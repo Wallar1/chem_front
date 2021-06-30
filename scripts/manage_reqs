@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+import click
+from collections import OrderedDict
+from contextlib import contextmanager
+import json
+import os
+from shutil import which
+import subprocess
+
+
+"""
+This is the shell command to install packages from the requirements.json file.
+"""
+
+
+@click.group()
+def manage_reqs():
+    pass
+
+
+class PackageManager(object):
+    def _install_package_dict(self, packages):
+        pass
+
+    def _clean(self):
+        pass
+
+    def install(self, packages):
+        try:
+            self._install_package_dict(packages)
+        except Exception as e:
+            print(e)
+        finally:
+            self._clean()
+
+
+class NpmManager(PackageManager):
+    def _install_package_dict(self, packages):
+        range_connector_gte = ">="
+        range_connector_lt = "<"
+        connector = '@'
+        manager = which('npm')
+        args = [manager, 'install', '--progress=false']
+        for package, version in packages.items():
+            if version is None:
+                args.append(package)
+            elif isinstance(version, list):
+                args.append(package + range_connector_gte + version[0] + ',' + range_connector_lt + version[1])
+            else:
+                args.append(package + connector + version)
+        print('installing npm packages')
+        subprocess.check_call(args, env=os.environ)
+
+    def _clean(self):
+        """ Check for residual tmp files left by npm """
+        tmp_location = subprocess.check_output(['npm', 'config', 'get', 'tmp'])
+        tmp_location = tmp_location.strip()
+        subprocess.Popen(['sudo', '-E', 'rm', '-rf', os.path.join(str(tmp_location), 'npm-*')], bufsize=0, shell=True)
+
+
+keys_to_package_manager_class = {
+    'npm': NpmManager
+}
+
+
+@click.command()
+@click.option('--requirements', '-r', default='requirements.json', type=click.File('r'), help='path to requirements.json file')
+@click.option('--only', default=None, help='comma separated list of package types to install (npm,pip,etc)')
+def install(requirements, only):
+    requirements_dir = os.path.dirname(requirements.name)
+    if requirements_dir:
+        os.chdir(requirements_dir)
+
+    requirements = json.load(requirements, object_pairs_hook=OrderedDict)
+
+    print('attempting to install ')
+    for key, packages in requirements.items():
+        if not only or key in only:
+            PackageManagerClass = keys_to_package_manager_class.get(key)
+            pmc = PackageManagerClass()
+            pmc.install(packages)
+
+
+@click.command(name='list')
+def list_installed_packages():
+    if which('npm'):
+        click.echo('npm packages:')
+        # npm --depth=0 lists top level packages without listing all sub-dependencies
+        npm_args = ['npm', 'ls', '--depth=0']
+        subprocess.call(npm_args)
+        click.echo('npm packages (global)')
+        subprocess.call(npm_args + ['-g'])
+    if which('pip'):
+        click.echo('pip packages:')
+        subprocess.call(['pip', 'list'])
+
+
+manage_reqs.add_command(install)
+manage_reqs.add_command(list_installed_packages)
+
+
+if __name__ == '__main__':
+    manage_reqs()

@@ -1,0 +1,9 @@
+{
+    "npm": {
+        "degit": "2.8.4",
+        "svelte": "3.38.3",
+        "svelte-loader": "3.1.2",
+        "three": "0.129.0",
+        "webpack": "5.38.1"
+    }
+}
