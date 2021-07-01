@@ -19,9 +19,8 @@ services:
                 AWS_SECRET: 
         # depends_on:
         #     - other_service_name
-        # ports:
-        #     - "8000:8000"  # maps the ports
-        user: craigw
+        ports:
+            - "8080:8080"  # maps the ports
         networks:
             - mynet
         stdin_open: true
