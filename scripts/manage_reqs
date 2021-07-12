@@ -56,7 +56,7 @@ class NpmManager(PackageManager):
         """ Check for residual tmp files left by npm """
         tmp_location = subprocess.check_output(['npm', 'config', 'get', 'tmp'])
         tmp_location = tmp_location.strip()
-        subprocess.Popen(['sudo', '-E', 'rm', '-rf', os.path.join(str(tmp_location), 'npm-*')], bufsize=0, shell=True)
+        subprocess.Popen(['sudo', 'rm', '-rf', os.path.join(str(tmp_location), 'npm-*')], bufsize=0, shell=True)
 
 
 keys_to_package_manager_class = {
