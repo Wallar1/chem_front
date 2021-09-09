@@ -3,13 +3,22 @@ FROM nikolaik/python-nodejs:python3.9-nodejs16
 
 
 RUN pip install click
-COPY ./scripts/ /scripts
-COPY ./web_app /web_app
-RUN ./scripts/manage_reqs install -r /web_app/requirements.json
+# copy <dest> <src>
+COPY . ./web_app
 WORKDIR /web_app
+RUN ./scripts/manage_reqs install -r ./requirements.json
 
 RUN pip install ipdb
 RUN apt-get update && apt-get install -y vim
+
+RUN npm install
+RUN npm run build
+RUN npm prune --production # Remove dev dependencies
+
+EXPOSE 5000
+ENV HOST=0.0.0.0
+
+CMD [ "npm", "start" ]
 
 
 # Dont need these steps now right? Once these files are copied, I will build the container with them

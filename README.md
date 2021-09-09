@@ -1,6 +1,9 @@
-to run the dev server (svelte app):
+
+to build and run:
 ```
-npm run dev
+docker-compose build chem 
+docker-compose run --rm chem npm install
+docker-compose up
 ```
 
 useful docker commands:
