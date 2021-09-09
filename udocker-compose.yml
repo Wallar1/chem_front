@@ -1,0 +1,111 @@
+# More info about the docker-compose specs/format can be found here https://github.com/compose-spec/compose-spec/blob/master/spec.md
+
+
+
+services:
+    nginx_rev:
+        container_name: nginx_rev
+        hostname: nginx_rev
+        build:
+            context: ~/toyprojs/chem_front/nginx
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./nginx/config:/etc/nginx
+            - ./nginx/certs:/etc/ssl/private
+        networks:
+            mynet:
+
+    chem:
+        environment:  # can just contain the env variables here
+            - POSTGRES_USER=postgres
+        hostname: chem
+        command:   bash -c 'python3 -m http.server' #bash -c 'npm run dev'  # ../scripts/keep_running.sh
+        image: 627023082830.dkr.ecr.us-west-1.amazonaws.com/chem:latest
+        volumes:
+            - chem_volume:/home/
+            - ./scripts:/scripts:delegated
+            - ./web_app:/web_app:delegated
+        #    - <name of the volume>:<path to where the container is mounted in the container>:<options>
+        build:
+            # you need to have the context outside of web_app so you can copy ./scripts
+            context: ~/toyprojs/chem_front
+            dockerfile: web_app/Dockerfile
+            args:
+                AWS_KEY: 
+                AWS_SECRET: 
+        # depends_on:
+        #     - other_service_name
+        ports:
+            - '8000:80'
+            # -   target: 80
+            #     published: 8080
+            #     protocol: tcp
+            #     mode: host
+        # networks:
+        #     mynet:
+        #         ipv4_address: 10.100.0.10
+        stdin_open: true
+        tty: true  # -t in cli, used to get terminal connection to the container (connects stdin/out somehow)
+
+# https://docs.docker.com/network/network-tutorial-standalone/
+# https://www.freecodecamp.org/news/docker-nginx-letsencrypt-easy-secure-reverse-proxy-40165ba3aee2/
+# https://www.freecodecamp.org/news/how-to-get-a-docker-container-ip-address-explained-with-examples/
+networks:
+    mynet:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: 10.100.0.0/16
+                  gateway: 10.100.0.1
+
+volumes:
+    chem_volume:
+
+
+
+# port info:
+#     short syntax:
+#         HOST:CONTAINER
+#     long syntax:
+#         target: the port inside the container
+#         published: the publicly exposed port
+#         protocol: the port protocol (tcp or udp)
+#         mode: host for publishing a host port on each node,
+
+
+
+
+
+# check these open tabs to see if they help the port issue
+# https://stackoverflow.com/questions/36320172/port-publishing-when-running-with-docker-compose
+
+# https://stackoverflow.com/questions/35429837/docker-compose-port-mapping
+
+# https://stackoverflow.com/questions/45109398/how-can-i-make-docker-compose-bind-the-containers-only-on-defined-network-instea
+
+# https://www.freecodecamp.org/news/docker-nginx-letsencrypt-easy-secure-reverse-proxy-40165ba3aee2/
+
+# https://github.com/yarsiemanym/raspberry-pi
+
+# https://github.com/dfletcher/nginx-proxy/blob/master/docker-compose.yml
+
+# https://hub.docker.com/r/jwilder/nginx-proxy
+
+# https://stackoverflow.com/questions/54196127/dockercompose-nginx-resolver-not-working
+
+# https://stackoverflow.com/questions/24319662/from-inside-of-a-docker-container-how-do-i-connect-to-the-localhost-of-the-mach
+
+# https://forums.docker.com/t/reverse-proxy-from-nginx-container-to-url-on-host/26473
+
+# https://stackoverflow.com/questions/62968807/dns-resolution-in-docker-containers
+
+# https://www.linode.com/docs/guides/use-nginx-reverse-proxy/
+
+# https://yzhong-cs.medium.com/dns-configurations-for-dev-environment-d35dbd3eba5d
+
+# https://gist.github.com/tinogomes/c425aa2a56d289f16a1f4fcb8a65ea65
+
+# https://www.docker.com/blog/how-to-use-the-official-nginx-docker-image/
