@@ -32,7 +32,8 @@ var mouse = new THREE.Vector2();
 // Earth settings
 var earth_radius = 60;
 var time_for_full_rotation = 30;
-var earth = create_earth(earth_radius);
+var earth_initial_position = new THREE.Vector3(0, -35, -50)
+var earth = create_earth();
 
 
 export class BasicGameplay {
@@ -135,14 +136,14 @@ function create_directional_light(){
     return light
 }
 
-function create_earth(earth_radius){
+function create_earth(){
     const earth = new THREE.Mesh(
         new THREE.SphereGeometry( earth_radius, 20, 20 ),
         new THREE.MeshStandardMaterial({
             color: 0x086100,
         })
     );
-    earth.position.set(0, -35, -50)
+    earth.position.copy(earth_initial_position)
     earth.castShadow = false;
     earth.receiveShadow = true;    
     function rotate_earth(state) {
@@ -209,12 +210,24 @@ function spawn_enemies() {
     function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
         let mod_5 = Math.floor(global_clock.elapsedTime) % 5 === 0
         if (mod_5 && !already_added_enemy) {
-            // TODO: figure out why 125 is fine
-            let initial_enemy_position = earth.worldToLocal(new THREE.Vector3(0, -35, -115))
-            let initial_enemy_rotation = new THREE.Quaternion();
+
+            // possibly delete this chunk. Trying to rotate enemy in the lanes
+            const x = 15;  // distance away from the center for each lane
+            let position = Math.floor(Math.random() * 3) - 1  // numbers -1, 0, 1 representing the lanes
+            let x_position = x * position
+            let origin = new THREE.Vector2(0, 0)
+            // mult the ratio of the (x / radius) against the fact that cosine goes from 0 to 1 between 0 and pi/2 rads
+            // TODO: figure out why this is slightly too angled
+            let y_rotation_angle = Math.sin((x_position / earth_radius) * (Math.PI / 2))
+
+
+            let initial_z = earth_initial_position.z - earth_radius - 5 // 5 for half of the enemy size
+            console.log(initial_z)
+            let world_initial_pos = new THREE.Vector3(x_position, earth_initial_position.y, -115)
+            let initial_enemy_position = earth.worldToLocal(world_initial_pos)
+            // let initial_enemy_rotation = new THREE.Quaternion();
             
-            // earth.getWorldQuaternion(initial_enemy_rotation)
-            last_enemy = add_enemy_to_earth(initial_enemy_position, initial_enemy_rotation)
+            last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
             already_added_enemy = true
         } else if (!mod_5) {
             already_added_enemy = false
@@ -225,7 +238,7 @@ function spawn_enemies() {
     global_updates_queue.push(updater)
 }
 
-function add_enemy_to_earth(position, rotation){
+function add_enemy_to_earth(position, y_rotation_angle){
     let enemy = new THREE.Mesh(
         // new THREE.PlaneGeometry(100, 80, 10, 10),
         new THREE.BoxGeometry( 10, 10, 10 ),
@@ -236,6 +249,7 @@ function add_enemy_to_earth(position, rotation){
     // console.log(position, rotation)
     earth.add(enemy)  // we add the enemy first to get it into earth's relative units
     enemy.rotateX(-earth.rotation.x)
+    enemy.rotateY(y_rotation_angle)
     console.log(enemy.rotation)
     enemy.position.x = position.x
     enemy.position.y = position.y
@@ -244,7 +258,6 @@ function add_enemy_to_earth(position, rotation){
     // enemy.rotateZ(rotation.z)
     function craig({enemy, initial_time}) {
         if (global_clock.elapsedTime - initial_time > 10) {
-            console.log('deleting enemy')
             return {enemy, finished: true, to_delete: [enemy]}
         }
         return {enemy, finished: false, initial_time: initial_time}
@@ -253,7 +266,10 @@ function add_enemy_to_earth(position, rotation){
     let updater = new Updater(craig, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime})
     global_updates_queue.push(updater)
 
-    enemy.dispose = () => {scene.remove(enemy)}
+    enemy.dispose = () => {
+        console.log('yo')
+        earth.remove(enemy)
+    }
     return enemy
 }
 
