@@ -19,6 +19,8 @@ services:
             - NODE_ENV=development
             - PORT=5000
             - HOST=0.0.0.0
+        networks:
+            mynet:
 
     nginx_rev:
         container_name: nginx_rev

@@ -46,11 +46,9 @@
 		}
 	}
 
-	#canvas-container {
-		/* nothing */
-	}
+	/*
 
-	/* #sidebar-right {
+	#sidebar-right {
 		height: 100vh;
 		width: 150px;
 		background-color: white;
@@ -82,5 +80,7 @@
 		height: 50px;
 		background-color: antiquewhite;
 		border: 1px solid black;
-	} */
+	}
+
+	*/
 </style>

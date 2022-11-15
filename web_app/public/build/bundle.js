@@ -27,120 +27,11 @@ var app = (function () {
     function is_empty(obj) {
         return Object.keys(obj).length === 0;
     }
-
-    // Track which nodes are claimed during hydration. Unclaimed nodes can then be removed from the DOM
-    // at the end of hydration without touching the remaining nodes.
-    let is_hydrating = false;
-    function start_hydrating() {
-        is_hydrating = true;
-    }
-    function end_hydrating() {
-        is_hydrating = false;
-    }
-    function upper_bound(low, high, key, value) {
-        // Return first index of value larger than input value in the range [low, high)
-        while (low < high) {
-            const mid = low + ((high - low) >> 1);
-            if (key(mid) <= value) {
-                low = mid + 1;
-            }
-            else {
-                high = mid;
-            }
-        }
-        return low;
-    }
-    function init_hydrate(target) {
-        if (target.hydrate_init)
-            return;
-        target.hydrate_init = true;
-        // We know that all children have claim_order values since the unclaimed have been detached
-        const children = target.childNodes;
-        /*
-        * Reorder claimed children optimally.
-        * We can reorder claimed children optimally by finding the longest subsequence of
-        * nodes that are already claimed in order and only moving the rest. The longest
-        * subsequence subsequence of nodes that are claimed in order can be found by
-        * computing the longest increasing subsequence of .claim_order values.
-        *
-        * This algorithm is optimal in generating the least amount of reorder operations
-        * possible.
-        *
-        * Proof:
-        * We know that, given a set of reordering operations, the nodes that do not move
-        * always form an increasing subsequence, since they do not move among each other
-        * meaning that they must be already ordered among each other. Thus, the maximal
-        * set of nodes that do not move form a longest increasing subsequence.
-        */
-        // Compute longest increasing subsequence
-        // m: subsequence length j => index k of smallest value that ends an increasing subsequence of length j
-        const m = new Int32Array(children.length + 1);
-        // Predecessor indices + 1
-        const p = new Int32Array(children.length);
-        m[0] = -1;
-        let longest = 0;
-        for (let i = 0; i < children.length; i++) {
-            const current = children[i].claim_order;
-            // Find the largest subsequence length such that it ends in a value less than our current value
-            // upper_bound returns first greater value, so we subtract one
-            const seqLen = upper_bound(1, longest + 1, idx => children[m[idx]].claim_order, current) - 1;
-            p[i] = m[seqLen] + 1;
-            const newLen = seqLen + 1;
-            // We can guarantee that current is the smallest value. Otherwise, we would have generated a longer sequence.
-            m[newLen] = i;
-            longest = Math.max(newLen, longest);
-        }
-        // The longest increasing subsequence of nodes (initially reversed)
-        const lis = [];
-        // The rest of the nodes, nodes that will be moved
-        const toMove = [];
-        let last = children.length - 1;
-        for (let cur = m[longest] + 1; cur != 0; cur = p[cur - 1]) {
-            lis.push(children[cur - 1]);
-            for (; last >= cur; last--) {
-                toMove.push(children[last]);
-            }
-            last--;
-        }
-        for (; last >= 0; last--) {
-            toMove.push(children[last]);
-        }
-        lis.reverse();
-        // We sort the nodes being moved to guarantee that their insertion order matches the claim order
-        toMove.sort((a, b) => a.claim_order - b.claim_order);
-        // Finally, we move the nodes
-        for (let i = 0, j = 0; i < toMove.length; i++) {
-            while (j < lis.length && toMove[i].claim_order >= lis[j].claim_order) {
-                j++;
-            }
-            const anchor = j < lis.length ? lis[j] : null;
-            target.insertBefore(toMove[i], anchor);
-        }
-    }
     function append(target, node) {
-        if (is_hydrating) {
-            init_hydrate(target);
-            if ((target.actual_end_child === undefined) || ((target.actual_end_child !== null) && (target.actual_end_child.parentElement !== target))) {
-                target.actual_end_child = target.firstChild;
-            }
-            if (node !== target.actual_end_child) {
-                target.insertBefore(node, target.actual_end_child);
-            }
-            else {
-                target.actual_end_child = node.nextSibling;
-            }
-        }
-        else if (node.parentNode !== target) {
-            target.appendChild(node);
-        }
+        target.appendChild(node);
     }
     function insert(target, node, anchor) {
-        if (is_hydrating && !anchor) {
-            append(target, node);
-        }
-        else if (node.parentNode !== target || (anchor && node.nextSibling !== anchor)) {
-            target.insertBefore(node, anchor || null);
-        }
+        target.insertBefore(node, anchor || null);
     }
     function detach(node) {
         node.parentNode.removeChild(node);
@@ -163,9 +54,9 @@ var app = (function () {
     function children(element) {
         return Array.from(element.childNodes);
     }
-    function custom_event(type, detail) {
+    function custom_event(type, detail, { bubbles = false, cancelable = false } = {}) {
         const e = document.createEvent('CustomEvent');
-        e.initCustomEvent(type, false, false, detail);
+        e.initCustomEvent(type, bubbles, cancelable, detail);
         return e;
     }
 
@@ -189,22 +80,40 @@ var app = (function () {
     function add_render_callback(fn) {
         render_callbacks.push(fn);
     }
-    let flushing = false;
+    // flush() calls callbacks in this order:
+    // 1. All beforeUpdate callbacks, in order: parents before children
+    // 2. All bind:this callbacks, in reverse order: children before parents.
+    // 3. All afterUpdate callbacks, in order: parents before children. EXCEPT
+    //    for afterUpdates called during the initial onMount, which are called in
+    //    reverse order: children before parents.
+    // Since callbacks might update component values, which could trigger another
+    // call to flush(), the following steps guard against this:
+    // 1. During beforeUpdate, any updated components will be added to the
+    //    dirty_components array and will cause a reentrant call to flush(). Because
+    //    the flush index is kept outside the function, the reentrant call will pick
+    //    up where the earlier call left off and go through all dirty components. The
+    //    current_component value is saved and restored so that the reentrant call will
+    //    not interfere with the "parent" flush() call.
+    // 2. bind:this callbacks cannot trigger new flush() calls.
+    // 3. During afterUpdate, any updated components will NOT have their afterUpdate
+    //    callback called a second time; the seen_callbacks set, outside the flush()
+    //    function, guarantees this behavior.
     const seen_callbacks = new Set();
+    let flushidx = 0; // Do *not* move this inside the flush() function
     function flush() {
-        if (flushing)
-            return;
-        flushing = true;
+        const saved_component = current_component;
         do {
             // first, call beforeUpdate functions
             // and update components
-            for (let i = 0; i < dirty_components.length; i += 1) {
-                const component = dirty_components[i];
+            while (flushidx < dirty_components.length) {
+                const component = dirty_components[flushidx];
+                flushidx++;
                 set_current_component(component);
                 update(component.$$);
             }
             set_current_component(null);
             dirty_components.length = 0;
+            flushidx = 0;
             while (binding_callbacks.length)
                 binding_callbacks.pop()();
             // then, once components are updated, call
@@ -224,8 +133,8 @@ var app = (function () {
             flush_callbacks.pop()();
         }
         update_scheduled = false;
-        flushing = false;
         seen_callbacks.clear();
+        set_current_component(saved_component);
     }
     function update($$) {
         if ($$.fragment !== null) {
@@ -283,7 +192,7 @@ var app = (function () {
         }
         component.$$.dirty[(i / 31) | 0] |= (1 << (i % 31));
     }
-    function init(component, options, instance, create_fragment, not_equal, props, dirty = [-1]) {
+    function init(component, options, instance, create_fragment, not_equal, props, append_styles, dirty = [-1]) {
         const parent_component = current_component;
         set_current_component(component);
         const $$ = component.$$ = {
@@ -300,12 +209,14 @@ var app = (function () {
             on_disconnect: [],
             before_update: [],
             after_update: [],
-            context: new Map(parent_component ? parent_component.$$.context : options.context || []),
+            context: new Map(options.context || (parent_component ? parent_component.$$.context : [])),
             // everything else
             callbacks: blank_object(),
             dirty,
-            skip_bound: false
+            skip_bound: false,
+            root: options.target || parent_component.$$.root
         };
+        append_styles && append_styles($$.root);
         let ready = false;
         $$.ctx = instance
             ? instance(component, options.props || {}, (i, ret, ...rest) => {
@@ -326,7 +237,6 @@ var app = (function () {
         $$.fragment = create_fragment ? create_fragment($$.ctx) : false;
         if (options.target) {
             if (options.hydrate) {
-                start_hydrating();
                 const nodes = children(options.target);
                 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                 $$.fragment && $$.fragment.l(nodes);
@@ -339,7 +249,6 @@ var app = (function () {
             if (options.intro)
                 transition_in(component.$$.fragment);
             mount_component(component, options.target, options.anchor, options.customElement);
-            end_hydrating();
             flush();
         }
         set_current_component(parent_component);
@@ -371,7 +280,7 @@ var app = (function () {
     }
 
     function dispatch_dev(type, detail) {
-        document.dispatchEvent(custom_event(type, Object.assign({ version: '3.38.3' }, detail)));
+        document.dispatchEvent(custom_event(type, Object.assign({ version: '3.50.0' }, detail), { bubbles: true }));
     }
     function append_dev(target, node) {
         dispatch_dev('SvelteDOMInsert', { target, node });
@@ -23872,7 +23781,7 @@ var app = (function () {
 
     		_currentDrawBuffers[ 0 ] = 1029;
 
-    		info = new WebGLInfo( _gl );
+    		info = new WebGLInfo();
     		properties = new WebGLProperties();
     		textures = new WebGLTextures( _gl, extensions, state, properties, capabilities, utils, info );
     		cubemaps = new WebGLCubeMaps( _this );
@@ -42404,6 +42313,306 @@ var app = (function () {
 
     }
 
+    function get_all_properties(obj) {
+        let result = [];
+        do {
+            result.push(...Object.getOwnPropertyNames(obj));
+        } while ((obj = Object.getPrototypeOf(obj)))
+        return result;
+    }
+
+    function proxy_handler(pass_through_obj_name){
+        /*
+        Pass_through_obj_name (ex: mesh) is the name of the property/obj that is called when a property isnt found 
+        */
+        return {
+            get(target, property) {
+                if (get_all_properties(target).indexOf(property) > -1) {
+                    return target[property]
+                } else {
+                    return target[pass_through_obj_name][property]
+                }
+            },
+            set(target, property, value) {
+                if (get_all_properties(target).indexOf(property) > -1) {
+                    return Reflect.set(target, property, value);
+                } else {
+                    return Reflect.set(target[pass_through_obj_name], property, value);
+                }
+            }
+        }
+    }
+
+    var size = new Vector3(10, 10, 10);
+    class Projectile {
+        constructor({geometry, material, initial_pos, velocity, onclick}) {
+            // super();
+            this.mesh = new Mesh(geometry, material);
+            this.velocity = velocity;
+            this.mesh.onclick = onclick;
+            this.radius = geometry.parameters.radius;
+            this.collision_sphere = new Sphere(initial_pos, this.radius);
+        }
+
+        dispose() {
+            this.parent.remove(this.mesh);
+        }
+
+        check_collisions(collision_elements) {
+            new Vector3();
+            let pos_in_world = new Vector3();
+            let collided_objs = [];
+            // console.log(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z)
+            this.collision_sphere.set(this.mesh.position, this.radius);
+            // console.log(this.collision_sphere.center.x, this.collision_sphere.center.y, this.collision_sphere.center.z)
+            collision_elements.forEach(obj => {
+                if (obj.collision_box) {
+                    // console.log(obj.collision_box)
+                    obj.getWorldPosition(pos_in_world);
+                    obj.collision_box.setFromCenterAndSize(pos_in_world, size);
+                    if (this.collision_sphere.intersectsBox(obj.collision_box)) {
+                        collided_objs = [obj];
+                        return  // this just returns out of the foreach
+                    }
+                } 
+                // else if (obj.collision_sphere) {
+                //     obj.mesh.getWorldPosition(world_pos);
+                //     obj.collision_sphere.set(world_pos, obj.radius)
+                //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
+                //         collided_objs = [obj];
+                //         return  // this just returns out of the foreach
+                //     }
+                // } else {
+                //     console.log('did we set another type of collider shape?')
+                // }
+            });
+            return collided_objs
+        }
+    }
+
+    function create_projectile(arg_dict) {
+        let projectile = new Projectile(arg_dict);
+        let proxy = new Proxy(projectile, proxy_handler('mesh'));
+        proxy.position.copy(arg_dict['initial_pos']);
+        return proxy
+    }
+
+
+    class Enemy {
+        constructor({geometry, material}) {
+            // super();
+            this.should_delete = false;
+            this.mesh = new Mesh(geometry, material);
+            let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
+            this.collision_box = new Box3(new Vector3(-r, -r, -r), new Vector3(r, r, r));
+        }
+
+        add_to(parent) {
+            this.parent = parent;
+            parent.add(this.mesh);
+        }
+
+        dispose() {
+            this.parent.remove(this.mesh);
+            this.collision_box = null;
+        }
+
+        collide() {
+            this.should_delete = true;
+        }
+    }
+
+
+
+    function create_enemy(arg_dict) {
+        let enemy = new Enemy(arg_dict);
+        let proxy = new Proxy(enemy, proxy_handler('mesh'));
+        proxy.position.copy(arg_dict['position']);
+
+        return proxy
+    }
+
+    /**
+     * @author mrdoob / http://mrdoob.com/
+     * from https://github.com/mrdoob/stats.js/blob/master/src/Stats.js
+     */
+
+    var Stats = function () {
+
+    	var mode = 0;
+
+    	var container = document.createElement( 'div' );
+    	container.style.cssText = 'position:fixed;top:0;left:0;cursor:pointer;opacity:0.9;z-index:10000';
+    	container.addEventListener( 'click', function ( event ) {
+
+    		event.preventDefault();
+    		showPanel( ++ mode % container.children.length );
+
+    	}, false );
+
+    	//
+
+    	function addPanel( panel ) {
+
+    		container.appendChild( panel.dom );
+    		return panel;
+
+    	}
+
+    	function showPanel( id ) {
+
+    		for ( var i = 0; i < container.children.length; i ++ ) {
+
+    			container.children[ i ].style.display = i === id ? 'block' : 'none';
+
+    		}
+
+    		mode = id;
+
+    	}
+
+    	//
+
+    	var beginTime = ( performance || Date ).now(), prevTime = beginTime, frames = 0;
+
+    	var fpsPanel = addPanel( new Stats.Panel( 'FPS', '#0ff', '#002' ) );
+    	var msPanel = addPanel( new Stats.Panel( 'MS', '#0f0', '#020' ) );
+
+    	if ( self.performance && self.performance.memory ) {
+
+    		var memPanel = addPanel( new Stats.Panel( 'MB', '#f08', '#201' ) );
+
+    	}
+
+    	showPanel( 0 );
+
+    	return {
+
+    		REVISION: 16,
+
+    		dom: container,
+
+    		addPanel: addPanel,
+    		showPanel: showPanel,
+
+    		begin: function () {
+
+    			beginTime = ( performance || Date ).now();
+
+    		},
+
+    		end: function () {
+
+    			frames ++;
+
+    			var time = ( performance || Date ).now();
+
+    			msPanel.update( time - beginTime, 200 );
+
+    			if ( time >= prevTime + 1000 ) {
+
+    				fpsPanel.update( ( frames * 1000 ) / ( time - prevTime ), 100 );
+
+    				prevTime = time;
+    				frames = 0;
+
+    				if ( memPanel ) {
+
+    					var memory = performance.memory;
+    					memPanel.update( memory.usedJSHeapSize / 1048576, memory.jsHeapSizeLimit / 1048576 );
+
+    				}
+
+    			}
+
+    			return time;
+
+    		},
+
+    		update: function () {
+
+    			beginTime = this.end();
+
+    		},
+
+    		// Backwards Compatibility
+
+    		domElement: container,
+    		setMode: showPanel
+
+    	};
+
+    };
+
+    Stats.Panel = function ( name, fg, bg ) {
+
+    	var min = Infinity, max = 0, round = Math.round;
+    	var PR = round( window.devicePixelRatio || 1 );
+
+    	var WIDTH = 80 * PR, HEIGHT = 48 * PR,
+    			TEXT_X = 3 * PR, TEXT_Y = 2 * PR,
+    			GRAPH_X = 3 * PR, GRAPH_Y = 15 * PR,
+    			GRAPH_WIDTH = 74 * PR, GRAPH_HEIGHT = 30 * PR;
+
+    	var canvas = document.createElement( 'canvas' );
+    	canvas.width = WIDTH;
+    	canvas.height = HEIGHT;
+    	canvas.style.cssText = 'width:80px;height:48px';
+
+    	var context = canvas.getContext( '2d' );
+    	context.font = 'bold ' + ( 9 * PR ) + 'px Helvetica,Arial,sans-serif';
+    	context.textBaseline = 'top';
+
+    	context.fillStyle = bg;
+    	context.fillRect( 0, 0, WIDTH, HEIGHT );
+
+    	context.fillStyle = fg;
+    	context.fillText( name, TEXT_X, TEXT_Y );
+    	context.fillRect( GRAPH_X, GRAPH_Y, GRAPH_WIDTH, GRAPH_HEIGHT );
+
+    	context.fillStyle = bg;
+    	context.globalAlpha = 0.9;
+    	context.fillRect( GRAPH_X, GRAPH_Y, GRAPH_WIDTH, GRAPH_HEIGHT );
+
+    	return {
+
+    		dom: canvas,
+
+    		update: function ( value, maxValue ) {
+
+    			min = Math.min( min, value );
+    			max = Math.max( max, value );
+
+    			context.fillStyle = bg;
+    			context.globalAlpha = 1;
+    			context.fillRect( 0, 0, WIDTH, GRAPH_Y );
+    			context.fillStyle = fg;
+    			context.fillText( round( value ) + ' ' + name + ' (' + round( min ) + '-' + round( max ) + ')', TEXT_X, TEXT_Y );
+
+    			context.drawImage( canvas, GRAPH_X + PR, GRAPH_Y, GRAPH_WIDTH - PR, GRAPH_HEIGHT, GRAPH_X, GRAPH_Y, GRAPH_WIDTH - PR, GRAPH_HEIGHT );
+
+    			context.fillRect( GRAPH_X + GRAPH_WIDTH - PR, GRAPH_Y, PR, GRAPH_HEIGHT );
+
+    			context.fillStyle = bg;
+    			context.globalAlpha = 0.9;
+    			context.fillRect( GRAPH_X + GRAPH_WIDTH - PR, GRAPH_Y, PR, round( ( 1 - ( value / maxValue ) ) * GRAPH_HEIGHT ) );
+
+    		}
+
+    	};
+
+    };
+
+    // Tutorial for collision detection:
+    // https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection/Bounding_volume_collision_detection_with_THREE.js
+
+
+    // Tips for speeding up:
+    //https://attackingpixels.com/tips-tricks-optimizing-three-js-performance/
+    // also his 3d portfolio tutorial
+    // https://attackingpixels.com/three-js-timeline-career-3D-portfolio/
+
+
     class Updater {
         constructor(step_function, state) {
             /*
@@ -42424,7 +42633,8 @@ var app = (function () {
     var global_updates_queue = [];
     var global_clock = new Clock();
     var gravity = new Vector3(0, -.5, 0);
-    var world_units_scale = 0.05;  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
+    var frame_rate = 60;
+    var world_units_scale = 1/frame_rate;  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
     var scene = new Scene();
     var camera = create_camera();
     var mouse_ray = new Raycaster();
@@ -42433,9 +42643,16 @@ var app = (function () {
     // Earth settings
     var earth_radius = 60;
     var time_for_full_rotation = 30;
-    var earth_initial_position = new Vector3(0, -35, -50);
+    var earth_initial_position = new Vector3(0,0,0);
     var earth = create_earth();
 
+    var collision_elements = [];  // we just have to keep track of the enemies and earth, and when the ball moves,
+                                  // it checks for any collisions with these elements
+
+
+    var stats = new Stats();
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild( stats.dom );
 
     class BasicGameplay {
         constructor() {
@@ -42459,32 +42676,34 @@ var app = (function () {
             window.addEventListener('click', (event) => on_mouse_click(), false);
 
             this.renderer.render(scene, camera);
-            camera.lookAt(new Vector3(0, 0, -100));
+            camera.lookAt(new Vector3(0, 30, -100));
             spawn_enemies();
-            fire_enemy_projectile();
             this.animate();
         }
 
         animate(){
             requestAnimationFrame(()=>{
                 this.animate();
+                stats.begin();
                 global_clock.getDelta();
                 this.renderer.render(scene, camera);
                 let next_updates = [];
-                while (true) {
-                    // we have to do this pop thing, because sometimes during iteration, another updater will be added to
-                    // the queue, and I want to make sure to get it. Doing a forEach doesnt allow new updaters to be added
-                    let updater = global_updates_queue.pop();
-                    if (updater === undefined) {
-                        break;
-                    }
+                // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
+                let i = 0;
+                let updater;
+                while (i < global_updates_queue.length) {
+                    updater = global_updates_queue[i];
                     updater.update();
                     if (!updater.state.finished) { 
                         next_updates.push(updater);
                     } else {
-                        updater.state.to_delete?.forEach(to_delete => to_delete.dispose());
+                        updater.state.to_delete?.forEach(to_delete => {
+                            to_delete.dispose();
+                        });
                     }
+                    i++;
                 }
+                stats.end();
                 global_updates_queue = next_updates;
             });
         }
@@ -42498,11 +42717,12 @@ var app = (function () {
 
     function create_renderer(){
         const renderer = new WebGLRenderer({
-            antialias: true,
+            antialias: false,
+            powerPreference: "high-performance",
         });
         renderer.outputEncoding = sRGBEncoding;
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = PCFSoftShadowMap;
+        renderer.shadowMap.enabled = false;
+        // renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         return renderer
@@ -42514,7 +42734,7 @@ var app = (function () {
         const near = 1.0;
         const far = 1000.0;
         const camera = new PerspectiveCamera(fov, aspect, near, far);
-        camera.position.set(0, 20, 10);
+        camera.position.set(0, 55, 60);
         return camera
     }
 
@@ -42522,18 +42742,18 @@ var app = (function () {
         const light = new DirectionalLight(0xFFFFFF, 1.0);
         light.position.set(-100, 100, 100);
         light.target.position.set(0, 0, 0);
-        light.castShadow = true;
-        light.shadow.bias = -0.001;
-        light.shadow.mapSize.width = 4096;
-        light.shadow.mapSize.height = 4096;
-        light.shadow.camera.near = 0.1;
-        light.shadow.camera.far = 500.0;
-        light.shadow.camera.near = 0.5;
-        light.shadow.camera.far = 500.0;
-        light.shadow.camera.left = 50;
-        light.shadow.camera.right = -50;
-        light.shadow.camera.top = 50;
-        light.shadow.camera.bottom = -50;
+        light.castShadow = false;
+        // light.shadow.bias = -0.001;
+        // light.shadow.mapSize.width = 4096;
+        // light.shadow.mapSize.height = 4096;
+        // light.shadow.camera.near = 0.1;
+        // light.shadow.camera.far = 500.0;
+        // light.shadow.camera.near = 0.5;
+        // light.shadow.camera.far = 500.0;
+        // light.shadow.camera.left = 50;
+        // light.shadow.camera.right = -50;
+        // light.shadow.camera.top = 50;
+        // light.shadow.camera.bottom = -50;
         return light
     }
 
@@ -42546,7 +42766,12 @@ var app = (function () {
         );
         earth.position.copy(earth_initial_position);
         earth.castShadow = false;
-        earth.receiveShadow = true;    
+        earth.receiveShadow = true;
+        
+        new Sphere(earth_initial_position, earth_radius);
+        // ONLY COMMENTING THIS NEXT LINE OUT BECAUSE I NEED TO ADJUST THE PROJECTILE ANGLE
+        // collision_elements.push(collision_sphere)
+
         function rotate_earth(state) {
             let new_x_rotation = (global_clock.elapsedTime % time_for_full_rotation) * 2 * Math.PI / time_for_full_rotation;
             let new_earth_rotation = new Vector3(new_x_rotation, earth.rotation.y, earth.rotation.z);
@@ -42555,79 +42780,26 @@ var app = (function () {
         }
         let updater = new Updater(rotate_earth, {});
         global_updates_queue.push(updater);
+
         return earth;
     }
 
-    // function spawn_enemies() {
-    //     function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
-    //         let mod_5 = Math.floor(global_clock.elapsedTime) % 5 === 0
-    //         if (mod_5 && !already_added_enemy) {
-    //             const x = 0;  // distance away from the center for each lane
-    //             let position = Math.floor(Math.random() * 3) - 1  // numbers -1, 0, 1 representing the lanes
-    //             let x_position = x * position
-    //             let origin = new THREE.Vector2(0, 0)
-    //             // mult the ratio of the (x / radius) against the fact that cosine goes from 0 to 1 between 0 and pi/2 rads
-    //             let radians = (x_position / 30) * (Math.PI / 2)
-    //             let z_position = -65 * Math.cos(radians)  // 65 because radius is 60, and enemy height is 10 (so halfway)
-    //             // because we moved 5.xx seconds out of 30 (the time_for_full_rotation), the angle ~ (5/30) * 2pi radians
-    //             let rotate_angle = global_clock.elapsedTime * Math.PI / 30
-
-    //             let initial_enemy_position, initial_enemy_rotation;
-    //             if (last_initial_position) {
-    //                 // we start from this position, and then rotate it. MaxTODO: we can just get that transform and apply it
-    //                 // note: we can only rotate the vector in 2d using this way
-    //                 let vector_to_rotate = new THREE.Vector2(last_initial_position.y, last_initial_position.z)
-    //                 vector_to_rotate.rotateAround(origin, rotate_angle)
-    //                 initial_enemy_position = new THREE.Vector3(x_position, vector_to_rotate.x, vector_to_rotate.y)
-    //             } else {
-    //                 initial_enemy_position = new THREE.Vector3(x_position, 0, z_position)
-    //             }
-
-    //             if (last_initial_rotation) {
-    //                 initial_enemy_rotation = new THREE.Vector3(last_initial_rotation.x, 
-    //                                                             last_initial_rotation.y,
-    //                                                             last_initial_rotation.z);
-    //             } else {
-    //                 // MaxTODO Y needs to be some ratio of x/r and use sine and cosine to have it tilt on the earth
-    //                 // depending on the position (-1, 0, or 1) for the lanes
-    //                 // this also means we have to move the position down a bit for the curve.
-    //                 initial_enemy_rotation = new THREE.Vector3(0, radians, 0);
-    //             }
-
-    //             last_initial_rotation = initial_enemy_rotation.clone()
-    //             last_initial_position = initial_enemy_position.clone()
-    //             last_enemy = add_enemy_to_earth(initial_enemy_position, initial_enemy_rotation)
-    //             already_added_enemy = true
-    //         } else if (!mod_5) {
-    //             already_added_enemy = false
-    //         }
-    //         return {already_added_enemy, last_initial_position, last_initial_rotation, last_enemy, finished: false}
-    //     }
-    //     let updater = new Updater(add_enemy_every_5_seconds, {})
-    //     global_updates_queue.push(updater)
-    // }
-
     function spawn_enemies() {
         function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
-            let mod_5 = Math.floor(global_clock.elapsedTime) % 5 === 0;
+            let mod_5 = Math.floor(global_clock.elapsedTime) % 3 === 0;
             if (mod_5 && !already_added_enemy) {
+                let position = Math.floor(Math.random() * 3) - 1;  // -1,0,1 for the lanes
+                let y_rotation_angle = Math.PI/10 * position;
+                let x_diff = earth_radius * Math.sin(y_rotation_angle);
+                // so if the position is 0, the x_diff will be 0
+                // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
+                let z_diff = earth_radius * Math.cos(y_rotation_angle);
+                // 5 for half of the enemy size
+                let initial_z = earth_initial_position.z - z_diff - 5;
 
-                // possibly delete this chunk. Trying to rotate enemy in the lanes
-                const x = 15;  // distance away from the center for each lane
-                let position = Math.floor(Math.random() * 3) - 1;  // numbers -1, 0, 1 representing the lanes
-                let x_position = x * position;
-                new Vector2(0, 0);
-                // mult the ratio of the (x / radius) against the fact that cosine goes from 0 to 1 between 0 and pi/2 rads
-                // TODO: figure out why this is slightly too angled
-                let y_rotation_angle = Math.sin((x_position / earth_radius) * (Math.PI / 2));
-
-
-                let initial_z = earth_initial_position.z - earth_radius - 5; // 5 for half of the enemy size
-                console.log(initial_z);
-                let world_initial_pos = new Vector3(x_position, earth_initial_position.y, -115);
+                let world_initial_pos = new Vector3(x_diff, earth_initial_position.y, initial_z);
                 let initial_enemy_position = earth.worldToLocal(world_initial_pos);
-                // let initial_enemy_rotation = new THREE.Quaternion();
-                
+
                 last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle);
                 already_added_enemy = true;
             } else if (!mod_5) {
@@ -42639,38 +42811,27 @@ var app = (function () {
         global_updates_queue.push(updater);
     }
 
+    let enemy_geometry = new BoxGeometry( 10, 10, 10 );
+    let enemy_material = new MeshStandardMaterial({color: 0xeb4034,});
+
     function add_enemy_to_earth(position, y_rotation_angle){
-        let enemy = new Mesh(
-            // new THREE.PlaneGeometry(100, 80, 10, 10),
-            new BoxGeometry( 10, 10, 10 ),
-            new MeshStandardMaterial({
-                color: 0xeb4034,
-            })
-        );
-        // console.log(position, rotation)
-        earth.add(enemy);  // we add the enemy first to get it into earth's relative units
+        let enemy = create_enemy({position, 'geometry': enemy_geometry, 'material': enemy_material});
+        // we add the enemy first to get it into earth's relative units
+        enemy.add_to(earth);
         enemy.rotateX(-earth.rotation.x);
         enemy.rotateY(y_rotation_angle);
-        console.log(enemy.rotation);
-        enemy.position.x = position.x;
-        enemy.position.y = position.y;
-        enemy.position.z = position.z;
-        // enemy.rotateY(rotation.y)
-        // enemy.rotateZ(rotation.z)
-        function craig({enemy, initial_time}) {
-            if (global_clock.elapsedTime - initial_time > 10) {
+
+        collision_elements.push(enemy);
+
+        function delete_enemy({enemy, initial_time}) {
+            if (global_clock.elapsedTime - initial_time > time_for_full_rotation || enemy.should_delete) {
                 return {enemy, finished: true, to_delete: [enemy]}
             }
             return {enemy, finished: false, initial_time: initial_time}
         }
         
-        let updater = new Updater(craig, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime});
+        let updater = new Updater(delete_enemy, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime});
         global_updates_queue.push(updater);
-
-        enemy.dispose = () => {
-            console.log('yo');
-            earth.remove(enemy);
-        };
         return enemy
     }
 
@@ -42717,46 +42878,26 @@ var app = (function () {
             fire_player_weapon();
         }
     }
-    class Projectile extends Object3D {
-        constructor(geometry, material, initial_pos, velocity, onclick) {
-            super();
-            this.mesh = new Mesh(geometry, material);
-            this.mesh.position.x = initial_pos.x;
-            this.mesh.position.y = initial_pos.y;
-            this.mesh.position.z = initial_pos.z;
-            this.velocity = velocity;
-            this.mesh.onclick = onclick;
-        }
 
-        dispose() {
-            scene.remove(this.mesh);
-        }
-    }
 
-    var sphere_geometry = new SphereGeometry( 5, 10, 10 );
+    var projectile_radius = 5;
+    var sphere_geometry = new SphereGeometry( projectile_radius, 10, 10 );
     var toon_material = new MeshToonMaterial({color: 0xffff00});
 
     function fire_player_weapon(){
-        const initial_pos = new Vector3(0, 20, 0);
-        // const velocity = new THREE.Vector3(0, 5, 5);
-        console.log(mouse_ray);
-        const velocity = mouse_ray.ray.direction.clone().multiplyScalar(8);
-        const onclick = (projectile) => {
-            projectile.mesh.material.color.set('#eb4034');
+        const initial_pos = camera.position.clone();
+        initial_pos.y -= 10;
+        initial_pos.z -= 15;
+        const velocity = mouse_ray.ray.direction.clone();
+        velocity.multiplyScalar(8);
+        velocity.y += 4;
+        const onclick = (target) => {
+            // this is just a POC. It doesnt work because all of the projectiles use the same material
+            target.object.material.color.set('#eb4034');
         };
-        let projectile = new Projectile(sphere_geometry, toon_material, initial_pos, velocity, onclick);
-        scene.add(projectile.mesh);
-        let updater = new Updater(blast_projectile, {projectile: projectile});
-        global_updates_queue.push(updater);
-    }
-
-    function fire_enemy_projectile(){
-        const initial_pos = new Vector3(0, 20, -200);
-        const velocity = new Vector3(0, 5, 5);
-        const onclick = (projectile) => {
-            projectile.mesh.material.color.set('#eb4034');
-        };
-        let projectile = new Projectile(sphere_geometry, toon_material, initial_pos, velocity, onclick);
+        let params = {'geometry': sphere_geometry, 'material': toon_material, 'parent': scene,
+                      initial_pos, velocity, onclick};
+        let projectile = create_projectile(params);
         scene.add(projectile.mesh);
         let updater = new Updater(blast_projectile, {projectile: projectile});
         global_updates_queue.push(updater);
@@ -42774,16 +42915,20 @@ var app = (function () {
         let added = v0t.add(at2).multiplyScalar(world_units_scale);
         total_time += global_clock.elapsedTime - initial_time;
         mesh.position.add(added);
-        let finished = true;
-        if (total_time < 100 && mesh.position.z < 100 && mesh.position.y > -100) {
-            finished = false;
-        } else {
+
+        let collisions = projectile.check_collisions(collision_elements);
+        collisions.forEach(collided_obj => collided_obj.collide(projectile));
+
+        let finished = false;
+        if (total_time > 100 || collisions.length) {
+            finished = true;
+            console.log(total_time, collisions);
             return {finished, to_delete: [projectile]}
         }
         return {projectile, total_time, finished, initial_time}
     }
 
-    /* src/App.svelte generated by Svelte v3.38.3 */
+    /* src/App.svelte generated by Svelte v3.50.0 */
     const file = "src/App.svelte";
 
     function create_fragment(ctx) {
@@ -42816,14 +42961,13 @@ var app = (function () {
     			a.textContent = "Svelte tutorial";
     			t7 = text(" to learn how to build Svelte apps.");
     			attr_dev(div, "id", "canvas-container");
-    			attr_dev(div, "class", "svelte-e62w10");
     			add_location(div, file, 21, 1, 530);
-    			attr_dev(h1, "class", "svelte-e62w10");
+    			attr_dev(h1, "class", "svelte-lx7if2");
     			add_location(h1, file, 22, 1, 565);
     			attr_dev(a, "href", "https://svelte.dev/tutorial");
     			add_location(a, file, 23, 14, 602);
     			add_location(p, file, 23, 1, 589);
-    			attr_dev(main, "class", "svelte-e62w10");
+    			attr_dev(main, "class", "svelte-lx7if2");
     			add_location(main, file, 12, 0, 286);
     		},
     		l: function claim(nodes) {
@@ -42866,27 +43010,27 @@ var app = (function () {
 
     function instance($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots("App", slots, []);
+    	validate_slots('App', slots, []);
 
-    	document.addEventListener("DOMContentLoaded", event => {
+    	document.addEventListener('DOMContentLoaded', event => {
     		new BasicGameplay();
     	});
 
     	let { name } = $$props;
-    	const writable_props = ["name"];
+    	const writable_props = ['name'];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<App> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<App> was created with unknown prop '${key}'`);
     	});
 
     	$$self.$$set = $$props => {
-    		if ("name" in $$props) $$invalidate(0, name = $$props.name);
+    		if ('name' in $$props) $$invalidate(0, name = $$props.name);
     	};
 
     	$$self.$capture_state = () => ({ BasicGameplay, name });
 
     	$$self.$inject_state = $$props => {
-    		if ("name" in $$props) $$invalidate(0, name = $$props.name);
+    		if ('name' in $$props) $$invalidate(0, name = $$props.name);
     	};
 
     	if ($$props && "$$inject" in $$props) {
@@ -42911,7 +43055,7 @@ var app = (function () {
     		const { ctx } = this.$$;
     		const props = options.props || {};
 
-    		if (/*name*/ ctx[0] === undefined && !("name" in props)) {
+    		if (/*name*/ ctx[0] === undefined && !('name' in props)) {
     			console.warn("<App> was created without expected prop 'name'");
     		}
     	}
@@ -42934,5 +43078,5 @@ var app = (function () {
 
     return app;
 
-}());
+})();
 //# sourceMappingURL=bundle.js.map

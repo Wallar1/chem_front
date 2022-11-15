@@ -12,6 +12,16 @@ docker-compose down --volume --remove-orphans
 
 docker network ls
 docker network inspect chem_front_mynet
+
+
+force a container to disconnet so you can bring it down:
+docker network disconnect -f devenv_default <container-name>
+
+docker ps -a - lists all containers. You can format this like docker ps -a --format "{{.Names}} {{.Status}} {{.ID}}"
+
+docker rm -f <image> - remove an image
+
+docker system prune
 ```
 
 log in to aws
