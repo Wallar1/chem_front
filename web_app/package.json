@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "degit": "^2.8.4",
+    "requirejs": "2.3.6",
+    "rollup-plugin-polyfill-node": "0.10.2",
     "sirv-cli": "^1.0.0",
     "svelte-loader": "^3.1.2",
     "three": "^0.129.0",
