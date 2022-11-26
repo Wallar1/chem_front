@@ -24,8 +24,17 @@ a:visited {
 	color: rgb(0,80,160);
 }
 
-label {
+/* label {
 	display: block;
+} */
+
+.label {
+	color: #FFF;
+	font-family: sans-serif;
+	padding: 2px;
+	width: 20px;
+	height: 20px;
+	background: rgba( 0, 0, 0, .6 );
 }
 
 input, button, select, textarea {

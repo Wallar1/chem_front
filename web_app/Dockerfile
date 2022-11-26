@@ -14,12 +14,12 @@ RUN apt-get update && apt-get install -y vim
 
 # RUN npm prune --production # Remove dev dependencies
 # run these steps manually in the container:
-# RUN npx degit sveltejs/template-webpack svelte-app
 # RUN cd svelte-app
 # TODO figure out why you need to run this manually in the container
 RUN npm init -y
 RUN npm install
-RUN npm run build
+# RUN npx degit sveltejs/template-webpack svelte-app
+# RUN npm run build
 
 # run this outside of the container:
 # docker cp chem_front_chem_1:/web_app/svelte-app ./test_web_app_copy
