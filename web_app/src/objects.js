@@ -32,34 +32,41 @@ function proxy_handler(pass_through_obj_name){
 };
 
 
-var size = new THREE.Vector3(10, 10, 10)
-class Projectile {
-    constructor({geometry, material, initial_pos, velocity, onclick}) {
-        // super();
-        this.mesh = new THREE.Mesh(geometry, material)
-        this.velocity = velocity
-        this.mesh.onclick = onclick
-        this.radius = geometry.parameters.radius;
-        this.collision_sphere = new THREE.Sphere(initial_pos, this.radius);
+class GameObj {
+    add(obj) {
+        this.mesh.add(obj)
     }
 
     dispose() {
         this.parent.remove(this.mesh);
+        this.collider = null;
+        this.mesh.remove(this.label)
+    }
+}
+
+
+var size = new THREE.Vector3(10, 10, 10)
+class Projectile extends GameObj {
+    constructor({geometry, material, initial_pos, velocity, onclick}) {
+        super();
+        this.mesh = new THREE.Mesh(geometry, material)
+        this.velocity = velocity
+        this.mesh.onclick = onclick
+        this.radius = geometry.parameters.radius;
+        this.collider = new THREE.Sphere(initial_pos, this.radius);
+        this.health_impact = 20;
     }
 
     check_collisions(collision_elements) {
         let world_pos = new THREE.Vector3();
         let pos_in_world = new THREE.Vector3();
         let collided_objs = []
-        // console.log(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z)
-        this.collision_sphere.set(this.mesh.position, this.radius)
-        // console.log(this.collision_sphere.center.x, this.collision_sphere.center.y, this.collision_sphere.center.z)
+        this.collider.set(this.mesh.position, this.radius)
         collision_elements.forEach(obj => {
-            if (obj.collision_box) {
-                // console.log(obj.collision_box)
+            if (obj.collider instanceof THREE.Box3) {
                 obj.getWorldPosition(pos_in_world);
-                obj.collision_box.setFromCenterAndSize(pos_in_world, size)
-                if (this.collision_sphere.intersectsBox(obj.collision_box)) {
+                obj.collider.setFromCenterAndSize(pos_in_world, size)
+                if (this.collider.intersectsBox(obj.collider)) {
                     collided_objs = [obj];
                     return  // this just returns out of the foreach
                 }
@@ -80,13 +87,24 @@ class Projectile {
 }
 
 
-class Enemy {
+const health_bar_material = new THREE.MeshToonMaterial( {color: 0x00ff00} );
+
+class Enemy extends GameObj {
     constructor({geometry, material}) {
-        // super();
+        super();
         this.should_delete = false;
         this.mesh = new THREE.Mesh(geometry, material);
         let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
-        this.collision_box = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+        this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+
+        this.full_health = 100;
+        this.health = 100;
+
+        let health_bar_geometry = new THREE.CylinderGeometry( 1, 1, 10, 10 );
+        this.health_bar = new THREE.Mesh( health_bar_geometry, health_bar_material );
+        this.mesh.add(this.health_bar)
+        this.health_bar.rotateZ(Math.PI/2)
+        this.health_bar.position.z = -8;
     }
 
     add_to(parent) {
@@ -94,12 +112,8 @@ class Enemy {
         parent.add(this.mesh)
     }
 
-    dispose() {
-        this.parent.remove(this.mesh);
-        this.collision_box = null;
-    }
-
     take_damage(dmg) {
+        console.log('yo')
         this.health -= dmg
         if (this.health <= 30) {
             this.should_delete = true;
@@ -114,10 +128,9 @@ class Enemy {
 }
 
 
-
 function create_enemy(arg_dict) {
     let enemy = new Enemy(arg_dict)
-    let proxy = new Proxy(enemy, proxy_handler('mesh'))
+    let proxy = new Proxy(enemy, proxy_handler('mesh'));
     proxy.position.copy(arg_dict['position'])
 
     return proxy

@@ -27439,6 +27439,268 @@ var app = (function () {
 
     DepthTexture.prototype.isDepthTexture = true;
 
+    class CylinderGeometry extends BufferGeometry {
+
+    	constructor( radiusTop = 1, radiusBottom = 1, height = 1, radialSegments = 8, heightSegments = 1, openEnded = false, thetaStart = 0, thetaLength = Math.PI * 2 ) {
+
+    		super();
+    		this.type = 'CylinderGeometry';
+
+    		this.parameters = {
+    			radiusTop: radiusTop,
+    			radiusBottom: radiusBottom,
+    			height: height,
+    			radialSegments: radialSegments,
+    			heightSegments: heightSegments,
+    			openEnded: openEnded,
+    			thetaStart: thetaStart,
+    			thetaLength: thetaLength
+    		};
+
+    		const scope = this;
+
+    		radialSegments = Math.floor( radialSegments );
+    		heightSegments = Math.floor( heightSegments );
+
+    		// buffers
+
+    		const indices = [];
+    		const vertices = [];
+    		const normals = [];
+    		const uvs = [];
+
+    		// helper variables
+
+    		let index = 0;
+    		const indexArray = [];
+    		const halfHeight = height / 2;
+    		let groupStart = 0;
+
+    		// generate geometry
+
+    		generateTorso();
+
+    		if ( openEnded === false ) {
+
+    			if ( radiusTop > 0 ) generateCap( true );
+    			if ( radiusBottom > 0 ) generateCap( false );
+
+    		}
+
+    		// build geometry
+
+    		this.setIndex( indices );
+    		this.setAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+    		this.setAttribute( 'normal', new Float32BufferAttribute( normals, 3 ) );
+    		this.setAttribute( 'uv', new Float32BufferAttribute( uvs, 2 ) );
+
+    		function generateTorso() {
+
+    			const normal = new Vector3();
+    			const vertex = new Vector3();
+
+    			let groupCount = 0;
+
+    			// this will be used to calculate the normal
+    			const slope = ( radiusBottom - radiusTop ) / height;
+
+    			// generate vertices, normals and uvs
+
+    			for ( let y = 0; y <= heightSegments; y ++ ) {
+
+    				const indexRow = [];
+
+    				const v = y / heightSegments;
+
+    				// calculate the radius of the current row
+
+    				const radius = v * ( radiusBottom - radiusTop ) + radiusTop;
+
+    				for ( let x = 0; x <= radialSegments; x ++ ) {
+
+    					const u = x / radialSegments;
+
+    					const theta = u * thetaLength + thetaStart;
+
+    					const sinTheta = Math.sin( theta );
+    					const cosTheta = Math.cos( theta );
+
+    					// vertex
+
+    					vertex.x = radius * sinTheta;
+    					vertex.y = - v * height + halfHeight;
+    					vertex.z = radius * cosTheta;
+    					vertices.push( vertex.x, vertex.y, vertex.z );
+
+    					// normal
+
+    					normal.set( sinTheta, slope, cosTheta ).normalize();
+    					normals.push( normal.x, normal.y, normal.z );
+
+    					// uv
+
+    					uvs.push( u, 1 - v );
+
+    					// save index of vertex in respective row
+
+    					indexRow.push( index ++ );
+
+    				}
+
+    				// now save vertices of the row in our index array
+
+    				indexArray.push( indexRow );
+
+    			}
+
+    			// generate indices
+
+    			for ( let x = 0; x < radialSegments; x ++ ) {
+
+    				for ( let y = 0; y < heightSegments; y ++ ) {
+
+    					// we use the index array to access the correct indices
+
+    					const a = indexArray[ y ][ x ];
+    					const b = indexArray[ y + 1 ][ x ];
+    					const c = indexArray[ y + 1 ][ x + 1 ];
+    					const d = indexArray[ y ][ x + 1 ];
+
+    					// faces
+
+    					indices.push( a, b, d );
+    					indices.push( b, c, d );
+
+    					// update group counter
+
+    					groupCount += 6;
+
+    				}
+
+    			}
+
+    			// add a group to the geometry. this will ensure multi material support
+
+    			scope.addGroup( groupStart, groupCount, 0 );
+
+    			// calculate new start value for groups
+
+    			groupStart += groupCount;
+
+    		}
+
+    		function generateCap( top ) {
+
+    			// save the index of the first center vertex
+    			const centerIndexStart = index;
+
+    			const uv = new Vector2();
+    			const vertex = new Vector3();
+
+    			let groupCount = 0;
+
+    			const radius = ( top === true ) ? radiusTop : radiusBottom;
+    			const sign = ( top === true ) ? 1 : - 1;
+
+    			// first we generate the center vertex data of the cap.
+    			// because the geometry needs one set of uvs per face,
+    			// we must generate a center vertex per face/segment
+
+    			for ( let x = 1; x <= radialSegments; x ++ ) {
+
+    				// vertex
+
+    				vertices.push( 0, halfHeight * sign, 0 );
+
+    				// normal
+
+    				normals.push( 0, sign, 0 );
+
+    				// uv
+
+    				uvs.push( 0.5, 0.5 );
+
+    				// increase index
+
+    				index ++;
+
+    			}
+
+    			// save the index of the last center vertex
+    			const centerIndexEnd = index;
+
+    			// now we generate the surrounding vertices, normals and uvs
+
+    			for ( let x = 0; x <= radialSegments; x ++ ) {
+
+    				const u = x / radialSegments;
+    				const theta = u * thetaLength + thetaStart;
+
+    				const cosTheta = Math.cos( theta );
+    				const sinTheta = Math.sin( theta );
+
+    				// vertex
+
+    				vertex.x = radius * sinTheta;
+    				vertex.y = halfHeight * sign;
+    				vertex.z = radius * cosTheta;
+    				vertices.push( vertex.x, vertex.y, vertex.z );
+
+    				// normal
+
+    				normals.push( 0, sign, 0 );
+
+    				// uv
+
+    				uv.x = ( cosTheta * 0.5 ) + 0.5;
+    				uv.y = ( sinTheta * 0.5 * sign ) + 0.5;
+    				uvs.push( uv.x, uv.y );
+
+    				// increase index
+
+    				index ++;
+
+    			}
+
+    			// generate indices
+
+    			for ( let x = 0; x < radialSegments; x ++ ) {
+
+    				const c = centerIndexStart + x;
+    				const i = centerIndexEnd + x;
+
+    				if ( top === true ) {
+
+    					// face top
+
+    					indices.push( i, i + 1, c );
+
+    				} else {
+
+    					// face bottom
+
+    					indices.push( i + 1, i, c );
+
+    				}
+
+    				groupCount += 3;
+
+    			}
+
+    			// add a group to the geometry. this will ensure multi material support
+
+    			scope.addGroup( groupStart, groupCount, top === true ? 1 : 2 );
+
+    			// calculate new start value for groups
+
+    			groupStart += groupCount;
+
+    		}
+
+    	}
+
+    }
+
     new Vector3();
     new Vector3();
     new Vector3();
@@ -42343,34 +42605,41 @@ var app = (function () {
         }
     }
 
-    var size = new Vector3(10, 10, 10);
-    class Projectile {
-        constructor({geometry, material, initial_pos, velocity, onclick}) {
-            // super();
-            this.mesh = new Mesh(geometry, material);
-            this.velocity = velocity;
-            this.mesh.onclick = onclick;
-            this.radius = geometry.parameters.radius;
-            this.collision_sphere = new Sphere(initial_pos, this.radius);
+    class GameObj {
+        add(obj) {
+            this.mesh.add(obj);
         }
 
         dispose() {
             this.parent.remove(this.mesh);
+            this.collider = null;
+            this.mesh.remove(this.label);
+        }
+    }
+
+
+    var size = new Vector3(10, 10, 10);
+    class Projectile extends GameObj {
+        constructor({geometry, material, initial_pos, velocity, onclick}) {
+            super();
+            this.mesh = new Mesh(geometry, material);
+            this.velocity = velocity;
+            this.mesh.onclick = onclick;
+            this.radius = geometry.parameters.radius;
+            this.collider = new Sphere(initial_pos, this.radius);
+            this.health_impact = 20;
         }
 
         check_collisions(collision_elements) {
             new Vector3();
             let pos_in_world = new Vector3();
             let collided_objs = [];
-            // console.log(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z)
-            this.collision_sphere.set(this.mesh.position, this.radius);
-            // console.log(this.collision_sphere.center.x, this.collision_sphere.center.y, this.collision_sphere.center.z)
+            this.collider.set(this.mesh.position, this.radius);
             collision_elements.forEach(obj => {
-                if (obj.collision_box) {
-                    // console.log(obj.collision_box)
+                if (obj.collider instanceof Box3) {
                     obj.getWorldPosition(pos_in_world);
-                    obj.collision_box.setFromCenterAndSize(pos_in_world, size);
-                    if (this.collision_sphere.intersectsBox(obj.collision_box)) {
+                    obj.collider.setFromCenterAndSize(pos_in_world, size);
+                    if (this.collider.intersectsBox(obj.collider)) {
                         collided_objs = [obj];
                         return  // this just returns out of the foreach
                     }
@@ -42391,13 +42660,24 @@ var app = (function () {
     }
 
 
-    class Enemy {
+    const health_bar_material = new MeshToonMaterial( {color: 0x00ff00} );
+
+    class Enemy extends GameObj {
         constructor({geometry, material}) {
-            // super();
+            super();
             this.should_delete = false;
             this.mesh = new Mesh(geometry, material);
             let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
-            this.collision_box = new Box3(new Vector3(-r, -r, -r), new Vector3(r, r, r));
+            this.collider = new Box3(new Vector3(-r, -r, -r), new Vector3(r, r, r));
+
+            this.full_health = 100;
+            this.health = 100;
+
+            let health_bar_geometry = new CylinderGeometry( 1, 1, 10, 10 );
+            this.health_bar = new Mesh( health_bar_geometry, health_bar_material );
+            this.mesh.add(this.health_bar);
+            this.health_bar.rotateZ(Math.PI/2);
+            this.health_bar.position.z = -8;
         }
 
         add_to(parent) {
@@ -42405,12 +42685,8 @@ var app = (function () {
             parent.add(this.mesh);
         }
 
-        dispose() {
-            this.parent.remove(this.mesh);
-            this.collision_box = null;
-        }
-
         take_damage(dmg) {
+            console.log('yo');
             this.health -= dmg;
             if (this.health <= 30) {
                 this.should_delete = true;
@@ -42423,7 +42699,6 @@ var app = (function () {
             this.take_damage(collided_obj.damage);
         }
     }
-
 
 
     function create_enemy(arg_dict) {
@@ -42508,7 +42783,7 @@ var app = (function () {
             this.formula = formula;
             this.name = 'Water';
             this.dict = Compound.classmeth_parse_formula_to_dict(this.formula);
-            this.damage = 100;
+            this.damage = 50;
             this.effects = [];
         }
     }
@@ -42978,7 +43253,7 @@ var app = (function () {
         
         new Sphere(earth_initial_position, earth_radius);
         // ONLY COMMENTING THIS NEXT LINE OUT BECAUSE I NEED TO ADJUST THE PROJECTILE ANGLE
-        // collision_elements.push(collision_sphere)
+        // collision_elements.push(collider)
 
         function rotate_earth(state) {
             let new_x_rotation = (global_clock.elapsedTime % time_for_full_rotation) * 2 * Math.PI / time_for_full_rotation;
