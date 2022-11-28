@@ -42390,13 +42390,6 @@ var app = (function () {
         }
     }
 
-    function create_projectile(arg_dict) {
-        let projectile = new Projectile(arg_dict);
-        let proxy = new Proxy(projectile, proxy_handler('mesh'));
-        proxy.position.copy(arg_dict['initial_pos']);
-        return proxy
-    }
-
 
     class Enemy {
         constructor({geometry, material}) {
@@ -42417,8 +42410,17 @@ var app = (function () {
             this.collision_box = null;
         }
 
-        collide() {
-            this.should_delete = true;
+        take_damage(dmg) {
+            this.health -= dmg;
+            if (this.health <= 30) {
+                this.should_delete = true;
+                return
+            }
+            this.health_bar.geometry.scale(1, this.health/this.full_health, 1);
+        }
+
+        collide(collided_obj) {
+            this.take_damage(collided_obj.damage);
         }
     }
 
@@ -42431,6 +42433,212 @@ var app = (function () {
 
         return proxy
     }
+
+    const material_map = {
+        'H2O': {
+            'geometry': new SphereGeometry( 5, 10, 10 ),
+            'material': new MeshToonMaterial({color: 0x26a0d4})
+        }
+    };
+
+
+    class Compound extends Projectile {
+        constructor({formula, initial_pos, velocity, onclick}) {
+            let geometry = material_map[formula]['geometry'];
+            let material = material_map[formula]['material'];
+            super({geometry, material, initial_pos, velocity, onclick});
+        }
+
+        toString () {
+            string = `${this.name} (${this.formula}): ${this.damage} damage. \n\tEffects: `;
+            for (effect in this.effects) {
+                string += "\n\t\t";
+                string += effect.toString();
+            }
+            return string
+        }
+
+        static classmeth_parse_formula_to_dict(formula) {
+            let d = {};
+            let current_el = '';
+            let current_num = '';
+            let chars = formula.split('');
+            function add_to_dict(el, num) {
+                if (d[el]) {
+                    d[el] += num;
+                } else {
+                    d[el] = num;
+                }
+            }
+            for (let c of chars) {
+                if (c.toUpperCase() !== c) { // must be lowercase aka not a new element or number
+                    current_el += c;
+                    continue
+                }
+                let num = Number(c);
+                if (isNaN(num)) {  // must be a captital letter aka new element
+                    num = current_num ? Number(current_num) : 1;
+                    if (current_el) {
+                        add_to_dict(current_el, num);
+                        current_el = c;
+                        current_num = '';
+                    } else {
+                        current_el = c;
+                    }
+                } else {
+                    current_num += c;
+                }
+            }
+            // do it one last time for the elements at the end
+            let num = current_num ? Number(current_num) : 1;
+            add_to_dict(current_el, num);
+            return d
+        }
+        
+        
+        parse_formula_to_dict(self) {
+            return Compound.classmeth_parse_formula_to_dict(this.formula)
+        }
+    }
+
+    class Water extends Compound {
+        constructor({initial_pos, velocity, onclick}) {
+            let formula = 'H2O';
+            super({formula, initial_pos, velocity, onclick});
+            this.formula = formula;
+            this.name = 'Water';
+            this.dict = Compound.classmeth_parse_formula_to_dict(this.formula);
+            this.damage = 100;
+            this.effects = [];
+        }
+    }
+
+
+    function create_water(arg_dict) {
+        let projectile = new Water(arg_dict);
+        let proxy = new Proxy(projectile, proxy_handler('mesh'));
+        proxy.position.copy(arg_dict['initial_pos']);
+        return proxy
+    }
+
+    // class Cyanide extends Compound {
+    //     constructor(enemy){
+    //         this.formula = 'CN'
+    //         this.name = 'Cyanide'
+    //         this.effects = [Poison(compound=self, enemy=enemy, damage=2)]
+    //         this.damage = 20
+    //     }
+    // }
+
+
+    // class Lead extends Compound {
+    //     constructor(enemy){
+    //         this.formula = 'Pb'
+    //         this.name = 'Lead'
+    //         this.effects = [Doom(compound=self, enemy=enemy, damage=20)]
+    //         this.damage = 30
+    //     }
+    // }
+
+
+    // class Chlorine extends Compound {
+    //     constructor(enemy){
+    //         this.formula = 'Cl'
+    //         this.name = 'Chlorine'
+    //         this.effects = []
+    //         this.damage = 10
+    //     }
+    // }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // import json
+    // import time
+        
+    /*
+    class JsonSerializable(object){
+        # https://yzhong-cs.medium.com/serialize-and-deserialize-complex-json-in-python-205ecc636caa
+        function toJSON(){
+            return json.dumps(default=lambda o: o.__dict__, sort_keys=True, indent=4)
+
+
+        @classmethod
+        def fromJSON(cls, json_data){
+            return cls(**json_data)
+        
+        
+        
+        def slow_print(text){
+            time.sleep(0)
+            print(text)
+        
+        
+        def get_coefficient(string){
+            coefficient = '0'
+            start = 0
+            chars = list(string)
+            for idx, c in enumerate(chars){
+                try{
+                    int(c)
+                    coefficient += c
+                except Exception{
+                    start = idx
+                    break
+            # do the max of 1 and int(coefficient) because no coefficient is assumed to be 1
+            return max(1, int(coefficient)), ''.join(chars[start:])
+        
+        
+        def measure_performance(func){
+            def wrapper(*args, **kwargs){
+                start = time.monotonic_ns()
+                return_value = func(*args, **kwargs)
+                end = time.monotonic_ns()
+                print('{} function took {} nanoseconds to run'.format(func.__name__, end - start))
+                return return_value
+            return wrapper
+        
+        
+        def least_common_multiple(num_arr){
+            # lazy method is just return the multiple of all of the numbers, which is not an LCM, but it works the same
+            return reduce(lambda serialized, num: serialized * num, num_arr, 1)
+        
+            # lcm = 1
+            # # make sure they are all not 1, because if so, the lcm is just 1
+            # if max(num_arr) == 1{
+            #     return 1
+        
+            # def all_nums_are_factors(num_arr){
+            #     for num in num_arr{
+            #         if lcm % num != 0{
+            #             return False
+            #     return True
+        
+            # # some random upper bound so we dont run to infinity if this code is wrong
+            # while lcm < 1000{
+            #     lcm += 1
+            #     if all_nums_are_factors(num_arr){
+            #         return lcm
+            # raise Exception("Least common multiple was not found")
+        
+        
+        # def find_random_compound(self, elements, compounds){
+        #     element_counts = {}
+        #     for element in elements{
+        #         element_counts[]
+        #     possible_compounds = []
+        #     for compound in compounds{
+        #         pass
+    */
 
     /**
      * @author mrdoob / http://mrdoob.com/
@@ -42880,10 +43088,6 @@ var app = (function () {
     }
 
 
-    var projectile_radius = 5;
-    var sphere_geometry = new SphereGeometry( projectile_radius, 10, 10 );
-    var toon_material = new MeshToonMaterial({color: 0xffff00});
-
     function fire_player_weapon(){
         const initial_pos = camera.position.clone();
         initial_pos.y -= 10;
@@ -42895,20 +43099,17 @@ var app = (function () {
             // this is just a POC. It doesnt work because all of the projectiles use the same material
             target.object.material.color.set('#eb4034');
         };
-        let params = {'geometry': sphere_geometry, 'material': toon_material, 'parent': scene,
-                      initial_pos, velocity, onclick};
-        let projectile = create_projectile(params);
+        let params = {'parent': scene, initial_pos, velocity, onclick};
+        let projectile = create_water(params);
         scene.add(projectile.mesh);
         let updater = new Updater(blast_projectile, {projectile: projectile});
         global_updates_queue.push(updater);
     }
 
     function blast_projectile({projectile, total_time, initial_time}){
-        if (!initial_time) {
-            initial_time = global_clock.elapsedTime;
-        }
-        let mesh = projectile.mesh;
+        if (!initial_time) initial_time = global_clock.elapsedTime;
         if (!total_time) total_time = 1;
+        let mesh = projectile.mesh;
         // xf = x0 + v0t + .5at^2
         let v0t = projectile.velocity.clone().multiplyScalar(total_time);
         let at2 = gravity.clone().multiplyScalar(total_time ** 2).multiplyScalar(0.5);

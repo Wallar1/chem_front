@@ -1,5 +1,3 @@
-// from effects import Doom, Poison, Effect
-// from utilities import slow_print
 
 /*
 Mercury: makes enemies crazy and attack each other
@@ -13,24 +11,27 @@ Calcium: makes player stronger
 Copper: electric shock that jumps from enemy to enemy 
 */
 
+import * as THREE from 'three';
+import {Projectile, proxy_handler} from './objects.js';
 
-const compound_to_damage_dict = {
-    'H2': 2,
-    'CH4': 4,
-    'NH3': 5,
-    'CO': 1,
-    'CN': 4,
-    'H2O': 2,
-    'O2': 1,
-    'Au': 5,
-    'Ag': 4,
-    'Pb': 8,
-    'Al': 9,
-    'Si': 2,
-    'Ca': 4,
-    'Na': 9,
-    'Cl': 9,
-    'Mg': 6
+
+const formula_to_damage_dict = {
+    'H2': 20,
+    'CH4': 40,
+    'NH3': 50,
+    'CO': 10,
+    'CN': 40,
+    'H2O': 20,
+    'O2': 10,
+    'Au': 50,
+    'Ag': 40,
+    'Pb': 80,
+    'Al': 90,
+    'Si': 20,
+    'Ca': 40,
+    'Na': 90,
+    'Cl': 90,
+    'Mg': 60
 }
 
 const formula_to_name_dict = {
@@ -57,13 +58,19 @@ const formula_to_name_dict = {
     'NaCl': 'Sodium Chloride (table salt)'
 }
 
+const material_map = {
+    'H2O': {
+        'geometry': new THREE.SphereGeometry( 5, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0x26a0d4})
+    }
+}
 
-export default class Compound {
-    constructor(formula, effects = []) {
-        this.formula = formula
-        this.name = ''
-        this.effects = effects
-        this.damage = 0
+
+export class Compound extends Projectile {
+    constructor({formula, initial_pos, velocity, onclick}) {
+        let geometry = material_map[formula]['geometry']
+        let material = material_map[formula]['material']
+        super({geometry, material, initial_pos, velocity, onclick})
     }
 
     toString () {
@@ -75,217 +82,116 @@ export default class Compound {
         return string
     }
 
-    
-    static classmeth_parse_formula_to_dict(formula){
-        /*
-        returns a dictionary of the element counts
-        ex: Br2ClNH3 -> {'Br': 2, 'Cl': 1, 'N': 1, 'H': 3}
-        */
-        element_counts = {}
-        element = ''
-        count = ''
-        for (c in formula) {
-            try {
-                num = int(c)
-                if (count) {
-                    count += num
-                }
-                else {
-                    count = num
-                }
-            } catch (error) {
-                // Every element symbol has only 1 capital, so a capital signals a new element
-                if (c.isupper()) {
-                    if (element){
-                        try{
-                            addition = int(count) ? int(count) : 1
-                        }
-                        catch (error) {
-                            addition = 1
-                        }
-                        if (element_counts.get(element, None)) {
-                            element_counts[element] += addition
-                        }
-                        else{
-                            element_counts[element] = addition
-                        }
-                        element = ''
-                        count = ''
-                    element = c
-                    }
-                }
-                else{
-                    element += c
-                }
+    static classmeth_parse_formula_to_dict(formula) {
+        let d = {}
+        let current_el = ''
+        let current_num = ''
+        let chars = formula.split('')
+        function add_to_dict(el, num) {
+            if (d[el]) {
+                d[el] += num
+            } else {
+                d[el] = num
             }
         }
-        if (element) {
-            try{
-                addition = int(count) ? int(count) : 1
+        for (let c of chars) {
+            if (c.toUpperCase() !== c) { // must be lowercase aka not a new element or number
+                current_el += c
+                continue
             }
-            catch (error) {
-                addition = 1
-            }
-            if (element_counts.get(element, None)) {
-                element_counts[element] += int(count)
-            }
-            else {
-                element_counts[element] = addition
+            let num = Number(c)
+            if (isNaN(num)) {  // must be a captital letter aka new element
+                num = current_num ? Number(current_num) : 1;
+                if (current_el) {
+                    add_to_dict(current_el, num)
+                    current_el = c
+                    current_num = ''
+                } else {
+                    current_el = c
+                }
+            } else {
+                current_num += c
             }
         }
-        return element_counts
+        // do it one last time for the elements at the end
+        let num = current_num ? Number(current_num) : 1;
+        add_to_dict(current_el, num)
+        return d
     }
-
+    
+    
     parse_formula_to_dict(self) {
         return Compound.classmeth_parse_formula_to_dict(this.formula)
     }
-
-    // TODO: Coefficient doesnt multiply effects. Seems fair right?
-    damage_enemy(enemy, coefficient) {
-        if (!enemy) {
-            throw 'Could not damage enemy that doesnt exist.'
-        }
-        dmg = this.damage * coefficient
-        slow_print("Attacked enemy {} with {}({}) for {} damage".format(enemy.name, this.name, this.formula, dmg))
-        enemy.damage(dmg)
-        // TODO: this stacks the effects, but do we want that?
-        if (this.effects.length) {
-            for (effect in this.effects) {
-                enemy.add_effect(effect)
-            }
-        }
-    }
 }
 
-
-class Cyanide extends Compound {
-    constructor(enemy){
-        this.formula = 'CN'
-        this.name = 'Cyanide'
-        this.effects = [Poison(compound=self, enemy=enemy, damage=2)]
-        this.damage = 4
-    }
-}
-
-
-class Lead extends Compound {
-    constructor(enemy){
-        this.formula = 'Pb'
-        this.name = 'Lead'
-        this.effects = [Doom(compound=self, enemy=enemy, damage=20)]
-        this.damage = 5
-    }
-}
-
-
-class Chlorine extends Compound {
-    constructor(enemy){
-        this.formula = 'Cl'
-        this.name = 'Chlorine'
+class Water extends Compound {
+    constructor({initial_pos, velocity, onclick}) {
+        let formula = 'H2O'
+        super({formula, initial_pos, velocity, onclick})
+        this.formula = formula
+        this.name = 'Water'
+        this.dict = Compound.classmeth_parse_formula_to_dict(this.formula)
+        this.damage = 100
         this.effects = []
-        this.damage = 9
     }
 }
 
 
-class CompoundFactory extends Compound {
-    formulas_to_class = {
-        'H2': 'Hydrogen gas',
-        'CH4': 'Methane',
-        'NH3': 'Ammonia',
-        'CO': 'Carbon Monoxide',
-        'CN': Cyanide,
-        'H2O': 'Water',
-        'O2': 'Oxygen gas',
-        'Au': 'Gold',
-        'Ag': 'Silver',
-        'Pb': Lead,
-        'Al': 'Aluminum',
-        'Si': 'Silicon',
-        'Ca': 'Calcium',
-        'Na': 'Sodium',
-        '2Na': 'Sodium x 2',
-        '3Na': 'Sodium x 3',
-        'Cl': 'Chlorine',
-        '2Cl': 'Chlorine x 2',
-        '3Cl': 'Chlorine x 3',
-        'Mg': 'Mercury',
-        'NaCl': 'Sodium Chloride (table salt)'
-    }
-
-    // static function create(formula, enemy){
-    //     return this.formulas_to_class.get(formula)(enemy)
-    // }
+export function create_water(arg_dict) {
+    let projectile = new Water(arg_dict)
+    let proxy = new Proxy(projectile, proxy_handler('mesh'))
+    proxy.position.copy(arg_dict['initial_pos'])
+    return proxy
 }
 
-
-
-// import uuid
-
-// from utilities import slow_print
-
-
-class Effect {
-    constructor(compound, enemy, damage, turns_until_effect){
-        this.compound = compound
-        this.enemy = enemy
-        this.damage = damage
-        this.turns_until_effect = turns_until_effect
-        this.uuid = uuid.uuid4()
+function poison({dmg, enemy, framerate, initial_time, total_time, seconds_between_poison, number_of_ticks}) {
+    if (!initial_time) initial_time = global_clock.elapsedTime
+    if (!total_time) total_time = 0;
+    total_time += global_clock.elapsedTime - initial_time;
+    let half_frame_rate = framerate / 2
+    let should_tick = Math.round((total_time * half_frame_rate) % (seconds_between_poison * half_frame_rate)) === 0
+    if (should_tick) {
+        enemy.take_damage(dmg)
+        number_of_ticks -= 1
+        initial_time = total_time
     }
+    let finished = false;
+    if (number_of_ticks <= 0) {
+        finished = true
+        return {finished}
+    }
+    return {dmg, enemy, framerate, initial_time, total_time, seconds_between_poison, number_of_ticks}
 }
 
-
-class Poison extends Effect{
-    constructor(compound=None, enemy=None, damage=0){
-        turns_until_effect = 0
-        // super(Poison, self).__init__(compound, enemy, damage, turns_until_effect)
-    }
-
-    toString(){
-        return "Poison{ does {} damage every turn".format(this.damage)
-    }
-
-    call(self) {
-        slow_print('{} poison does {} damage to {}'.format(this.compound.name, this.damage, this.enemy.name))
-        this.enemy.damage(this.damage)
-        this.damage -= 1
-        if (this.damage <= 0){
-            this.enemy.remove_effect(this.uuid)
-            // del self
-        }
-    }
-}
+// class Cyanide extends Compound {
+//     constructor(enemy){
+//         this.formula = 'CN'
+//         this.name = 'Cyanide'
+//         this.effects = [Poison(compound=self, enemy=enemy, damage=2)]
+//         this.damage = 20
+//     }
+// }
 
 
-class Doom extends Effect{
-    constructor(compound=None, enemy=None, damage=0){
-        turns_until_effect = 4
-        super(Doom, self).__init__(compound, enemy, damage, turns_until_effect)
-    }
-
-    toString() {
-        return "Doom: a blast of {} damage after {} turns".format(this.damage, this.turns_until_effect)
-    }
-
-    call(){
-        if (this.turns_until_effect > 0){
-            slow_print('{} turns until DOOM effect on {}'.format(this.turns_until_effect, this.enemy.name))
-            this.turns_until_effect -= 1   
-        }
-        else{
-            slow_print('{} does {} DOOM damage to {}'.format(this.compound.name, this.damage, this.enemy.name))
-            this.enemy.damage(this.damage)
-            this.enemy.remove_effect(this.uuid)
-            // del this
-        }
-    }
-}
-        
+// class Lead extends Compound {
+//     constructor(enemy){
+//         this.formula = 'Pb'
+//         this.name = 'Lead'
+//         this.effects = [Doom(compound=self, enemy=enemy, damage=20)]
+//         this.damage = 30
+//     }
+// }
 
 
-
-
+// class Chlorine extends Compound {
+//     constructor(enemy){
+//         this.formula = 'Cl'
+//         this.name = 'Chlorine'
+//         this.effects = []
+//         this.damage = 10
+//     }
+// }
 
 
 
