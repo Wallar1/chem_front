@@ -45,6 +45,10 @@ var app = (function () {
     function space() {
         return text(' ');
     }
+    function listen(node, event, handler, options) {
+        node.addEventListener(event, handler, options);
+        return () => node.removeEventListener(event, handler, options);
+    }
     function attr(node, attribute, value) {
         if (value == null)
             node.removeAttribute(attribute);
@@ -293,6 +297,19 @@ var app = (function () {
     function detach_dev(node) {
         dispatch_dev('SvelteDOMRemove', { node });
         detach(node);
+    }
+    function listen_dev(node, event, handler, options, has_prevent_default, has_stop_propagation) {
+        const modifiers = options === true ? ['capture'] : options ? Array.from(Object.keys(options)) : [];
+        if (has_prevent_default)
+            modifiers.push('preventDefault');
+        if (has_stop_propagation)
+            modifiers.push('stopPropagation');
+        dispatch_dev('SvelteDOMAddEventListener', { node, event, handler, modifiers });
+        const dispose = listen(node, event, handler, options);
+        return () => {
+            dispatch_dev('SvelteDOMRemoveEventListener', { node, event, handler, modifiers });
+            dispose();
+        };
     }
     function attr_dev(node, attribute, value) {
         attr(node, attribute, value);
@@ -42686,7 +42703,6 @@ var app = (function () {
         }
 
         take_damage(dmg) {
-            console.log('yo');
             this.health -= dmg;
             if (this.health <= 30) {
                 this.should_delete = true;
@@ -42710,10 +42726,26 @@ var app = (function () {
     }
 
     const material_map = {
+        'H2': {
+            'geometry': new SphereGeometry( 2, 10, 10 ),
+            'material': new MeshToonMaterial({color: 0x10c42e})
+        },
+        'CH4': {
+            'geometry': new SphereGeometry( 4, 10, 10 ),
+            'material': new MeshToonMaterial({color: 0xe31b05})
+        },
+        'NH3': {
+            'geometry': new SphereGeometry( 5, 10, 10 ),
+            'material': new MeshToonMaterial({color: 0xafb538})
+        },
+        'CN': {
+            'geometry': new SphereGeometry( 3, 10, 10 ),
+            'material': new MeshToonMaterial({color: 0xebebeb})
+        },
         'H2O': {
             'geometry': new SphereGeometry( 5, 10, 10 ),
             'material': new MeshToonMaterial({color: 0x26a0d4})
-        }
+        },
     };
 
 
@@ -42722,6 +42754,8 @@ var app = (function () {
             let geometry = material_map[formula]['geometry'];
             let material = material_map[formula]['material'];
             super({geometry, material, initial_pos, velocity, onclick});
+            this.formula = formula;
+            this.dict = Compound.classmeth_parse_formula_to_dict(this.formula);
         }
 
         toString () {
@@ -42776,21 +42810,68 @@ var app = (function () {
         }
     }
 
-    class Water extends Compound {
+
+    class HydrogenGas extends Compound {
         constructor({initial_pos, velocity, onclick}) {
-            let formula = 'H2O';
+            let formula = 'H2';
             super({formula, initial_pos, velocity, onclick});
-            this.formula = formula;
-            this.name = 'Water';
-            this.dict = Compound.classmeth_parse_formula_to_dict(this.formula);
+            this.name = 'Hydrogen Gas';
+            this.damage = 20;
+            this.effects = [];
+        }
+    }
+
+    class Methane extends Compound {
+        constructor({initial_pos, velocity, onclick}) {
+            let formula = 'CH4';
+            super({formula, initial_pos, velocity, onclick});
+            this.name = 'Methane';
+            this.damage = 30;
+            this.effects = [];
+        }
+    }
+
+    class Ammonia extends Compound {
+        constructor({initial_pos, velocity, onclick}) {
+            let formula = 'NH3';
+            super({formula, initial_pos, velocity, onclick});
+            this.name = 'Ammonia';
+            this.damage = 30;
+            this.effects = [];
+        }
+    }
+
+    class Cyanide extends Compound {
+        constructor({initial_pos, velocity, onclick}) {
+            let formula = 'CN';
+            super({formula, initial_pos, velocity, onclick});
+            this.name = 'Cyanide';
             this.damage = 50;
             this.effects = [];
         }
     }
 
+    class Water extends Compound {
+        constructor({initial_pos, velocity, onclick}) {
+            let formula = 'H2O';
+            super({formula, initial_pos, velocity, onclick});
+            this.name = 'Water';
+            this.damage = 50;
+            this.effects = [];
+        }
+    }
 
-    function create_water(arg_dict) {
-        let projectile = new Water(arg_dict);
+    const compound_name_to_class = {
+        'H2': HydrogenGas,
+        'CH4': Methane,
+        'NH3': Ammonia,
+        'CN': Cyanide,
+        'H2O': Water,
+    };
+
+    function create_compound(compound_name, arg_dict) {
+        let klass = compound_name_to_class[compound_name];
+        let projectile = new klass(arg_dict);
         let proxy = new Proxy(projectile, proxy_handler('mesh'));
         proxy.position.copy(arg_dict['initial_pos']);
         return proxy
@@ -42914,6 +42995,15 @@ var app = (function () {
         #     for compound in compounds{
         #         pass
     */
+
+    let ui_state = {
+        'selected_compound': 'H2O',
+    };
+
+    function update_selected(event) {
+        ui_state['selected_compound'] = event.target.innerText;
+        console.log(ui_state);
+    }
 
     /**
      * @author mrdoob / http://mrdoob.com/
@@ -43375,7 +43465,7 @@ var app = (function () {
             target.object.material.color.set('#eb4034');
         };
         let params = {'parent': scene, initial_pos, velocity, onclick};
-        let projectile = create_water(params);
+        let projectile = create_compound(ui_state['selected_compound'], params);
         scene.add(projectile.mesh);
         let updater = new Updater(blast_projectile, {projectile: projectile});
         global_updates_queue.push(updater);
@@ -43398,7 +43488,6 @@ var app = (function () {
         let finished = false;
         if (total_time > 100 || collisions.length) {
             finished = true;
-            console.log(total_time, collisions);
             return {finished, to_delete: [projectile]}
         }
         return {projectile, total_time, finished, initial_time}
@@ -43409,67 +43498,143 @@ var app = (function () {
 
     function create_fragment(ctx) {
     	let main;
-    	let div;
+    	let div0;
     	let t0;
-    	let h1;
-    	let t1;
+    	let div6;
+    	let div1;
     	let t2;
-    	let t3;
+    	let div2;
     	let t4;
+    	let div3;
+    	let t6;
+    	let div4;
+    	let t8;
+    	let div5;
+    	let t10;
+    	let div7;
+    	let t11;
+    	let h1;
+    	let t12;
+    	let t13;
+    	let t14;
+    	let t15;
     	let p;
-    	let t5;
+    	let t16;
     	let a;
-    	let t7;
+    	let t18;
+    	let mounted;
+    	let dispose;
 
     	const block = {
     		c: function create() {
     			main = element("main");
-    			div = element("div");
+    			div0 = element("div");
     			t0 = space();
-    			h1 = element("h1");
-    			t1 = text("Hello ");
-    			t2 = text(/*name*/ ctx[0]);
-    			t3 = text("!");
+    			div6 = element("div");
+    			div1 = element("div");
+    			div1.textContent = "H2";
+    			t2 = space();
+    			div2 = element("div");
+    			div2.textContent = "CH4";
     			t4 = space();
+    			div3 = element("div");
+    			div3.textContent = "NH3";
+    			t6 = space();
+    			div4 = element("div");
+    			div4.textContent = "CN";
+    			t8 = space();
+    			div5 = element("div");
+    			div5.textContent = "H2O";
+    			t10 = space();
+    			div7 = element("div");
+    			t11 = space();
+    			h1 = element("h1");
+    			t12 = text("Hello ");
+    			t13 = text(/*name*/ ctx[0]);
+    			t14 = text("!");
+    			t15 = space();
     			p = element("p");
-    			t5 = text("Visit the ");
+    			t16 = text("Visit the ");
     			a = element("a");
     			a.textContent = "Svelte tutorial";
-    			t7 = text(" to learn how to build Svelte apps.");
-    			attr_dev(div, "id", "canvas-container");
-    			add_location(div, file, 21, 1, 530);
-    			attr_dev(h1, "class", "svelte-lx7if2");
-    			add_location(h1, file, 22, 1, 565);
+    			t18 = text(" to learn how to build Svelte apps.");
+    			attr_dev(div0, "id", "sidebar-right");
+    			attr_dev(div0, "class", "svelte-1cnnfyk");
+    			add_location(div0, file, 14, 1, 336);
+    			attr_dev(div1, "class", "button svelte-1cnnfyk");
+    			add_location(div1, file, 16, 2, 396);
+    			attr_dev(div2, "class", "button svelte-1cnnfyk");
+    			add_location(div2, file, 17, 2, 454);
+    			attr_dev(div3, "class", "button svelte-1cnnfyk");
+    			add_location(div3, file, 18, 2, 513);
+    			attr_dev(div4, "class", "button svelte-1cnnfyk");
+    			add_location(div4, file, 19, 2, 572);
+    			attr_dev(div5, "class", "button svelte-1cnnfyk");
+    			add_location(div5, file, 20, 2, 630);
+    			attr_dev(div6, "id", "sidebar-bottom");
+    			attr_dev(div6, "class", "svelte-1cnnfyk");
+    			add_location(div6, file, 15, 1, 368);
+    			attr_dev(div7, "id", "canvas-container");
+    			add_location(div7, file, 22, 1, 696);
+    			attr_dev(h1, "class", "svelte-1cnnfyk");
+    			add_location(h1, file, 23, 1, 731);
     			attr_dev(a, "href", "https://svelte.dev/tutorial");
-    			add_location(a, file, 23, 14, 602);
-    			add_location(p, file, 23, 1, 589);
-    			attr_dev(main, "class", "svelte-lx7if2");
-    			add_location(main, file, 12, 0, 286);
+    			add_location(a, file, 24, 14, 768);
+    			add_location(p, file, 24, 1, 755);
+    			attr_dev(main, "class", "svelte-1cnnfyk");
+    			add_location(main, file, 13, 0, 328);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, main, anchor);
-    			append_dev(main, div);
+    			append_dev(main, div0);
     			append_dev(main, t0);
+    			append_dev(main, div6);
+    			append_dev(div6, div1);
+    			append_dev(div6, t2);
+    			append_dev(div6, div2);
+    			append_dev(div6, t4);
+    			append_dev(div6, div3);
+    			append_dev(div6, t6);
+    			append_dev(div6, div4);
+    			append_dev(div6, t8);
+    			append_dev(div6, div5);
+    			append_dev(main, t10);
+    			append_dev(main, div7);
+    			append_dev(main, t11);
     			append_dev(main, h1);
-    			append_dev(h1, t1);
-    			append_dev(h1, t2);
-    			append_dev(h1, t3);
-    			append_dev(main, t4);
+    			append_dev(h1, t12);
+    			append_dev(h1, t13);
+    			append_dev(h1, t14);
+    			append_dev(main, t15);
     			append_dev(main, p);
-    			append_dev(p, t5);
+    			append_dev(p, t16);
     			append_dev(p, a);
-    			append_dev(p, t7);
+    			append_dev(p, t18);
+
+    			if (!mounted) {
+    				dispose = [
+    					listen_dev(div1, "click", update_selected, false, false, false),
+    					listen_dev(div2, "click", update_selected, false, false, false),
+    					listen_dev(div3, "click", update_selected, false, false, false),
+    					listen_dev(div4, "click", update_selected, false, false, false),
+    					listen_dev(div5, "click", update_selected, false, false, false)
+    				];
+
+    				mounted = true;
+    			}
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*name*/ 1) set_data_dev(t2, /*name*/ ctx[0]);
+    			if (dirty & /*name*/ 1) set_data_dev(t13, /*name*/ ctx[0]);
     		},
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(main);
+    			mounted = false;
+    			run_all(dispose);
     		}
     	};
 
@@ -43503,7 +43668,7 @@ var app = (function () {
     		if ('name' in $$props) $$invalidate(0, name = $$props.name);
     	};
 
-    	$$self.$capture_state = () => ({ BasicGameplay, name });
+    	$$self.$capture_state = () => ({ BasicGameplay, update_selected, name });
 
     	$$self.$inject_state = $$props => {
     		if ('name' in $$props) $$invalidate(0, name = $$props.name);

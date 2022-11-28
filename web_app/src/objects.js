@@ -113,7 +113,6 @@ class Enemy extends GameObj {
     }
 
     take_damage(dmg) {
-        console.log('yo')
         this.health -= dmg
         if (this.health <= 30) {
             this.should_delete = true;

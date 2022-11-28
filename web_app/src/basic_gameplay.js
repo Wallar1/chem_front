@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as compounds from './compounds.js'
 // import * as AmmoLib from '../lib/ammo.js';
 import {create_enemy, Enemy, get_all_properties} from './objects.js';
-import {create_water} from './compounds.js';
+import {create_compound} from './compounds.js';
+import {ui_state} from './ui.js';
 
 import { Stats } from '../public/lib/stats.js'
 
@@ -298,7 +299,7 @@ function fire_player_weapon(){
         target.object.material.color.set('#eb4034')
     }
     let params = {'parent': scene, initial_pos, velocity, onclick}
-    let projectile = create_water(params)
+    let projectile = create_compound(ui_state['selected_compound'], params)
     scene.add(projectile.mesh)
     let updater = new Updater(blast_projectile, {projectile: projectile})
     global_updates_queue.push(updater)
@@ -333,7 +334,6 @@ function blast_projectile({projectile, total_time, initial_time}){
     let finished = false;
     if (total_time > 100 || collisions.length) {
         finished = true
-        console.log(total_time, collisions)
         return {finished, to_delete: [projectile]}
     }
     return {projectile, total_time, finished, initial_time}
