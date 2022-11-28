@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as compounds from './compounds.js'
 // import * as AmmoLib from '../lib/ammo.js';
-import {create_projectile, create_enemy, Enemy, get_all_properties} from './objects.js';
+import {create_enemy, Enemy, get_all_properties} from './objects.js';
+import {create_water} from './compounds.js';
 
 import { Stats } from '../public/lib/stats.js'
 
@@ -285,10 +286,6 @@ function on_mouse_click(event) {
 }
 
 
-var projectile_radius = 5;
-var sphere_geometry = new THREE.SphereGeometry( projectile_radius, 10, 10 );
-var toon_material = new THREE.MeshToonMaterial({color: 0xffff00})
-
 function fire_player_weapon(){
     const initial_pos = camera.position.clone()
     initial_pos.y -= 10
@@ -300,9 +297,8 @@ function fire_player_weapon(){
         // this is just a POC. It doesnt work because all of the projectiles use the same material
         target.object.material.color.set('#eb4034')
     }
-    let params = {'geometry': sphere_geometry, 'material': toon_material, 'parent': scene,
-                  initial_pos, velocity, onclick}
-    let projectile = create_projectile(params)
+    let params = {'parent': scene, initial_pos, velocity, onclick}
+    let projectile = create_water(params)
     scene.add(projectile.mesh)
     let updater = new Updater(blast_projectile, {projectile: projectile})
     global_updates_queue.push(updater)
@@ -321,11 +317,9 @@ function fire_enemy_projectile(){
 }
 
 function blast_projectile({projectile, total_time, initial_time}){
-    if (!initial_time) {
-        initial_time = global_clock.elapsedTime
-    }
-    let mesh = projectile.mesh
+    if (!initial_time) initial_time = global_clock.elapsedTime
     if (!total_time) total_time = 1;
+    let mesh = projectile.mesh
     // xf = x0 + v0t + .5at^2
     let v0t = projectile.velocity.clone().multiplyScalar(total_time)
     let at2 = gravity.clone().multiplyScalar(total_time ** 2).multiplyScalar(0.5)

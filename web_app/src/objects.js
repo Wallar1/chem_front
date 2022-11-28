@@ -86,13 +86,6 @@ class Projectile extends GameObj {
     }
 }
 
-function create_projectile(arg_dict) {
-    let projectile = new Projectile(arg_dict)
-    let proxy = new Proxy(projectile, proxy_handler('mesh'))
-    proxy.position.copy(arg_dict['initial_pos'])
-    return proxy
-}
-
 
 const health_bar_material = new THREE.MeshToonMaterial( {color: 0x00ff00} );
 
@@ -119,13 +112,18 @@ class Enemy extends GameObj {
         parent.add(this.mesh)
     }
 
-    collide(collided_obj) {
-        this.health -= collided_obj.health_impact;
+    take_damage(dmg) {
+        console.log('yo')
+        this.health -= dmg
         if (this.health <= 30) {
             this.should_delete = true;
             return
         }
         this.health_bar.geometry.scale(1, this.health/this.full_health, 1)
+    }
+
+    collide(collided_obj) {
+        this.take_damage(collided_obj.damage)
     }
 }
 
@@ -154,4 +152,4 @@ class Test {
 }
 
 
-export {create_enemy, create_projectile, Enemy, get_all_properties};
+export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler};
