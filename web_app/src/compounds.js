@@ -132,7 +132,7 @@ class Water extends Compound {
         this.formula = formula
         this.name = 'Water'
         this.dict = Compound.classmeth_parse_formula_to_dict(this.formula)
-        this.damage = 100
+        this.damage = 50
         this.effects = []
     }
 }

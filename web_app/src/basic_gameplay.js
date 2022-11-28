@@ -174,9 +174,9 @@ function create_earth(){
     earth.castShadow = false;
     earth.receiveShadow = true;
     
-    let collision_sphere = new THREE.Sphere(earth_initial_position, earth_radius);
+    let collider = new THREE.Sphere(earth_initial_position, earth_radius);
     // ONLY COMMENTING THIS NEXT LINE OUT BECAUSE I NEED TO ADJUST THE PROJECTILE ANGLE
-    // collision_elements.push(collision_sphere)
+    // collision_elements.push(collider)
 
     function rotate_earth(state) {
         let new_x_rotation = (global_clock.elapsedTime % time_for_full_rotation) * 2 * Math.PI / time_for_full_rotation;
