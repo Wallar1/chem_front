@@ -79,13 +79,6 @@ class Projectile {
     }
 }
 
-function create_projectile(arg_dict) {
-    let projectile = new Projectile(arg_dict)
-    let proxy = new Proxy(projectile, proxy_handler('mesh'))
-    proxy.position.copy(arg_dict['initial_pos'])
-    return proxy
-}
-
 
 class Enemy {
     constructor({geometry, material}) {
@@ -106,8 +99,17 @@ class Enemy {
         this.collision_box = null;
     }
 
-    collide() {
-        this.should_delete = true;
+    take_damage(dmg) {
+        this.health -= dmg
+        if (this.health <= 30) {
+            this.should_delete = true;
+            return
+        }
+        this.health_bar.geometry.scale(1, this.health/this.full_health, 1)
+    }
+
+    collide(collided_obj) {
+        this.take_damage(collided_obj.damage)
     }
 }
 
@@ -137,4 +139,4 @@ class Test {
 }
 
 
-export {create_enemy, create_projectile, Enemy, get_all_properties};
+export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler};
