@@ -3,6 +3,7 @@
 	// new CharacterControllerDemo();
 
 	import {BasicGameplay} from './basic_gameplay.js'
+	import {update_selected} from './ui.js';
 	document.addEventListener('DOMContentLoaded', (event) => {
 		new BasicGameplay();
 	});
@@ -11,14 +12,14 @@
 </script>
 
 <main>
-	<!-- <div id='sidebar-right'></div>
+	<div id='sidebar-right'></div>
 	<div id='sidebar-bottom'>
-		<div class='button'>Hey</div>
-		<div class='button'>Hey</div>
-		<div class='button'>Hey</div>
-		<div class='button'>Hey</div>
-		<div class='button'>Hey</div>
-	</div> -->
+		<div class='button' on:click={update_selected}>H2</div>
+		<div class='button' on:click={update_selected}>CH4</div>
+		<div class='button' on:click={update_selected}>NH3</div>
+		<div class='button' on:click={update_selected}>CN</div>
+		<div class='button' on:click={update_selected}>H2O</div>
+	</div>
 	<div id='canvas-container'></div>
 	<h1>Hello {name}!</h1>
 	<p>Visit the <a href="https://svelte.dev/tutorial">Svelte tutorial</a> to learn how to build Svelte apps.</p>
@@ -46,7 +47,7 @@
 		}
 	}
 
-	/*
+	
 
 	#sidebar-right {
 		height: 100vh;
@@ -82,5 +83,5 @@
 		border: 1px solid black;
 	}
 
-	*/
+	
 </style>

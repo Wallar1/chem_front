@@ -59,10 +59,26 @@ const formula_to_name_dict = {
 }
 
 const material_map = {
+    'H2': {
+        'geometry': new THREE.SphereGeometry( 2, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0x10c42e})
+    },
+    'CH4': {
+        'geometry': new THREE.SphereGeometry( 4, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xe31b05})
+    },
+    'NH3': {
+        'geometry': new THREE.SphereGeometry( 5, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xafb538})
+    },
+    'CN': {
+        'geometry': new THREE.SphereGeometry( 3, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xebebeb})
+    },
     'H2O': {
         'geometry': new THREE.SphereGeometry( 5, 10, 10 ),
         'material': new THREE.MeshToonMaterial({color: 0x26a0d4})
-    }
+    },
 }
 
 
@@ -71,6 +87,8 @@ export class Compound extends Projectile {
         let geometry = material_map[formula]['geometry']
         let material = material_map[formula]['material']
         super({geometry, material, initial_pos, velocity, onclick})
+        this.formula = formula
+        this.dict = Compound.classmeth_parse_formula_to_dict(this.formula)
     }
 
     toString () {
@@ -125,21 +143,74 @@ export class Compound extends Projectile {
     }
 }
 
-class Water extends Compound {
+{/* <div class='button'>H2</div>
+		<div class='button'>CH4</div>
+		<div class='button'>NH3</div>
+		<div class='button'>CN</div>
+		<div class='button'>H2O</div> */}
+
+
+class HydrogenGas extends Compound {
     constructor({initial_pos, velocity, onclick}) {
-        let formula = 'H2O'
+        let formula = 'H2'
         super({formula, initial_pos, velocity, onclick})
-        this.formula = formula
-        this.name = 'Water'
-        this.dict = Compound.classmeth_parse_formula_to_dict(this.formula)
+        this.name = 'Hydrogen Gas'
+        this.damage = 20
+        this.effects = []
+    }
+}
+
+class Methane extends Compound {
+    constructor({initial_pos, velocity, onclick}) {
+        let formula = 'CH4'
+        super({formula, initial_pos, velocity, onclick})
+        this.name = 'Methane'
+        this.damage = 30
+        this.effects = []
+    }
+}
+
+class Ammonia extends Compound {
+    constructor({initial_pos, velocity, onclick}) {
+        let formula = 'NH3'
+        super({formula, initial_pos, velocity, onclick})
+        this.name = 'Ammonia'
+        this.damage = 30
+        this.effects = []
+    }
+}
+
+class Cyanide extends Compound {
+    constructor({initial_pos, velocity, onclick}) {
+        let formula = 'CN'
+        super({formula, initial_pos, velocity, onclick})
+        this.name = 'Cyanide'
         this.damage = 50
         this.effects = []
     }
 }
 
+class Water extends Compound {
+    constructor({initial_pos, velocity, onclick}) {
+        let formula = 'H2O'
+        super({formula, initial_pos, velocity, onclick})
+        this.name = 'Water'
+        this.damage = 50
+        this.effects = []
+    }
+}
 
-export function create_water(arg_dict) {
-    let projectile = new Water(arg_dict)
+const compound_name_to_class = {
+    'H2': HydrogenGas,
+    'CH4': Methane,
+    'NH3': Ammonia,
+    'CN': Cyanide,
+    'H2O': Water,
+}
+
+export function create_compound(compound_name, arg_dict) {
+    let klass = compound_name_to_class[compound_name]
+    let projectile = new klass(arg_dict)
     let proxy = new Proxy(projectile, proxy_handler('mesh'))
     proxy.position.copy(arg_dict['initial_pos'])
     return proxy
