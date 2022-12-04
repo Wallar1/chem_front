@@ -4,9 +4,10 @@ import * as compounds from './compounds.js'
 // import * as AmmoLib from '../lib/ammo.js';
 import {create_enemy, Enemy, get_all_properties} from './objects.js';
 import {create_compound} from './compounds.js';
-import {ui_state} from './ui.js';
+import { selected_compound } from './components/stores.js';
 
 import { Stats } from '../public/lib/stats.js'
+import { last_pressed_key } from './components/stores.js';
 
 
 // Tutorial for collision detection:
@@ -60,6 +61,9 @@ var collision_elements = [];  // we just have to keep track of the enemies and e
 var stats = new Stats();
 stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
 document.body.appendChild( stats.dom );
+
+var selected_compound_sub;
+selected_compound.subscribe(val => selected_compound_sub = val)
 
 export class BasicGameplay {
     constructor() {
@@ -299,7 +303,7 @@ function fire_player_weapon(){
         target.object.material.color.set('#eb4034')
     }
     let params = {'parent': scene, initial_pos, velocity, onclick}
-    let projectile = create_compound(ui_state['selected_compound'], params)
+    let projectile = create_compound(selected_compound_sub, params)
     scene.add(projectile.mesh)
     let updater = new Updater(blast_projectile, {projectile: projectile})
     global_updates_queue.push(updater)
