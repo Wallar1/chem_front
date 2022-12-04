@@ -1,6 +1,6 @@
 <script>
     import CompoundCard from './compound_card.svelte';
-    import {key_to_compound, selected_compound} from './stores.js';
+    import {key_to_compound, selected_compound} from '../../stores.js';
 </script>
 
 <div id='sidebar-bottom'>

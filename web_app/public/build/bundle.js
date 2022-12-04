@@ -24,6 +24,14 @@ var app = (function () {
     function safe_not_equal(a, b) {
         return a != a ? b == b : a !== b || ((a && typeof a === 'object') || typeof a === 'function');
     }
+    let src_url_equal_anchor;
+    function src_url_equal(element_src, url) {
+        if (!src_url_equal_anchor) {
+            src_url_equal_anchor = document.createElement('a');
+        }
+        src_url_equal_anchor.href = url;
+        return element_src === src_url_equal_anchor.href;
+    }
     function is_empty(obj) {
         return Object.keys(obj).length === 0;
     }
@@ -41,6 +49,10 @@ var app = (function () {
     }
     function component_subscribe(component, store, callback) {
         component.$$.on_destroy.push(subscribe(store, callback));
+    }
+    function set_store_value(store, ret, value) {
+        store.set(value);
+        return ret;
     }
     function append(target, node) {
         target.appendChild(node);
@@ -77,6 +89,13 @@ var app = (function () {
             return fn.call(this, event);
         };
     }
+    function stop_propagation(fn) {
+        return function (event) {
+            event.stopPropagation();
+            // @ts-ignore
+            return fn.call(this, event);
+        };
+    }
     function attr(node, attribute, value) {
         if (value == null)
             node.removeAttribute(attribute);
@@ -85,6 +104,14 @@ var app = (function () {
     }
     function children(element) {
         return Array.from(element.childNodes);
+    }
+    function set_style(node, key, value, important) {
+        if (value === null) {
+            node.style.removeProperty(key);
+        }
+        else {
+            node.style.setProperty(key, value, important ? 'important' : '');
+        }
     }
     function toggle_class(element, name, toggle) {
         element.classList[toggle ? 'add' : 'remove'](name);
@@ -98,6 +125,14 @@ var app = (function () {
     let current_component;
     function set_current_component(component) {
         current_component = component;
+    }
+    function get_current_component() {
+        if (!current_component)
+            throw new Error('Function called outside component initialization');
+        return current_component;
+    }
+    function onMount(fn) {
+        get_current_component().$$.on_mount.push(fn);
     }
 
     const dirty_components = [];
@@ -432,6 +467,532 @@ var app = (function () {
         }
         $capture_state() { }
         $inject_state() { }
+    }
+
+    const subscriber_queue = [];
+    /**
+     * Creates a `Readable` store that allows reading by subscription.
+     * @param value initial value
+     * @param {StartStopNotifier}start start and stop notifications for subscriptions
+     */
+    function readable(value, start) {
+        return {
+            subscribe: writable(value, start).subscribe
+        };
+    }
+    /**
+     * Create a `Writable` store that allows both updating and reading by subscription.
+     * @param {*=}value initial value
+     * @param {StartStopNotifier=}start start and stop notifications for subscriptions
+     */
+    function writable(value, start = noop) {
+        let stop;
+        const subscribers = new Set();
+        function set(new_value) {
+            if (safe_not_equal(value, new_value)) {
+                value = new_value;
+                if (stop) { // store is ready
+                    const run_queue = !subscriber_queue.length;
+                    for (const subscriber of subscribers) {
+                        subscriber[1]();
+                        subscriber_queue.push(subscriber, value);
+                    }
+                    if (run_queue) {
+                        for (let i = 0; i < subscriber_queue.length; i += 2) {
+                            subscriber_queue[i][0](subscriber_queue[i + 1]);
+                        }
+                        subscriber_queue.length = 0;
+                    }
+                }
+            }
+        }
+        function update(fn) {
+            set(fn(value));
+        }
+        function subscribe(run, invalidate = noop) {
+            const subscriber = [run, invalidate];
+            subscribers.add(subscriber);
+            if (subscribers.size === 1) {
+                stop = start(set) || noop;
+            }
+            run(value);
+            return () => {
+                subscribers.delete(subscriber);
+                if (subscribers.size === 0) {
+                    stop();
+                    stop = null;
+                }
+            };
+        }
+        return { set, update, subscribe };
+    }
+    function derived(stores, fn, initial_value) {
+        const single = !Array.isArray(stores);
+        const stores_array = single
+            ? [stores]
+            : stores;
+        const auto = fn.length < 2;
+        return readable(initial_value, (set) => {
+            let inited = false;
+            const values = [];
+            let pending = 0;
+            let cleanup = noop;
+            const sync = () => {
+                if (pending) {
+                    return;
+                }
+                cleanup();
+                const result = fn(single ? values[0] : values, set);
+                if (auto) {
+                    set(result);
+                }
+                else {
+                    cleanup = is_function(result) ? result : noop;
+                }
+            };
+            const unsubscribers = stores_array.map((store, i) => subscribe(store, (value) => {
+                values[i] = value;
+                pending &= ~(1 << i);
+                if (inited) {
+                    sync();
+                }
+            }, () => {
+                pending |= (1 << i);
+            }));
+            inited = true;
+            sync();
+            return function stop() {
+                run_all(unsubscribers);
+                cleanup();
+            };
+        });
+    }
+
+    /*
+        'ErnestRutherford': {
+            name: 'Ernest Rutherford',
+            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+            history: '',
+            strength: '',
+            weakness: '',
+            enemy_type: ''
+        }
+
+        enemy {
+            model
+            damage
+            effect
+            health
+            animations
+        }
+    */
+
+    const scientists = {
+        'MaxPlanck': {
+            name: 'Max Planck',
+            src: 'https://t3.gstatic.com/licensed-image?q=tbn:ANd9GcStjVkByJ0OkjZHEdoqZtfws_WnkdbJh-piwo3ia607u-CxoB6v--8yrOsZzdhRivcTamp3qzWuPsgp0KY'
+        },
+        'ErnestRutherford': {
+            name: 'Ernest Rutherford',
+            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+        },
+        'RobertBoyle': {
+            name: 'Robert Boyle',
+            src: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Robert_Boyle_0001.jpg'
+        },
+        'MaxPlanck2': {
+            name: 'Max Planck',
+            src: 'https://t3.gstatic.com/licensed-image?q=tbn:ANd9GcStjVkByJ0OkjZHEdoqZtfws_WnkdbJh-piwo3ia607u-CxoB6v--8yrOsZzdhRivcTamp3qzWuPsgp0KY'
+        },
+        'ErnestRutherford2': {
+            name: 'Ernest Rutherford',
+            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+        },
+        'RobertBoyle2': {
+            name: 'Robert Boyle',
+            src: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Robert_Boyle_0001.jpg'
+        },
+        'MaxPlanck3': {
+            name: 'Max Planck',
+            src: 'https://t3.gstatic.com/licensed-image?q=tbn:ANd9GcStjVkByJ0OkjZHEdoqZtfws_WnkdbJh-piwo3ia607u-CxoB6v--8yrOsZzdhRivcTamp3qzWuPsgp0KY'
+        },
+        'ErnestRutherford3': {
+            name: 'Ernest Rutherford',
+            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+        },
+        'RobertBoyle3': {
+            name: 'Robert Boyle',
+            src: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Robert_Boyle_0001.jpg'
+        },
+    };
+
+    const possible_scenes = Object.freeze({
+        'Loading': Symbol('loading'),
+        'Timeline': Symbol('timeline'),
+        'Battle': Symbol('battle'),
+        'CompoundCreator': Symbol('compound creator')
+    });
+    const current_scene = writable(possible_scenes.Timeline);
+
+    const last_pressed_key = writable('p');
+
+    const current_scientist = writable(scientists.RobertBoyle);
+
+    const key_to_compound = writable({
+        'q': 'H2',
+        'w': 'CH4',
+        'e': 'NH3',
+        'r': 'CN',
+        't': 'H2O'
+    });
+
+    const selected_compound = derived(
+    	[last_pressed_key, key_to_compound],
+    	([$last_pressed_key, $key_to_compound]) => {
+            return $key_to_compound[$last_pressed_key] ? $key_to_compound[$last_pressed_key] : 'H2';
+        }
+    );
+
+    /* src/components/scientist_timeline/scientist_card.svelte generated by Svelte v3.50.0 */
+
+    const file$5 = "src/components/scientist_timeline/scientist_card.svelte";
+
+    function create_fragment$5(ctx) {
+    	let div;
+    	let img;
+    	let img_src_value;
+    	let t0;
+    	let p;
+    	let t1;
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			img = element("img");
+    			t0 = space();
+    			p = element("p");
+    			t1 = text(/*name*/ ctx[0]);
+    			if (!src_url_equal(img.src, img_src_value = /*src*/ ctx[1])) attr_dev(img, "src", img_src_value);
+    			attr_dev(img, "alt", /*name*/ ctx[0]);
+    			attr_dev(img, "class", "svelte-143afoo");
+    			add_location(img, file$5, 6, 4, 88);
+    			add_location(p, file$5, 8, 4, 122);
+    			attr_dev(div, "class", "card svelte-143afoo");
+    			add_location(div, file$5, 5, 0, 61);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    			append_dev(div, img);
+    			append_dev(div, t0);
+    			append_dev(div, p);
+    			append_dev(p, t1);
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*src*/ 2 && !src_url_equal(img.src, img_src_value = /*src*/ ctx[1])) {
+    				attr_dev(img, "src", img_src_value);
+    			}
+
+    			if (dirty & /*name*/ 1) {
+    				attr_dev(img, "alt", /*name*/ ctx[0]);
+    			}
+
+    			if (dirty & /*name*/ 1) set_data_dev(t1, /*name*/ ctx[0]);
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$5.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$5($$self, $$props, $$invalidate) {
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('Scientist_card', slots, []);
+    	let { name } = $$props;
+    	let { src } = $$props;
+    	const writable_props = ['name', 'src'];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_card> was created with unknown prop '${key}'`);
+    	});
+
+    	$$self.$$set = $$props => {
+    		if ('name' in $$props) $$invalidate(0, name = $$props.name);
+    		if ('src' in $$props) $$invalidate(1, src = $$props.src);
+    	};
+
+    	$$self.$capture_state = () => ({ name, src });
+
+    	$$self.$inject_state = $$props => {
+    		if ('name' in $$props) $$invalidate(0, name = $$props.name);
+    		if ('src' in $$props) $$invalidate(1, src = $$props.src);
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	return [name, src];
+    }
+
+    class Scientist_card extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$5, create_fragment$5, safe_not_equal, { name: 0, src: 1 });
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Scientist_card",
+    			options,
+    			id: create_fragment$5.name
+    		});
+
+    		const { ctx } = this.$$;
+    		const props = options.props || {};
+
+    		if (/*name*/ ctx[0] === undefined && !('name' in props)) {
+    			console.warn("<Scientist_card> was created without expected prop 'name'");
+    		}
+
+    		if (/*src*/ ctx[1] === undefined && !('src' in props)) {
+    			console.warn("<Scientist_card> was created without expected prop 'src'");
+    		}
+    	}
+
+    	get name() {
+    		throw new Error("<Scientist_card>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set name(value) {
+    		throw new Error("<Scientist_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get src() {
+    		throw new Error("<Scientist_card>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set src(value) {
+    		throw new Error("<Scientist_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+    }
+
+    /* src/components/scientist_timeline/scientist_timeline.svelte generated by Svelte v3.50.0 */
+
+    const { Object: Object_1$1, console: console_1 } = globals;
+    const file$4 = "src/components/scientist_timeline/scientist_timeline.svelte";
+
+    function get_each_context$1(ctx, list, i) {
+    	const child_ctx = ctx.slice();
+    	child_ctx[4] = list[i];
+    	return child_ctx;
+    }
+
+    // (14:4) {#each Object.values(scientists) as scientist}
+    function create_each_block$1(ctx) {
+    	let div;
+    	let img;
+    	let img_src_value;
+    	let t0;
+    	let p;
+    	let t1_value = /*scientist*/ ctx[4].name + "";
+    	let t1;
+    	let t2;
+    	let mounted;
+    	let dispose;
+
+    	function click_handler(...args) {
+    		return /*click_handler*/ ctx[1](/*scientist*/ ctx[4], ...args);
+    	}
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			img = element("img");
+    			t0 = space();
+    			p = element("p");
+    			t1 = text(t1_value);
+    			t2 = space();
+    			if (!src_url_equal(img.src, img_src_value = /*scientist*/ ctx[4].src)) attr_dev(img, "src", img_src_value);
+    			attr_dev(img, "alt", /*scientist*/ ctx[4].name);
+    			attr_dev(img, "class", "svelte-1tc6or5");
+    			add_location(img, file$4, 15, 12, 557);
+    			add_location(p, file$4, 16, 12, 618);
+    			attr_dev(div, "class", "card svelte-1tc6or5");
+    			add_location(div, file$4, 14, 8, 471);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    			append_dev(div, img);
+    			append_dev(div, t0);
+    			append_dev(div, p);
+    			append_dev(p, t1);
+    			append_dev(div, t2);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(click_handler), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(new_ctx, dirty) {
+    			ctx = new_ctx;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_each_block$1.name,
+    		type: "each",
+    		source: "(14:4) {#each Object.values(scientists) as scientist}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$4(ctx) {
+    	let div;
+    	let each_value = Object.values(scientists);
+    	validate_each_argument(each_value);
+    	let each_blocks = [];
+
+    	for (let i = 0; i < each_value.length; i += 1) {
+    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+    	}
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].c();
+    			}
+
+    			attr_dev(div, "class", "fullscreen svelte-1tc6or5");
+    			add_location(div, file$4, 12, 0, 387);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].m(div, null);
+    			}
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*set_scene, Object, scientists*/ 1) {
+    				each_value = Object.values(scientists);
+    				validate_each_argument(each_value);
+    				let i;
+
+    				for (i = 0; i < each_value.length; i += 1) {
+    					const child_ctx = get_each_context$1(ctx, each_value, i);
+
+    					if (each_blocks[i]) {
+    						each_blocks[i].p(child_ctx, dirty);
+    					} else {
+    						each_blocks[i] = create_each_block$1(child_ctx);
+    						each_blocks[i].c();
+    						each_blocks[i].m(div, null);
+    					}
+    				}
+
+    				for (; i < each_blocks.length; i += 1) {
+    					each_blocks[i].d(1);
+    				}
+
+    				each_blocks.length = each_value.length;
+    			}
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    			destroy_each(each_blocks, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$4.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$4($$self, $$props, $$invalidate) {
+    	let $current_scene;
+    	let $current_scientist;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(2, $current_scene = $$value));
+    	validate_store(current_scientist, 'current_scientist');
+    	component_subscribe($$self, current_scientist, $$value => $$invalidate(3, $current_scientist = $$value));
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('Scientist_timeline', slots, []);
+
+    	function set_scene(scientist) {
+    		set_store_value(current_scientist, $current_scientist = scientist.name, $current_scientist);
+    		console.log($current_scientist);
+    		set_store_value(current_scene, $current_scene = possible_scenes.Battle, $current_scene);
+    	}
+
+    	const writable_props = [];
+
+    	Object_1$1.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<Scientist_timeline> was created with unknown prop '${key}'`);
+    	});
+
+    	const click_handler = (scientist, e) => set_scene(scientist);
+
+    	$$self.$capture_state = () => ({
+    		current_scene,
+    		possible_scenes,
+    		current_scientist,
+    		scientists,
+    		ScientistCard: Scientist_card,
+    		set_scene,
+    		$current_scene,
+    		$current_scientist
+    	});
+
+    	return [set_scene, click_handler];
+    }
+
+    class Scientist_timeline extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$4, create_fragment$4, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Scientist_timeline",
+    			options,
+    			id: create_fragment$4.name
+    		});
+    	}
     }
 
     /**
@@ -27800,6 +28361,28 @@ var app = (function () {
 
     }
 
+    class ConeGeometry extends CylinderGeometry {
+
+    	constructor( radius = 1, height = 1, radialSegments = 8, heightSegments = 1, openEnded = false, thetaStart = 0, thetaLength = Math.PI * 2 ) {
+
+    		super( 0, radius, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength );
+
+    		this.type = 'ConeGeometry';
+
+    		this.parameters = {
+    			radius: radius,
+    			height: height,
+    			radialSegments: radialSegments,
+    			heightSegments: heightSegments,
+    			openEnded: openEnded,
+    			thetaStart: thetaStart,
+    			thetaLength: thetaLength
+    		};
+
+    	}
+
+    }
+
     new Vector3();
     new Vector3();
     new Vector3();
@@ -42807,6 +43390,35 @@ var app = (function () {
         return proxy
     }
 
+
+    class Mine extends GameObj {
+        constructor({geometry, material}) {
+            super();
+            this.should_delete = false;
+            this.mesh = new Mesh(geometry, material);
+            let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
+            this.collider = new Box3(new Vector3(-r, -r, -r), new Vector3(r, r, r));
+        }
+
+        add_to(parent) {
+            this.parent = parent;
+            parent.add(this.mesh);
+        }
+
+        collide(collided_obj) {
+            // this.take_damage(collided_obj.damage)
+            console.log(collided_obj.damage);
+        }
+    }
+
+
+    function create_mine(arg_dict) {
+        let mine = new Mine(arg_dict);
+        let proxy = new Proxy(mine, proxy_handler('mesh'));
+        proxy.position.copy(arg_dict['position']);
+        return proxy
+    }
+
     const material_map = {
         'H2': {
             'geometry': new SphereGeometry( 2, 10, 10 ),
@@ -43078,123 +43690,6 @@ var app = (function () {
         #         pass
     */
 
-    const subscriber_queue = [];
-    /**
-     * Creates a `Readable` store that allows reading by subscription.
-     * @param value initial value
-     * @param {StartStopNotifier}start start and stop notifications for subscriptions
-     */
-    function readable(value, start) {
-        return {
-            subscribe: writable(value, start).subscribe
-        };
-    }
-    /**
-     * Create a `Writable` store that allows both updating and reading by subscription.
-     * @param {*=}value initial value
-     * @param {StartStopNotifier=}start start and stop notifications for subscriptions
-     */
-    function writable(value, start = noop) {
-        let stop;
-        const subscribers = new Set();
-        function set(new_value) {
-            if (safe_not_equal(value, new_value)) {
-                value = new_value;
-                if (stop) { // store is ready
-                    const run_queue = !subscriber_queue.length;
-                    for (const subscriber of subscribers) {
-                        subscriber[1]();
-                        subscriber_queue.push(subscriber, value);
-                    }
-                    if (run_queue) {
-                        for (let i = 0; i < subscriber_queue.length; i += 2) {
-                            subscriber_queue[i][0](subscriber_queue[i + 1]);
-                        }
-                        subscriber_queue.length = 0;
-                    }
-                }
-            }
-        }
-        function update(fn) {
-            set(fn(value));
-        }
-        function subscribe(run, invalidate = noop) {
-            const subscriber = [run, invalidate];
-            subscribers.add(subscriber);
-            if (subscribers.size === 1) {
-                stop = start(set) || noop;
-            }
-            run(value);
-            return () => {
-                subscribers.delete(subscriber);
-                if (subscribers.size === 0) {
-                    stop();
-                    stop = null;
-                }
-            };
-        }
-        return { set, update, subscribe };
-    }
-    function derived(stores, fn, initial_value) {
-        const single = !Array.isArray(stores);
-        const stores_array = single
-            ? [stores]
-            : stores;
-        const auto = fn.length < 2;
-        return readable(initial_value, (set) => {
-            let inited = false;
-            const values = [];
-            let pending = 0;
-            let cleanup = noop;
-            const sync = () => {
-                if (pending) {
-                    return;
-                }
-                cleanup();
-                const result = fn(single ? values[0] : values, set);
-                if (auto) {
-                    set(result);
-                }
-                else {
-                    cleanup = is_function(result) ? result : noop;
-                }
-            };
-            const unsubscribers = stores_array.map((store, i) => subscribe(store, (value) => {
-                values[i] = value;
-                pending &= ~(1 << i);
-                if (inited) {
-                    sync();
-                }
-            }, () => {
-                pending |= (1 << i);
-            }));
-            inited = true;
-            sync();
-            return function stop() {
-                run_all(unsubscribers);
-                cleanup();
-            };
-        });
-    }
-
-    const last_pressed_key = writable('p');
-
-    const key_to_compound = writable({
-        'q': 'H2',
-        'w': 'CH4',
-        'e': 'NH3',
-        'r': 'CN',
-        't': 'H2O'
-    });
-
-
-    const selected_compound = derived(
-    	[last_pressed_key, key_to_compound],
-    	([$last_pressed_key, $key_to_compound]) => {
-            return $key_to_compound[$last_pressed_key]
-        }
-    );
-
     /**
      * @author mrdoob / http://mrdoob.com/
      * from https://github.com/mrdoob/stats.js/blob/master/src/Stats.js
@@ -43405,12 +43900,13 @@ var app = (function () {
 
     // Earth settings
     var earth_radius = 60;
-    var time_for_full_rotation = 30;
+    var speed = 1;
+    var time_for_full_rotation = 30/speed;
     var earth_initial_position = new Vector3(0,0,0);
     var earth = create_earth();
 
     var collision_elements = [];  // we just have to keep track of the enemies and earth, and when the ball moves,
-                                  // it checks for any collisions with these elements
+                                // it checks for any collisions with these elements
 
 
     var stats = new Stats();
@@ -43420,7 +43916,7 @@ var app = (function () {
     var selected_compound_sub;
     selected_compound.subscribe(val => selected_compound_sub = val);
 
-    class BasicGameplay {
+    class BattleScene {
         constructor() {
             this.renderer = create_renderer();
             const canvas_container = document.getElementById('canvas-container');
@@ -43443,7 +43939,9 @@ var app = (function () {
 
             this.renderer.render(scene, camera);
             camera.lookAt(new Vector3(0, 30, -100));
-            spawn_enemies();
+            // spawn_enemies()
+            // spawn_mines()
+            spawn_objects();
             this.animate();
         }
 
@@ -43550,24 +44048,34 @@ var app = (function () {
         return earth;
     }
 
-    function spawn_enemies() {
+    function spawn_objects() {
         function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
             let mod_5 = Math.floor(global_clock.elapsedTime) % 3 === 0;
             if (mod_5 && !already_added_enemy) {
-                let position = Math.floor(Math.random() * 3) - 1;  // -1,0,1 for the lanes
-                let y_rotation_angle = Math.PI/10 * position;
-                let x_diff = earth_radius * Math.sin(y_rotation_angle);
-                // so if the position is 0, the x_diff will be 0
-                // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
-                let z_diff = earth_radius * Math.cos(y_rotation_angle);
-                // 5 for half of the enemy size
-                let initial_z = earth_initial_position.z - z_diff - 5;
+                for (let position = -1; position <= 1; position++){ // -1,0,1 for the lanes
+                    if (Math.ceil(Math.random() * 3) === 3) {
+                        continue;
+                    }
+                    let y_rotation_angle = Math.PI/10 * position;
+                    let x_diff = earth_radius * Math.sin(y_rotation_angle);
+                    // so if the position is 0, the x_diff will be 0
+                    // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
+                    let z_diff = earth_radius * Math.cos(y_rotation_angle);
+                    // 5 for half of the enemy size
+                    let initial_z = earth_initial_position.z - z_diff - 5;
 
-                let world_initial_pos = new Vector3(x_diff, earth_initial_position.y, initial_z);
-                let initial_enemy_position = earth.worldToLocal(world_initial_pos);
+                    let world_initial_pos = new Vector3(x_diff, earth_initial_position.y, initial_z);
+                    let initial_enemy_position = earth.worldToLocal(world_initial_pos);
 
-                last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle);
-                already_added_enemy = true;
+                    let type_of_object = Math.ceil(Math.random() * 2);
+                    if (type_of_object === 1) {
+                        last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle);
+                    } else if (type_of_object === 2) {
+                        last_enemy = add_mine_to_earth(initial_enemy_position, -y_rotation_angle);
+                    }
+                    // last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
+                    already_added_enemy = true;
+                }
             } else if (!mod_5) {
                 already_added_enemy = false;
             }
@@ -43575,6 +44083,40 @@ var app = (function () {
         }
         let updater = new Updater(add_enemy_every_5_seconds, {});
         global_updates_queue.push(updater);
+    }
+
+
+    let mine_geometry = new ConeGeometry( 5, 20, 32 );
+    let purple_mine_material = new MeshStandardMaterial({color: 0x9621ad,});
+    let yellow_mine_material = new MeshStandardMaterial({color: 0xcdd188,});
+    let blue_mine_material = new MeshStandardMaterial({color: 0x00cde8,});
+
+
+    // TODO: available_mine_types needs to be a store. You also need a possible_mine_types but it can be constant.
+    // Available_mine_types changes as the levels change
+    const mine_types = [
+        purple_mine_material, yellow_mine_material, blue_mine_material
+    ];
+    function add_mine_to_earth(position, y_rotation_angle){
+        let mine_material = mine_types[Math.floor(Math.random() * mine_types.length)];
+        let enemy = create_mine({position, 'geometry': mine_geometry, 'material': mine_material});
+        // we add the enemy first to get it into earth's relative units
+        enemy.add_to(earth);
+        enemy.rotateX(-earth.rotation.x - Math.PI / 2);
+        enemy.rotateZ(y_rotation_angle);
+
+        collision_elements.push(enemy);
+
+        function delete_enemy({enemy, initial_time}) {
+            if (global_clock.elapsedTime - initial_time > time_for_full_rotation || enemy.should_delete) {
+                return {enemy, finished: true, to_delete: [enemy]}
+            }
+            return {enemy, finished: false, initial_time: initial_time}
+        }
+        
+        let updater = new Updater(delete_enemy, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime});
+        global_updates_queue.push(updater);
+        return enemy
     }
 
     let enemy_geometry = new BoxGeometry( 10, 10, 10 );
@@ -43651,8 +44193,8 @@ var app = (function () {
         initial_pos.y -= 10;
         initial_pos.z -= 15;
         const velocity = mouse_ray.ray.direction.clone();
-        velocity.multiplyScalar(8);
-        velocity.y += 4;
+        velocity.multiplyScalar(8 * speed);
+        velocity.y += (5 * speed);
         const onclick = (target) => {
             // this is just a POC. It doesnt work because all of the projectiles use the same material
             target.object.material.color.set('#eb4034');
@@ -43686,11 +44228,11 @@ var app = (function () {
         return {projectile, total_time, finished, initial_time}
     }
 
-    /* src/components/compound_card.svelte generated by Svelte v3.50.0 */
+    /* src/components/battle_scene/compound_card.svelte generated by Svelte v3.50.0 */
 
-    const file$2 = "src/components/compound_card.svelte";
+    const file$3 = "src/components/battle_scene/compound_card.svelte";
 
-    function create_fragment$2(ctx) {
+    function create_fragment$3(ctx) {
     	let div2;
     	let div0;
     	let p;
@@ -43707,14 +44249,14 @@ var app = (function () {
     			t1 = space();
     			div1 = element("div");
     			t2 = text(/*el_name*/ ctx[0]);
-    			add_location(p, file$2, 7, 8, 141);
+    			add_location(p, file$3, 7, 8, 141);
     			attr_dev(div0, "class", "stats svelte-1c92od4");
-    			add_location(div0, file$2, 6, 4, 113);
+    			add_location(div0, file$3, 6, 4, 113);
     			attr_dev(div1, "class", "el_name svelte-1c92od4");
-    			add_location(div1, file$2, 9, 4, 174);
+    			add_location(div1, file$3, 9, 4, 174);
     			attr_dev(div2, "class", "card svelte-1c92od4");
     			toggle_class(div2, "highlighted", /*highlighted*/ ctx[1]);
-    			add_location(div2, file$2, 5, 0, 72);
+    			add_location(div2, file$3, 5, 0, 72);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -43743,7 +44285,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$2.name,
+    		id: create_fragment$3.name,
     		type: "component",
     		source: "",
     		ctx
@@ -43752,7 +44294,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$2($$self, $$props, $$invalidate) {
+    function instance$3($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_card', slots, []);
     	let { el_name } = $$props;
@@ -43785,13 +44327,13 @@ var app = (function () {
     class Compound_card extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$2, create_fragment$2, safe_not_equal, { el_name: 0, highlighted: 1 });
+    		init(this, options, instance$3, create_fragment$3, safe_not_equal, { el_name: 0, highlighted: 1 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Compound_card",
     			options,
-    			id: create_fragment$2.name
+    			id: create_fragment$3.name
     		});
 
     		const { ctx } = this.$$;
@@ -43823,10 +44365,10 @@ var app = (function () {
     	}
     }
 
-    /* src/components/bottom_compound_bar.svelte generated by Svelte v3.50.0 */
+    /* src/components/battle_scene/bottom_compound_bar.svelte generated by Svelte v3.50.0 */
 
     const { Object: Object_1 } = globals;
-    const file$1 = "src/components/bottom_compound_bar.svelte";
+    const file$2 = "src/components/battle_scene/bottom_compound_bar.svelte";
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -43886,7 +44428,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$1(ctx) {
+    function create_fragment$2(ctx) {
     	let div;
     	let current;
     	let each_value = Object.values(/*$key_to_compound*/ ctx[0]);
@@ -43911,7 +44453,7 @@ var app = (function () {
 
     			attr_dev(div, "id", "sidebar-bottom");
     			attr_dev(div, "class", "svelte-d2vxdq");
-    			add_location(div, file$1, 5, 0, 143);
+    			add_location(div, file$2, 5, 0, 147);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -43980,7 +44522,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$1.name,
+    		id: create_fragment$2.name,
     		type: "component",
     		source: "",
     		ctx
@@ -43989,7 +44531,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$1($$self, $$props, $$invalidate) {
+    function instance$2($$self, $$props, $$invalidate) {
     	let $key_to_compound;
     	let $selected_compound;
     	validate_store(key_to_compound, 'key_to_compound');
@@ -44018,65 +44560,76 @@ var app = (function () {
     class Bottom_compound_bar extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$1, create_fragment$1, safe_not_equal, {});
+    		init(this, options, instance$2, create_fragment$2, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Bottom_compound_bar",
     			options,
-    			id: create_fragment$1.name
+    			id: create_fragment$2.name
     		});
     	}
     }
 
-    /* src/App.svelte generated by Svelte v3.50.0 */
-    const file = "src/App.svelte";
+    /* src/components/battle_scene/battle.svelte generated by Svelte v3.50.0 */
+    const file$1 = "src/components/battle_scene/battle.svelte";
 
-    function create_fragment(ctx) {
-    	let main;
+    function create_fragment$1(ctx) {
+    	let div3;
     	let div0;
+    	let h4;
     	let t0;
-    	let bottomcompoundbar;
     	let t1;
     	let div1;
+    	let t2;
+    	let bottomcompoundbar;
+    	let t3;
+    	let div2;
     	let current;
-    	let mounted;
-    	let dispose;
     	bottomcompoundbar = new Bottom_compound_bar({ $$inline: true });
 
     	const block = {
     		c: function create() {
-    			main = element("main");
+    			div3 = element("div");
     			div0 = element("div");
-    			t0 = space();
-    			create_component(bottomcompoundbar.$$.fragment);
+    			h4 = element("h4");
+    			t0 = text(/*$current_scientist*/ ctx[0]);
     			t1 = space();
     			div1 = element("div");
-    			attr_dev(div0, "id", "sidebar-right");
-    			attr_dev(div0, "class", "svelte-1exnyqc");
-    			add_location(div0, file, 19, 1, 555);
-    			attr_dev(div1, "id", "canvas-container");
-    			add_location(div1, file, 21, 1, 609);
-    			add_location(main, file, 18, 0, 547);
+    			t2 = space();
+    			create_component(bottomcompoundbar.$$.fragment);
+    			t3 = space();
+    			div2 = element("div");
+    			add_location(h4, file$1, 12, 8, 368);
+    			set_style(div0, "display", "flex");
+    			set_style(div0, "justify-content", "center");
+    			add_location(div0, file$1, 11, 4, 306);
+    			attr_dev(div1, "id", "sidebar-right");
+    			attr_dev(div1, "class", "svelte-8rffiz");
+    			add_location(div1, file$1, 14, 4, 413);
+    			attr_dev(div2, "id", "canvas-container");
+    			add_location(div2, file$1, 16, 4, 473);
+    			add_location(div3, file$1, 10, 0, 296);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, main, anchor);
-    			append_dev(main, div0);
-    			append_dev(main, t0);
-    			mount_component(bottomcompoundbar, main, null);
-    			append_dev(main, t1);
-    			append_dev(main, div1);
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, div0);
+    			append_dev(div0, h4);
+    			append_dev(h4, t0);
+    			append_dev(div3, t1);
+    			append_dev(div3, div1);
+    			append_dev(div3, t2);
+    			mount_component(bottomcompoundbar, div3, null);
+    			append_dev(div3, t3);
+    			append_dev(div3, div2);
     			current = true;
-
-    			if (!mounted) {
-    				dispose = listen_dev(window, "keypress", prevent_default(/*set_key*/ ctx[0]), false, true, false);
-    				mounted = true;
-    			}
     		},
-    		p: noop,
+    		p: function update(ctx, [dirty]) {
+    			if (!current || dirty & /*$current_scientist*/ 1) set_data_dev(t0, /*$current_scientist*/ ctx[0]);
+    		},
     		i: function intro(local) {
     			if (current) return;
     			transition_in(bottomcompoundbar.$$.fragment, local);
@@ -44087,8 +44640,281 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(main);
+    			if (detaching) detach_dev(div3);
     			destroy_component(bottomcompoundbar);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$1.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$1($$self, $$props, $$invalidate) {
+    	let $current_scientist;
+    	validate_store(current_scientist, 'current_scientist');
+    	component_subscribe($$self, current_scientist, $$value => $$invalidate(0, $current_scientist = $$value));
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('Battle', slots, []);
+
+    	onMount(async () => {
+    		new BattleScene();
+    	});
+
+    	const writable_props = [];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Battle> was created with unknown prop '${key}'`);
+    	});
+
+    	$$self.$capture_state = () => ({
+    		onMount,
+    		BattleScene,
+    		BottomCompoundBar: Bottom_compound_bar,
+    		current_scientist,
+    		$current_scientist
+    	});
+
+    	return [$current_scientist];
+    }
+
+    class Battle extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$1, create_fragment$1, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Battle",
+    			options,
+    			id: create_fragment$1.name
+    		});
+    	}
+    }
+
+    /* src/App.svelte generated by Svelte v3.50.0 */
+    const file = "src/App.svelte";
+
+    // (23:1) {:else}
+    function create_else_block(ctx) {
+    	let p;
+
+    	const block = {
+    		c: function create() {
+    			p = element("p");
+    			p.textContent = "Loading ...";
+    			add_location(p, file, 23, 2, 638);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, p, anchor);
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(p);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_else_block.name,
+    		type: "else",
+    		source: "(23:1) {:else}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (21:62) 
+    function create_if_block_2(ctx) {
+    	let p;
+
+    	const block = {
+    		c: function create() {
+    			p = element("p");
+    			p.textContent = "compound creator";
+    			add_location(p, file, 21, 2, 603);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, p, anchor);
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(p);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_2.name,
+    		type: "if",
+    		source: "(21:62) ",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (19:53) 
+    function create_if_block_1(ctx) {
+    	let battle;
+    	let current;
+    	battle = new Battle({ $$inline: true });
+
+    	const block = {
+    		c: function create() {
+    			create_component(battle.$$.fragment);
+    		},
+    		m: function mount(target, anchor) {
+    			mount_component(battle, target, anchor);
+    			current = true;
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(battle.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(battle.$$.fragment, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			destroy_component(battle, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_1.name,
+    		type: "if",
+    		source: "(19:53) ",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (17:1) {#if $current_scene === possible_scenes.Timeline}
+    function create_if_block(ctx) {
+    	let timeline;
+    	let current;
+    	timeline = new Scientist_timeline({ $$inline: true });
+
+    	const block = {
+    		c: function create() {
+    			create_component(timeline.$$.fragment);
+    		},
+    		m: function mount(target, anchor) {
+    			mount_component(timeline, target, anchor);
+    			current = true;
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(timeline.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(timeline.$$.fragment, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			destroy_component(timeline, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block.name,
+    		type: "if",
+    		source: "(17:1) {#if $current_scene === possible_scenes.Timeline}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment(ctx) {
+    	let main;
+    	let current_block_type_index;
+    	let if_block;
+    	let current;
+    	let mounted;
+    	let dispose;
+    	const if_block_creators = [create_if_block, create_if_block_1, create_if_block_2, create_else_block];
+    	const if_blocks = [];
+
+    	function select_block_type(ctx, dirty) {
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.Timeline) return 0;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.Battle) return 1;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.CompoundCreator) return 2;
+    		return 3;
+    	}
+
+    	current_block_type_index = select_block_type(ctx);
+    	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+
+    	const block = {
+    		c: function create() {
+    			main = element("main");
+    			if_block.c();
+    			add_location(main, file, 15, 0, 400);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, main, anchor);
+    			if_blocks[current_block_type_index].m(main, null);
+    			current = true;
+
+    			if (!mounted) {
+    				dispose = listen_dev(window, "keypress", prevent_default(/*set_key*/ ctx[1]), false, true, false);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(ctx, [dirty]) {
+    			let previous_block_index = current_block_type_index;
+    			current_block_type_index = select_block_type(ctx);
+
+    			if (current_block_type_index !== previous_block_index) {
+    				group_outros();
+
+    				transition_out(if_blocks[previous_block_index], 1, 1, () => {
+    					if_blocks[previous_block_index] = null;
+    				});
+
+    				check_outros();
+    				if_block = if_blocks[current_block_type_index];
+
+    				if (!if_block) {
+    					if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+    					if_block.c();
+    				}
+
+    				transition_in(if_block, 1);
+    				if_block.m(main, null);
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(if_block);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(if_block);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(main);
+    			if_blocks[current_block_type_index].d();
     			mounted = false;
     			dispose();
     		}
@@ -44106,12 +44932,11 @@ var app = (function () {
     }
 
     function instance($$self, $$props, $$invalidate) {
+    	let $current_scene;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(0, $current_scene = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('App', slots, []);
-
-    	document.addEventListener('DOMContentLoaded', event => {
-    		new BasicGameplay();
-    	});
 
     	function set_key(e) {
     		let watched_keys = ['q', 'w', 'e', 'r', 't'];
@@ -44128,13 +44953,16 @@ var app = (function () {
     	});
 
     	$$self.$capture_state = () => ({
-    		BasicGameplay,
+    		possible_scenes,
+    		current_scene,
     		last_pressed_key,
-    		BottomCompoundBar: Bottom_compound_bar,
-    		set_key
+    		Timeline: Scientist_timeline,
+    		Battle,
+    		set_key,
+    		$current_scene
     	});
 
-    	return [set_key];
+    	return [$current_scene, set_key];
     }
 
     class App extends SvelteComponentDev {
@@ -44154,7 +44982,6 @@ var app = (function () {
     const app = new App({
     	target: document.body,
     	props: {
-    		name: 'Craig'
     	}
     });
 
