@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import * as compounds from './compounds.js'
 // import * as AmmoLib from '../lib/ammo.js';
-import {create_enemy, Enemy, get_all_properties} from './objects.js';
-import {create_compound} from './compounds.js';
-import { selected_compound } from './components/stores.js';
+import {create_enemy, create_mine} from '../../objects.js';
+import {create_compound} from '../../compounds.js';
+import { selected_compound } from '../../stores.js';
 
-import { Stats } from '../public/lib/stats.js'
-import { last_pressed_key } from './components/stores.js';
+import { Stats } from '../../../public/lib/stats.js'
 
 
 // Tutorial for collision detection:
@@ -50,12 +48,13 @@ var mouse = new THREE.Vector2();
 
 // Earth settings
 var earth_radius = 60;
-var time_for_full_rotation = 30;
+var speed = 1;
+var time_for_full_rotation = 30/speed;
 var earth_initial_position = new THREE.Vector3(0,0,0)
 var earth = create_earth();
 
 var collision_elements = [];  // we just have to keep track of the enemies and earth, and when the ball moves,
-                              // it checks for any collisions with these elements
+                            // it checks for any collisions with these elements
 
 
 var stats = new Stats();
@@ -65,7 +64,7 @@ document.body.appendChild( stats.dom );
 var selected_compound_sub;
 selected_compound.subscribe(val => selected_compound_sub = val)
 
-export class BasicGameplay {
+export class BattleScene {
     constructor() {
         this.renderer = create_renderer();
         const canvas_container = document.getElementById('canvas-container')
@@ -88,7 +87,9 @@ export class BasicGameplay {
 
         this.renderer.render(scene, camera);
         camera.lookAt(new THREE.Vector3(0, 30, -100));
-        spawn_enemies()
+        // spawn_enemies()
+        // spawn_mines()
+        spawn_objects()
         this.animate();
     }
 
@@ -195,24 +196,34 @@ function create_earth(){
     return earth;
 }
 
-function spawn_enemies() {
+function spawn_objects() {
     function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
         let mod_5 = Math.floor(global_clock.elapsedTime) % 3 === 0
         if (mod_5 && !already_added_enemy) {
-            let position = Math.floor(Math.random() * 3) - 1  // -1,0,1 for the lanes
-            let y_rotation_angle = Math.PI/10 * position
-            let x_diff = earth_radius * Math.sin(y_rotation_angle)
-            // so if the position is 0, the x_diff will be 0
-            // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
-            let z_diff = earth_radius * Math.cos(y_rotation_angle)
-            // 5 for half of the enemy size
-            let initial_z = earth_initial_position.z - z_diff - 5
+            for (let position = -1; position <= 1; position++){ // -1,0,1 for the lanes
+                if (Math.ceil(Math.random() * 3) === 3) {
+                    continue;
+                }
+                let y_rotation_angle = Math.PI/10 * position
+                let x_diff = earth_radius * Math.sin(y_rotation_angle)
+                // so if the position is 0, the x_diff will be 0
+                // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
+                let z_diff = earth_radius * Math.cos(y_rotation_angle)
+                // 5 for half of the enemy size
+                let initial_z = earth_initial_position.z - z_diff - 5
 
-            let world_initial_pos = new THREE.Vector3(x_diff, earth_initial_position.y, initial_z)
-            let initial_enemy_position = earth.worldToLocal(world_initial_pos)
+                let world_initial_pos = new THREE.Vector3(x_diff, earth_initial_position.y, initial_z)
+                let initial_enemy_position = earth.worldToLocal(world_initial_pos)
 
-            last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
-            already_added_enemy = true
+                let type_of_object = Math.ceil(Math.random() * 2)
+                if (type_of_object === 1) {
+                    last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
+                } else if (type_of_object === 2) {
+                    last_enemy = add_mine_to_earth(initial_enemy_position, -y_rotation_angle)
+                }
+                // last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
+                already_added_enemy = true
+            }
         } else if (!mod_5) {
             already_added_enemy = false
         }
@@ -220,6 +231,40 @@ function spawn_enemies() {
     }
     let updater = new Updater(add_enemy_every_5_seconds, {})
     global_updates_queue.push(updater)
+}
+
+
+let mine_geometry = new THREE.ConeGeometry( 5, 20, 32 );
+let purple_mine_material = new THREE.MeshStandardMaterial({color: 0x9621ad,});
+let yellow_mine_material = new THREE.MeshStandardMaterial({color: 0xcdd188,});
+let blue_mine_material = new THREE.MeshStandardMaterial({color: 0x00cde8,});
+
+
+// TODO: available_mine_types needs to be a store. You also need a possible_mine_types but it can be constant.
+// Available_mine_types changes as the levels change
+const mine_types = [
+    purple_mine_material, yellow_mine_material, blue_mine_material
+]
+function add_mine_to_earth(position, y_rotation_angle){
+    let mine_material = mine_types[Math.floor(Math.random() * mine_types.length)]
+    let enemy = create_mine({position, 'geometry': mine_geometry, 'material': mine_material})
+    // we add the enemy first to get it into earth's relative units
+    enemy.add_to(earth)
+    enemy.rotateX(-earth.rotation.x - Math.PI / 2)
+    enemy.rotateZ(y_rotation_angle)
+
+    collision_elements.push(enemy)
+
+    function delete_enemy({enemy, initial_time}) {
+        if (global_clock.elapsedTime - initial_time > time_for_full_rotation || enemy.should_delete) {
+            return {enemy, finished: true, to_delete: [enemy]}
+        }
+        return {enemy, finished: false, initial_time: initial_time}
+    }
+    
+    let updater = new Updater(delete_enemy, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime})
+    global_updates_queue.push(updater)
+    return enemy
 }
 
 let enemy_geometry = new THREE.BoxGeometry( 10, 10, 10 );
@@ -296,8 +341,8 @@ function fire_player_weapon(){
     initial_pos.y -= 10
     initial_pos.z -= 15
     const velocity = mouse_ray.ray.direction.clone();
-    velocity.multiplyScalar(8);
-    velocity.y += 4
+    velocity.multiplyScalar(8 * speed);
+    velocity.y += (5 * speed)
     const onclick = (target) => {
         // this is just a POC. It doesnt work because all of the projectiles use the same material
         target.object.material.color.set('#eb4034')

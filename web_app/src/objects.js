@@ -136,6 +136,35 @@ function create_enemy(arg_dict) {
 }
 
 
+class Mine extends GameObj {
+    constructor({geometry, material}) {
+        super();
+        this.should_delete = false;
+        this.mesh = new THREE.Mesh(geometry, material);
+        let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
+        this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+    }
+
+    add_to(parent) {
+        this.parent = parent;
+        parent.add(this.mesh)
+    }
+
+    collide(collided_obj) {
+        // this.take_damage(collided_obj.damage)
+        console.log(collided_obj.damage)
+    }
+}
+
+
+function create_mine(arg_dict) {
+    let mine = new Mine(arg_dict)
+    let proxy = new Proxy(mine, proxy_handler('mesh'));
+    proxy.position.copy(arg_dict['position'])
+    return proxy
+}
+
+
 
 class Test {
     constructor() {}
@@ -151,4 +180,4 @@ class Test {
 }
 
 
-export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler};
+export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler, Mine, create_mine};
