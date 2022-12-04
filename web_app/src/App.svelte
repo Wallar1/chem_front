@@ -2,52 +2,28 @@
 	// import { CharacterControllerDemo } from './simon_dev_controller.js'
 	// new CharacterControllerDemo();
 
-	import {BasicGameplay} from './basic_gameplay.js'
-	import {update_selected} from './ui.js';
+	import {BasicGameplay} from './basic_gameplay.js';
+	import {last_pressed_key} from './components/stores.js';
+	import BottomCompoundBar from './components/bottom_compound_bar.svelte';
 	document.addEventListener('DOMContentLoaded', (event) => {
 		new BasicGameplay();
 	});
-
-	export let name;
+	function set_key(e) {
+		let watched_keys = ['q', 'w', 'e', 'r', 't'];
+		if (watched_keys.includes(e.key)) {
+			last_pressed_key.set(e.key)
+		}
+	}
 </script>
 
 <main>
 	<div id='sidebar-right'></div>
-	<div id='sidebar-bottom'>
-		<div class='button' on:click={update_selected}>H2</div>
-		<div class='button' on:click={update_selected}>CH4</div>
-		<div class='button' on:click={update_selected}>NH3</div>
-		<div class='button' on:click={update_selected}>CN</div>
-		<div class='button' on:click={update_selected}>H2O</div>
-	</div>
+	<BottomCompoundBar/>
 	<div id='canvas-container'></div>
-	<h1>Hello {name}!</h1>
-	<p>Visit the <a href="https://svelte.dev/tutorial">Svelte tutorial</a> to learn how to build Svelte apps.</p>
 </main>
+<svelte:window on:keypress|preventDefault={set_key} />
 
 <style>
-	main {
-		text-align: center;
-		max-width: 240px;
-		margin: 0 auto;
-		position: sticky;
-		top: 0px;
-	}
-
-	h1 {
-		color: #ff3e00;
-		text-transform: uppercase;
-		font-size: 4em;
-		font-weight: 100;
-	}
-
-	@media (min-width: 640px) {
-		main {
-			max-width: none;
-		}
-	}
-
-	
 
 	#sidebar-right {
 		height: 100vh;
@@ -60,28 +36,4 @@
 		left: calc(100vw - 150px);
 		float: right;
 	}
-
-	#sidebar-bottom {
-		height: 150px;
-		width: calc(100vw - 150px);
-		background-color: white;
-		box-sizing: border-box;
-		position: absolute;
-		opacity: .7;
-		left: 0px;
-		top: calc(100vh - 150px);
-		float: right;
-		display: flex;
-		justify-content: space-around;
-		align-items: center;
-	}
-
-	.button {
-		width: 50px;
-		height: 50px;
-		background-color: antiquewhite;
-		border: 1px solid black;
-	}
-
-	
 </style>
