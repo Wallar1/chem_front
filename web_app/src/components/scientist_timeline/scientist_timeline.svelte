@@ -5,7 +5,6 @@
 
     function set_scene(scientist) {
         $current_scientist = scientist.name
-        console.log($current_scientist)
         $current_scene = possible_scenes.Battle
     }
 </script>
@@ -24,8 +23,6 @@
         width: 100vw;
         height: 100vh;
         display: flex;
-        justify-content: center;
-        align-items: center;
         overflow-x: scroll;
     }
 

@@ -1,11 +1,14 @@
 <script>
     export let el_name;
     export let highlighted;
+    export let damage;
+    export let count_available;
 </script>
 
 <div class='card' class:highlighted>
     <div class='stats'>
-        <p>Damage: 10</p>
+        <p>Count Available: {count_available}</p>
+        <p>Damage: {damage}</p>
     </div>
     <div class='el_name'>{el_name}</div>
 </div>

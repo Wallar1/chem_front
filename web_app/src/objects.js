@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { get } from 'svelte/store';
+
+import { get_random_element, get_font_text_mesh } from './helper_functions';
+import { current_element_counts } from './stores.js';
 
 
 function get_all_properties(obj) {
@@ -136,13 +140,25 @@ function create_enemy(arg_dict) {
 }
 
 
+// TODO: maybe also map to a geometry and z position, so we can make the water, mine, or cloud
+const element_to_material = {
+    'H': new THREE.MeshStandardMaterial({color: 0xffffff,}),
+    'C': new THREE.MeshStandardMaterial({color: 0x000000,}),
+    'N': new THREE.MeshStandardMaterial({color: 0x00cde8,}),
+    'O': new THREE.MeshStandardMaterial({color: 0xffffff,}),
+    'Au': new THREE.MeshStandardMaterial({color: 0xebd834,}),
+}
+const mine_geometry = new THREE.ConeGeometry( 5, 4, 32 );
+
 class Mine extends GameObj {
-    constructor({geometry, material}) {
+    constructor({position}) { 
         super();
+        this.element = get_random_element();;
         this.should_delete = false;
-        this.mesh = new THREE.Mesh(geometry, material);
-        let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
+        this.mesh = new THREE.Mesh(mine_geometry, element_to_material[this.element]);
+        let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
         this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+        get_font_text_mesh(this.element, this)
     }
 
     add_to(parent) {
@@ -151,8 +167,14 @@ class Mine extends GameObj {
     }
 
     collide(collided_obj) {
-        // this.take_damage(collided_obj.damage)
-        console.log(collided_obj.damage)
+        let added_amount = Math.floor(collided_obj.damage / 10);
+        let curr_el_cnts = get(current_element_counts)
+        if (curr_el_cnts[this.element]) {
+            curr_el_cnts[this.element] += added_amount;
+        } else {
+            curr_el_cnts[this.element] = added_amount;
+        }
+        current_element_counts.set(curr_el_cnts)
     }
 }
 
