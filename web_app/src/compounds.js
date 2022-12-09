@@ -15,15 +15,34 @@ import * as THREE from 'three';
 import {Projectile, proxy_handler} from './objects.js';
 
 
-const formula_to_damage_dict = {
-    'H2': 20,
+
+const element_to_likelihood = {
+    'H': 25,
+    'C': 11,
+    'N': 9,
+    'O': 10,
+    'Au': 1,
+    'Ag': 2,
+    'Pb': 2,
+    'Al': 5,
+    'Si': 3,
+    'Ca': 4,
+    'Na': 7,
+    'Cl': 6,
+    'Mg': 1
+}
+
+
+
+export const formula_to_damage_dict = {
+    'H2': 10,
     'CH4': 40,
     'NH3': 50,
-    'CO': 10,
+    'CO': 30,
     'CN': 40,
-    'H2O': 20,
+    'H2O': 40,
     'O2': 10,
-    'Au': 50,
+    'Au': 80,
     'Ag': 40,
     'Pb': 80,
     'Al': 90,
@@ -88,7 +107,6 @@ export class Compound extends Projectile {
         let material = material_map[formula]['material']
         super({geometry, material, initial_pos, velocity, onclick})
         this.formula = formula
-        this.dict = Compound.classmeth_parse_formula_to_dict(this.formula)
     }
 
     toString () {
@@ -98,48 +116,6 @@ export class Compound extends Projectile {
             string += effect.toString()
         }
         return string
-    }
-
-    static classmeth_parse_formula_to_dict(formula) {
-        let d = {}
-        let current_el = ''
-        let current_num = ''
-        let chars = formula.split('')
-        function add_to_dict(el, num) {
-            if (d[el]) {
-                d[el] += num
-            } else {
-                d[el] = num
-            }
-        }
-        for (let c of chars) {
-            if (c.toUpperCase() !== c) { // must be lowercase aka not a new element or number
-                current_el += c
-                continue
-            }
-            let num = Number(c)
-            if (isNaN(num)) {  // must be a captital letter aka new element
-                num = current_num ? Number(current_num) : 1;
-                if (current_el) {
-                    add_to_dict(current_el, num)
-                    current_el = c
-                    current_num = ''
-                } else {
-                    current_el = c
-                }
-            } else {
-                current_num += c
-            }
-        }
-        // do it one last time for the elements at the end
-        let num = current_num ? Number(current_num) : 1;
-        add_to_dict(current_el, num)
-        return d
-    }
-    
-    
-    parse_formula_to_dict(self) {
-        return Compound.classmeth_parse_formula_to_dict(this.formula)
     }
 }
 
@@ -155,7 +131,7 @@ class HydrogenGas extends Compound {
         let formula = 'H2'
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Hydrogen Gas'
-        this.damage = 20
+        this.damage = formula_to_damage_dict[this.formula]
         this.effects = []
     }
 }
@@ -165,7 +141,7 @@ class Methane extends Compound {
         let formula = 'CH4'
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Methane'
-        this.damage = 30
+        this.damage = formula_to_damage_dict[this.formula]
         this.effects = []
     }
 }
@@ -175,7 +151,7 @@ class Ammonia extends Compound {
         let formula = 'NH3'
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Ammonia'
-        this.damage = 30
+        this.damage = formula_to_damage_dict[this.formula]
         this.effects = []
     }
 }
@@ -185,7 +161,7 @@ class Cyanide extends Compound {
         let formula = 'CN'
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Cyanide'
-        this.damage = 50
+        this.damage = formula_to_damage_dict[this.formula]
         this.effects = []
     }
 }
@@ -195,7 +171,7 @@ class Water extends Compound {
         let formula = 'H2O'
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Water'
-        this.damage = 50
+        this.damage = formula_to_damage_dict[this.formula]
         this.effects = []
     }
 }

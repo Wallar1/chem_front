@@ -1,16 +1,8 @@
 <script>
 	
-	import {possible_scenes, current_scene, last_pressed_key} from './stores.js';
+	import {possible_scenes, current_scene} from './stores.js';
     import Timeline from './components/scientist_timeline/scientist_timeline.svelte';
 	import Battle from './components/battle_scene/battle.svelte';
-	function set_key(e) {
-		let watched_keys = ['q', 'w', 'e', 'r', 't'];
-		if (watched_keys.includes(e.key)) {
-			last_pressed_key.set(e.key)
-		}
-	}
-	
-
 </script>
 
 <main>
@@ -24,7 +16,6 @@
 		<p>Loading ...</p>
 	{/if}
 </main>
-<svelte:window on:keypress|preventDefault={set_key} />
 
 <style>
 </style>

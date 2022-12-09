@@ -1,9 +1,12 @@
 import * as THREE from 'three';
+import { get } from 'svelte/store';
+
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
 import {create_enemy, create_mine} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
-import { selected_compound } from '../../stores.js';
+import { selected_compound, current_element_counts } from '../../stores.js';
+import { parse_formula_to_dict } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
 
@@ -60,9 +63,6 @@ var collision_elements = [];  // we just have to keep track of the enemies and e
 var stats = new Stats();
 stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
 document.body.appendChild( stats.dom );
-
-var selected_compound_sub;
-selected_compound.subscribe(val => selected_compound_sub = val)
 
 export class BattleScene {
     constructor() {
@@ -198,10 +198,10 @@ function create_earth(){
 
 function spawn_objects() {
     function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
-        let mod_5 = Math.floor(global_clock.elapsedTime) % 3 === 0
+        let mod_5 = Math.floor(global_clock.elapsedTime) % 6 === 0  // spawn every 6 seconds
         if (mod_5 && !already_added_enemy) {
             for (let position = -1; position <= 1; position++){ // -1,0,1 for the lanes
-                if (Math.ceil(Math.random() * 3) === 3) {
+                if (Math.ceil(Math.random() * 3) !== 3) { // only spawn an enemy/mine 1/3 of the time
                     continue;
                 }
                 let y_rotation_angle = Math.PI/10 * position
@@ -209,13 +209,16 @@ function spawn_objects() {
                 // so if the position is 0, the x_diff will be 0
                 // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
                 let z_diff = earth_radius * Math.cos(y_rotation_angle)
-                // 5 for half of the enemy size
-                let initial_z = earth_initial_position.z - z_diff - 5
 
+                let type_of_object = Math.ceil(Math.random() * 2)
+                // 5 for half of the enemy size, since I guess the center point is the center of the cube,
+                // whereas the center of the cone is the base? idk
+                // also we have to do it before we call earth.worldToLocal below, because that makes everything confusing
+                let extra_z_distance = type_of_object === 1 ? 5 : 0
+                let initial_z = earth_initial_position.z - z_diff - extra_z_distance
                 let world_initial_pos = new THREE.Vector3(x_diff, earth_initial_position.y, initial_z)
                 let initial_enemy_position = earth.worldToLocal(world_initial_pos)
 
-                let type_of_object = Math.ceil(Math.random() * 2)
                 if (type_of_object === 1) {
                     last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
                 } else if (type_of_object === 2) {
@@ -234,20 +237,8 @@ function spawn_objects() {
 }
 
 
-let mine_geometry = new THREE.ConeGeometry( 5, 20, 32 );
-let purple_mine_material = new THREE.MeshStandardMaterial({color: 0x9621ad,});
-let yellow_mine_material = new THREE.MeshStandardMaterial({color: 0xcdd188,});
-let blue_mine_material = new THREE.MeshStandardMaterial({color: 0x00cde8,});
-
-
-// TODO: available_mine_types needs to be a store. You also need a possible_mine_types but it can be constant.
-// Available_mine_types changes as the levels change
-const mine_types = [
-    purple_mine_material, yellow_mine_material, blue_mine_material
-]
 function add_mine_to_earth(position, y_rotation_angle){
-    let mine_material = mine_types[Math.floor(Math.random() * mine_types.length)]
-    let enemy = create_mine({position, 'geometry': mine_geometry, 'material': mine_material})
+    let enemy = create_mine({position})
     // we add the enemy first to get it into earth's relative units
     enemy.add_to(earth)
     enemy.rotateX(-earth.rotation.x - Math.PI / 2)
@@ -326,13 +317,29 @@ function unique(arr, key_func) {
     return ret_arr;
 }
 function on_mouse_click(event) {
-    let intersects = unique(mouse_ray.intersectObjects( scene.children ), (o) => o.object.uuid);
-    let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-    if (intersects_with_click.length) {
-        intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
-    } else {
-        fire_player_weapon();
+    // COMMENTED OUT because I dont care about the color changes, it was just a POC
+    // let intersects = unique(mouse_ray.intersectObjects( scene.children ), (o) => o.object.uuid);
+    // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
+    // if (intersects_with_click.length) {
+    //     intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
+    // } else {
+    //     fire_player_weapon();
+    // }
+    fire_player_weapon();
+}
+
+function check_if_weapon_can_fire_and_get_new_counts(compound) {
+
+    let element_counts = get(current_element_counts)
+    let entries = Object.entries(parse_formula_to_dict(compound));
+    for (let i=0; i<entries.length; i++) {
+        let [element, count_needed] = entries[i];
+        if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
+            return [false, {}]
+        }
+        element_counts[element] = element_counts[element] - count_needed
     }
+    return [true, element_counts]
 }
 
 
@@ -345,10 +352,14 @@ function fire_player_weapon(){
     velocity.y += (5 * speed)
     const onclick = (target) => {
         // this is just a POC. It doesnt work because all of the projectiles use the same material
-        target.object.material.color.set('#eb4034')
+        // target.object.material.color.set('#eb4034')
     }
     let params = {'parent': scene, initial_pos, velocity, onclick}
-    let projectile = create_compound(selected_compound_sub, params)
+    let compound = get(selected_compound)
+    let [can_fire_weapon, new_counts] = check_if_weapon_can_fire_and_get_new_counts(compound);
+    if (!can_fire_weapon) return;
+    let projectile = create_compound(compound, params)
+    current_element_counts.set(new_counts)
     scene.add(projectile.mesh)
     let updater = new Updater(blast_projectile, {projectile: projectile})
     global_updates_queue.push(updater)
