@@ -13,8 +13,8 @@ export function get_font_text_mesh(characters, parent) {
         const text = new THREE.Mesh( geometry, matLite );
 
         parent.add(text)
-        text.position.y = 5  // to put it over the mine
-        text.position.x = -2  // to center it
+        text.position.y += 6  // to put it over the mine
+        text.position.x -= 2  // to center it
         // render();
         return text
     
@@ -22,18 +22,20 @@ export function get_font_text_mesh(characters, parent) {
 }
 
 
-export function get_random_element() {
+export function get_random_element(available_elements=None) {
     /*
     I just create some ranges using the likelihoods like H will go from 0 - 30 and Au will go from 30 - 32, and then I pick a random
     number from 0 - 32 and wherever it lands, I return that element
     */
     // change this to a store
-    let available_elements = {
-        'H': 25,
-        'C': 11,
-        'N': 9,
-        'O': 10,
-        'Au': 1,
+    if (!available_elements) {
+        available_elements = {
+            'H': 25,
+            'C': 11,
+            'N': 9,
+            'O': 10,
+            'Au': 1,
+        }
     }
     let ranges = []  // gets populated like [['Au',min, max], ['H', min, max]]
     let current_min = 0;
@@ -41,7 +43,7 @@ export function get_random_element() {
         ranges.push([el, current_min, current_min + likelihood])
         current_min += likelihood
     }
-    let r = Math.floor(Math.random() * current_min)
+    let r = Math.floor(Math.random() * (current_min + 1))
     for (let i=0; i<ranges.length; i++) {
         let [el, min, max] = ranges[i]
         if (r >= min && r <= max) {
@@ -49,6 +51,14 @@ export function get_random_element() {
         }
     }
     return 'There was an error'
+}
+
+export function get_random_gas_element() {
+    return get_random_element({'H': 25, 'O': 10, 'N': 9})
+}
+
+export function get_random_solid_element() {
+    return get_random_element({'C': 11, 'Au': 1})
 }
 
 

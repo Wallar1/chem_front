@@ -110,14 +110,6 @@ var app = (function () {
     function children(element) {
         return Array.from(element.childNodes);
     }
-    function set_style(node, key, value, important) {
-        if (value === null) {
-            node.style.removeProperty(key);
-        }
-        else {
-            node.style.setProperty(key, value, important ? 'important' : '');
-        }
-    }
     function toggle_class(element, name, toggle) {
         element.classList[toggle ? 'add' : 'remove'](name);
     }
@@ -42205,8 +42197,8 @@ var app = (function () {
             const text = new Mesh( geometry, matLite );
 
             parent.add(text);
-            text.position.y = 5;  // to put it over the mine
-            text.position.x = -2;  // to center it
+            text.position.y += 6;  // to put it over the mine
+            text.position.x -= 2;  // to center it
             // render();
             return text
         
@@ -42214,26 +42206,28 @@ var app = (function () {
     }
 
 
-    function get_random_element() {
+    function get_random_element(available_elements=None) {
         /*
         I just create some ranges using the likelihoods like H will go from 0 - 30 and Au will go from 30 - 32, and then I pick a random
         number from 0 - 32 and wherever it lands, I return that element
         */
         // change this to a store
-        let available_elements = {
-            'H': 25,
-            'C': 11,
-            'N': 9,
-            'O': 10,
-            'Au': 1,
-        };
+        if (!available_elements) {
+            available_elements = {
+                'H': 25,
+                'C': 11,
+                'N': 9,
+                'O': 10,
+                'Au': 1,
+            };
+        }
         let ranges = [];  // gets populated like [['Au',min, max], ['H', min, max]]
         let current_min = 0;
         for (const [el, likelihood] of Object.entries(available_elements)) {
             ranges.push([el, current_min, current_min + likelihood]);
             current_min += likelihood;
         }
-        let r = Math.floor(Math.random() * current_min);
+        let r = Math.floor(Math.random() * (current_min + 1));
         for (let i=0; i<ranges.length; i++) {
             let [el, min, max] = ranges[i];
             if (r >= min && r <= max) {
@@ -42241,6 +42235,14 @@ var app = (function () {
             }
         }
         return 'There was an error'
+    }
+
+    function get_random_gas_element() {
+        return get_random_element({'H': 25, 'O': 10, 'N': 9})
+    }
+
+    function get_random_solid_element() {
+        return get_random_element({'C': 11, 'Au': 1})
     }
 
 
@@ -42310,7 +42312,7 @@ var app = (function () {
     );
 
     let counts = {
-        'H': 100,
+        'H': 20,
     };
     const current_element_counts = writable(counts);
 
@@ -44002,15 +44004,29 @@ var app = (function () {
         'O': new MeshStandardMaterial({color: 0xffffff,}),
         'Au': new MeshStandardMaterial({color: 0xebd834,}),
     };
-    const mine_geometry = new ConeGeometry( 5, 4, 32 );
+    const mine_geometry = new ConeGeometry( 7, 7, 32 );
+
+    function mine_or_cloud_onclick(element) {
+        return () => {
+            let added_amount = 1;
+            let curr_el_cnts = get_store_value(current_element_counts);
+            if (curr_el_cnts[element]) {
+                curr_el_cnts[element] += added_amount;
+            } else {
+                curr_el_cnts[element] = added_amount;
+            }
+            current_element_counts.set(curr_el_cnts);
+        }   
+    }
 
     class Mine extends GameObj {
-        constructor({position}) { 
+        constructor({position, onclick}) { 
             super();
-            this.element = get_random_element();        this.should_delete = false;
+            this.element = get_random_solid_element();        this.should_delete = false;
             this.mesh = new Mesh(mine_geometry, element_to_material[this.element]);
-            let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
-            this.collider = new Box3(new Vector3(-r, -r, -r), new Vector3(r, r, r));
+            this.mesh.onclick = mine_or_cloud_onclick(this.element);
+            // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
+            // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
             get_font_text_mesh(this.element, this);
         }
 
@@ -44019,21 +44035,62 @@ var app = (function () {
             parent.add(this.mesh);
         }
 
-        collide(collided_obj) {
-            let added_amount = Math.floor(collided_obj.damage / 10);
-            let curr_el_cnts = get_store_value(current_element_counts);
-            if (curr_el_cnts[this.element]) {
-                curr_el_cnts[this.element] += added_amount;
-            } else {
-                curr_el_cnts[this.element] = added_amount;
-            }
-            current_element_counts.set(curr_el_cnts);
-        }
+        // collide(collided_obj) {
+        //     let added_amount = Math.floor(collided_obj.damage / 10);
+        //     let curr_el_cnts = get(current_element_counts)
+        //     if (curr_el_cnts[this.element]) {
+        //         curr_el_cnts[this.element] += added_amount;
+        //     } else {
+        //         curr_el_cnts[this.element] = added_amount;
+        //     }
+        //     current_element_counts.set(curr_el_cnts)
+        // }
     }
 
 
     function create_mine(arg_dict) {
         let mine = new Mine(arg_dict);
+        let proxy = new Proxy(mine, proxy_handler('mesh'));
+        proxy.position.copy(arg_dict['position']);
+        return proxy
+    }
+
+
+
+    const cloud_material = new MeshStandardMaterial({color: 0xffffff,});
+    const cloud_geometry = new SphereGeometry( 5, 10, 10 );
+
+    class Cloud extends GameObj {
+        constructor({position, onclick}) { 
+            super();
+            this.element = get_random_gas_element();        this.should_delete = false;
+            this.mesh = new Mesh(cloud_geometry, cloud_material);
+            this.mesh.onclick = mine_or_cloud_onclick(this.element);
+            // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
+            // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+            get_font_text_mesh(this.element, this);
+        }
+
+        add_to(parent) {
+            this.parent = parent;
+            parent.add(this.mesh);
+        }
+
+        // collide(collided_obj) {
+        //     let added_amount = Math.floor(collided_obj.damage / 10);
+        //     let curr_el_cnts = get(current_element_counts)
+        //     if (curr_el_cnts[this.element]) {
+        //         curr_el_cnts[this.element] += added_amount;
+        //     } else {
+        //         curr_el_cnts[this.element] = added_amount;
+        //     }
+        //     current_element_counts.set(curr_el_cnts)
+        // }
+    }
+
+
+    function create_cloud(arg_dict) {
+        let mine = new Cloud(arg_dict);
         let proxy = new Proxy(mine, proxy_handler('mesh'));
         proxy.position.copy(arg_dict['position']);
         return proxy
@@ -44058,7 +44115,7 @@ var app = (function () {
         'Mg': 60
     };
 
-    const material_map = {
+    const projectile_material_map = {
         'H2': {
             'geometry': new SphereGeometry( 2, 10, 10 ),
             'material': new MeshToonMaterial({color: 0x10c42e})
@@ -44084,8 +44141,8 @@ var app = (function () {
 
     class Compound extends Projectile {
         constructor({formula, initial_pos, velocity, onclick}) {
-            let geometry = material_map[formula]['geometry'];
-            let material = material_map[formula]['material'];
+            let geometry = projectile_material_map[formula]['geometry'];
+            let material = projectile_material_map[formula]['material'];
             super({geometry, material, initial_pos, velocity, onclick});
             this.formula = formula;
         }
@@ -44641,9 +44698,39 @@ var app = (function () {
         return earth;
     }
 
+
+    const object_type_details = {
+        'mine': {
+            'probability': 1,
+            'extra_z_distance': 0,
+            'add_function': add_mine_to_earth,
+        },
+        'cloud': {
+            'probability': 2,
+            'extra_z_distance': 10,
+            'add_function': add_cloud_to_earth,
+        },
+        'enemy': {
+            'probability': 2,
+            'extra_z_distance': 5,
+            'add_function': add_enemy_to_earth
+        }
+    };
+    function get_random_type() {
+        let object_probabilities = {};
+        let entries = Object.entries(object_type_details);
+        for (let i=0; i<entries.length; i++) {
+            let [key, entry] = entries[i];
+            object_probabilities[key] = entry['probability'];
+        }
+        let object_type = get_random_element(object_probabilities);
+        console.log(object_probabilities, object_type);
+        return object_type_details[object_type]
+    }
+
     function spawn_objects() {
-        function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
-            let mod_5 = Math.floor(global_clock.elapsedTime) % 6 === 0;  // spawn every 5 seconds
+        function add_enemy_every_5_seconds({already_added_enemy, last_enemy}) {
+            let mod_5 = Math.floor(global_clock.elapsedTime) % 5 === 0;  // spawn every 6 seconds
             if (mod_5 && !already_added_enemy) {
                 for (let position = -1; position <= 1; position++){ // -1,0,1 for the lanes
                     if (Math.ceil(Math.random() * 3) !== 3) { // only spawn an enemy/mine 1/3 of the time
@@ -44655,52 +44742,68 @@ var app = (function () {
                     // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
                     let z_diff = earth_radius * Math.cos(y_rotation_angle);
 
-                    let type_of_object = Math.ceil(Math.random() * 2);
-                    // 5 for half of the enemy size, since I guess the center point is the center of the cube,
-                    // whereas the center of the cone is the base? idk
+                    let type_of_object;
+                    if (global_clock.elapsedTime < mod_5 * 3) { // just to make sure the first couple spawn is a mine/cloud
+                        type_of_object = object_type_details['cloud'];
+                    } else {
+                        type_of_object = get_random_type();
+                    }
+                    // for the enemies, 5 is for half of the enemy size, since I guess the center point is the
+                    // center of the cube, whereas the center of the cone is the base? idk
                     // also we have to do it before we call earth.worldToLocal below, because that makes everything confusing
-                    let extra_z_distance = type_of_object === 1 ? 5 : 0;
-                    let initial_z = earth_initial_position.z - z_diff - extra_z_distance;
+                    let initial_z = earth_initial_position.z - z_diff - type_of_object['extra_z_distance'];
                     let world_initial_pos = new Vector3(x_diff, earth_initial_position.y, initial_z);
                     let initial_enemy_position = earth.worldToLocal(world_initial_pos);
 
-                    if (type_of_object === 1) {
-                        last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle);
-                    } else if (type_of_object === 2) {
-                        last_enemy = add_mine_to_earth(initial_enemy_position, -y_rotation_angle);
-                    }
-                    // last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
+                    last_enemy = type_of_object['add_function'](initial_enemy_position, -y_rotation_angle);
                     already_added_enemy = true;
                 }
             } else if (!mod_5) {
                 already_added_enemy = false;
             }
-            return {already_added_enemy, last_initial_position, last_initial_rotation, last_enemy, finished: false}
+            return {already_added_enemy, last_enemy, finished: false}
         }
         let updater = new Updater(add_enemy_every_5_seconds, {});
         global_updates_queue.push(updater);
     }
 
 
-    function add_mine_to_earth(position, y_rotation_angle){
-        let enemy = create_mine({position});
-        // we add the enemy first to get it into earth's relative units
-        enemy.add_to(earth);
-        enemy.rotateX(-earth.rotation.x - Math.PI / 2);
-        enemy.rotateZ(y_rotation_angle);
-
-        collision_elements.push(enemy);
-
-        function delete_enemy({enemy, initial_time}) {
-            if (global_clock.elapsedTime - initial_time > time_for_full_rotation || enemy.should_delete) {
-                return {enemy, finished: true, to_delete: [enemy]}
-            }
-            return {enemy, finished: false, initial_time: initial_time}
+    function delete_mine({mine, initial_time}) {
+        if (global_clock.elapsedTime - initial_time > time_for_full_rotation || mine.should_delete) {
+            return {mine, finished: true, to_delete: [mine]}
         }
-        
-        let updater = new Updater(delete_enemy, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime});
+        return {mine, finished: false, initial_time: initial_time}
+    }
+
+    function add_mine_to_earth(position, y_rotation_angle){
+        let mine = create_mine({position});
+        // we add the mine first to get it into earth's relative units
+        mine.add_to(earth);
+        mine.rotateX(-earth.rotation.x - Math.PI / 2);
+        mine.rotateZ(y_rotation_angle);
+
+        collision_elements.push(mine);
+
+        let updater = new Updater(delete_mine, {mine: mine, finished: false, initial_time: global_clock.elapsedTime});
         global_updates_queue.push(updater);
-        return enemy
+        return mine
+    }
+
+    function add_cloud_to_earth(position, y_rotation_angle) {
+        // const onclick = (target) => {
+        //     // this is just a POC. It doesnt work because all of the projectiles use the same material
+        //     // target.object.material.color.set('#eb4034')
+        //     console.log('clicked cloud')
+        // }
+        let cloud = create_cloud({position});
+        // we add the enemy first to get it into earth's relative units
+        cloud.add_to(earth);
+        cloud.rotateZ(y_rotation_angle);
+        cloud.rotateX(-earth.rotation.x - Math.PI / 2);
+        
+        let updater = new Updater(delete_mine, {mine: cloud, finished: false, initial_time: global_clock.elapsedTime});
+        global_updates_queue.push(updater);
+        return cloud
     }
 
     let enemy_geometry = new BoxGeometry( 10, 10, 10 );
@@ -44749,16 +44852,36 @@ var app = (function () {
         mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
         mouse_ray.setFromCamera( mouse, camera );
     }
+    function unique(arr, key_func) {
+        const ret_arr = [];
+        const seen = new Set();
+        arr.forEach((obj) => {
+            let key = key_func(obj);
+            if (!seen.has(key)) {
+                seen.add(key);
+                ret_arr.push(obj);
+            }
+        });
+        return ret_arr;
+    }
     function on_mouse_click(event) {
-        // COMMENTED OUT because I dont care about the color changes, it was just a POC
-        // let intersects = unique(mouse_ray.intersectObjects( scene.children ), (o) => o.object.uuid);
-        // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-        // if (intersects_with_click.length) {
-        //     intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
-        // } else {
-        //     fire_player_weapon();
-        // }
-        fire_player_weapon();
+        // this next line helps debug. Previously we were getting different positions because the renderer was expecting
+        // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
+        // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
+        let children = [];
+        for (let c=0; c<scene.children.length; c++) {
+            children.push(scene.children[c]);
+        }
+        for (let e=0; e<earth.children.length; e++) {
+            children.push(earth.children[e]);
+        }
+        let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
+        let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
+        if (intersects_with_click.length) {
+            intersects_with_click.forEach(intersect => intersect.object.onclick(intersect));
+        } else {
+            fire_player_weapon();
+        }
     }
 
     function check_if_weapon_can_fire_and_get_new_counts(compound) {
@@ -45450,59 +45573,41 @@ var app = (function () {
     const file$1 = "src/components/battle_scene/battle.svelte";
 
     function create_fragment$1(ctx) {
-    	let div2;
-    	let div0;
-    	let h4;
-    	let t0;
-    	let t1;
-    	let rightsidebar;
-    	let t2;
-    	let bottomcompoundbar;
-    	let t3;
     	let div1;
+    	let rightsidebar;
+    	let t0;
+    	let bottomcompoundbar;
+    	let t1;
+    	let div0;
     	let current;
     	rightsidebar = new Right_element_bar({ $$inline: true });
     	bottomcompoundbar = new Bottom_compound_bar({ $$inline: true });
 
     	const block = {
     		c: function create() {
-    			div2 = element("div");
-    			div0 = element("div");
-    			h4 = element("h4");
-    			t0 = text(/*$current_scientist*/ ctx[0]);
-    			t1 = space();
-    			create_component(rightsidebar.$$.fragment);
-    			t2 = space();
-    			create_component(bottomcompoundbar.$$.fragment);
-    			t3 = space();
     			div1 = element("div");
-    			add_location(h4, file$1, 13, 8, 427);
-    			set_style(div0, "display", "flex");
-    			set_style(div0, "justify-content", "center");
-    			add_location(div0, file$1, 12, 4, 365);
-    			attr_dev(div1, "id", "canvas-container");
-    			add_location(div1, file$1, 17, 4, 517);
-    			add_location(div2, file$1, 11, 0, 355);
+    			create_component(rightsidebar.$$.fragment);
+    			t0 = space();
+    			create_component(bottomcompoundbar.$$.fragment);
+    			t1 = space();
+    			div0 = element("div");
+    			attr_dev(div0, "id", "canvas-container");
+    			add_location(div0, file$1, 14, 4, 413);
+    			add_location(div1, file$1, 11, 0, 358);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div2, anchor);
-    			append_dev(div2, div0);
-    			append_dev(div0, h4);
-    			append_dev(h4, t0);
-    			append_dev(div2, t1);
-    			mount_component(rightsidebar, div2, null);
-    			append_dev(div2, t2);
-    			mount_component(bottomcompoundbar, div2, null);
-    			append_dev(div2, t3);
-    			append_dev(div2, div1);
+    			insert_dev(target, div1, anchor);
+    			mount_component(rightsidebar, div1, null);
+    			append_dev(div1, t0);
+    			mount_component(bottomcompoundbar, div1, null);
+    			append_dev(div1, t1);
+    			append_dev(div1, div0);
     			current = true;
     		},
-    		p: function update(ctx, [dirty]) {
-    			if (!current || dirty & /*$current_scientist*/ 1) set_data_dev(t0, /*$current_scientist*/ ctx[0]);
-    		},
+    		p: noop,
     		i: function intro(local) {
     			if (current) return;
     			transition_in(rightsidebar.$$.fragment, local);
@@ -45515,7 +45620,7 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div2);
+    			if (detaching) detach_dev(div1);
     			destroy_component(rightsidebar);
     			destroy_component(bottomcompoundbar);
     		}
@@ -45533,9 +45638,6 @@ var app = (function () {
     }
 
     function instance$1($$self, $$props, $$invalidate) {
-    	let $current_scientist;
-    	validate_store(current_scientist, 'current_scientist');
-    	component_subscribe($$self, current_scientist, $$value => $$invalidate(0, $current_scientist = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Battle', slots, []);
 
@@ -45553,12 +45655,10 @@ var app = (function () {
     		onMount,
     		BattleScene,
     		BottomCompoundBar: Bottom_compound_bar,
-    		RightSideBar: Right_element_bar,
-    		current_scientist,
-    		$current_scientist
+    		RightSideBar: Right_element_bar
     	});
 
-    	return [$current_scientist];
+    	return [];
     }
 
     class Battle extends SvelteComponentDev {
