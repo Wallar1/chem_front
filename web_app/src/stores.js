@@ -32,7 +32,7 @@ export const selected_compound = derived(
 );
 
 let counts = {
-    'H': 100,
+    'H': 20,
 }
 export const current_element_counts = writable(counts);
 

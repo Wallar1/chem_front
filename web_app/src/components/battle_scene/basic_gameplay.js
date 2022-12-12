@@ -3,10 +3,10 @@ import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
-import {create_enemy, create_mine} from '../../objects.js';
+import {create_enemy, create_mine, create_cloud} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
 import { selected_compound, current_element_counts } from '../../stores.js';
-import { parse_formula_to_dict } from '../../helper_functions.js';
+import { parse_formula_to_dict, get_random_element } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
 
@@ -196,9 +196,39 @@ function create_earth(){
     return earth;
 }
 
+
+const object_type_details = {
+    'mine': {
+        'probability': 1,
+        'extra_z_distance': 0,
+        'add_function': add_mine_to_earth,
+    },
+    'cloud': {
+        'probability': 2,
+        'extra_z_distance': 10,
+        'add_function': add_cloud_to_earth,
+    },
+    'enemy': {
+        'probability': 2,
+        'extra_z_distance': 5,
+        'add_function': add_enemy_to_earth
+    }
+}
+function get_random_type() {
+    let object_probabilities = {}
+    let entries = Object.entries(object_type_details)
+    for (let i=0; i<entries.length; i++) {
+        let [key, entry] = entries[i]
+        object_probabilities[key] = entry['probability']
+    }
+    let object_type = get_random_element(object_probabilities)
+    console.log(object_probabilities, object_type)
+    return object_type_details[object_type]
+}
+
 function spawn_objects() {
-    function add_enemy_every_5_seconds({already_added_enemy, last_initial_position, last_initial_rotation, last_enemy}) {
-        let mod_5 = Math.floor(global_clock.elapsedTime) % 6 === 0  // spawn every 6 seconds
+    function add_enemy_every_5_seconds({already_added_enemy, last_enemy}) {
+        let mod_5 = Math.floor(global_clock.elapsedTime) % 5 === 0  // spawn every 6 seconds
         if (mod_5 && !already_added_enemy) {
             for (let position = -1; position <= 1; position++){ // -1,0,1 for the lanes
                 if (Math.ceil(Math.random() * 3) !== 3) { // only spawn an enemy/mine 1/3 of the time
@@ -210,52 +240,68 @@ function spawn_objects() {
                 // if the position is 1 with a rotation angle of 30 degrees, the x_diff will be like 15
                 let z_diff = earth_radius * Math.cos(y_rotation_angle)
 
-                let type_of_object = Math.ceil(Math.random() * 2)
-                // 5 for half of the enemy size, since I guess the center point is the center of the cube,
-                // whereas the center of the cone is the base? idk
+                let type_of_object;
+                if (global_clock.elapsedTime < mod_5 * 3) { // just to make sure the first couple spawn is a mine/cloud
+                    type_of_object = object_type_details['cloud'];
+                } else {
+                    type_of_object = get_random_type()
+                }
+                // for the enemies, 5 is for half of the enemy size, since I guess the center point is the
+                // center of the cube, whereas the center of the cone is the base? idk
                 // also we have to do it before we call earth.worldToLocal below, because that makes everything confusing
-                let extra_z_distance = type_of_object === 1 ? 5 : 0
-                let initial_z = earth_initial_position.z - z_diff - extra_z_distance
+                let initial_z = earth_initial_position.z - z_diff - type_of_object['extra_z_distance']
                 let world_initial_pos = new THREE.Vector3(x_diff, earth_initial_position.y, initial_z)
                 let initial_enemy_position = earth.worldToLocal(world_initial_pos)
 
-                if (type_of_object === 1) {
-                    last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
-                } else if (type_of_object === 2) {
-                    last_enemy = add_mine_to_earth(initial_enemy_position, -y_rotation_angle)
-                }
-                // last_enemy = add_enemy_to_earth(initial_enemy_position, -y_rotation_angle)
+                last_enemy = type_of_object['add_function'](initial_enemy_position, -y_rotation_angle)
                 already_added_enemy = true
             }
         } else if (!mod_5) {
             already_added_enemy = false
         }
-        return {already_added_enemy, last_initial_position, last_initial_rotation, last_enemy, finished: false}
+        return {already_added_enemy, last_enemy, finished: false}
     }
     let updater = new Updater(add_enemy_every_5_seconds, {})
     global_updates_queue.push(updater)
 }
 
 
-function add_mine_to_earth(position, y_rotation_angle){
-    let enemy = create_mine({position})
-    // we add the enemy first to get it into earth's relative units
-    enemy.add_to(earth)
-    enemy.rotateX(-earth.rotation.x - Math.PI / 2)
-    enemy.rotateZ(y_rotation_angle)
-
-    collision_elements.push(enemy)
-
-    function delete_enemy({enemy, initial_time}) {
-        if (global_clock.elapsedTime - initial_time > time_for_full_rotation || enemy.should_delete) {
-            return {enemy, finished: true, to_delete: [enemy]}
-        }
-        return {enemy, finished: false, initial_time: initial_time}
+function delete_mine({mine, initial_time}) {
+    if (global_clock.elapsedTime - initial_time > time_for_full_rotation || mine.should_delete) {
+        return {mine, finished: true, to_delete: [mine]}
     }
-    
-    let updater = new Updater(delete_enemy, {enemy: enemy, finished: false, initial_time: global_clock.elapsedTime})
+    return {mine, finished: false, initial_time: initial_time}
+}
+
+function add_mine_to_earth(position, y_rotation_angle){
+    let mine = create_mine({position})
+    // we add the mine first to get it into earth's relative units
+    mine.add_to(earth)
+    mine.rotateX(-earth.rotation.x - Math.PI / 2)
+    mine.rotateZ(y_rotation_angle)
+
+    collision_elements.push(mine)
+
+    let updater = new Updater(delete_mine, {mine: mine, finished: false, initial_time: global_clock.elapsedTime})
     global_updates_queue.push(updater)
-    return enemy
+    return mine
+}
+
+function add_cloud_to_earth(position, y_rotation_angle) {
+    // const onclick = (target) => {
+    //     // this is just a POC. It doesnt work because all of the projectiles use the same material
+    //     // target.object.material.color.set('#eb4034')
+    //     console.log('clicked cloud')
+    // }
+    let cloud = create_cloud({position})
+    // we add the enemy first to get it into earth's relative units
+    cloud.add_to(earth)
+    cloud.rotateZ(y_rotation_angle)
+    cloud.rotateX(-earth.rotation.x - Math.PI / 2)
+    
+    let updater = new Updater(delete_mine, {mine: cloud, finished: false, initial_time: global_clock.elapsedTime})
+    global_updates_queue.push(updater)
+    return cloud
 }
 
 let enemy_geometry = new THREE.BoxGeometry( 10, 10, 10 );
@@ -317,15 +363,23 @@ function unique(arr, key_func) {
     return ret_arr;
 }
 function on_mouse_click(event) {
-    // COMMENTED OUT because I dont care about the color changes, it was just a POC
-    // let intersects = unique(mouse_ray.intersectObjects( scene.children ), (o) => o.object.uuid);
-    // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-    // if (intersects_with_click.length) {
-    //     intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
-    // } else {
-    //     fire_player_weapon();
-    // }
-    fire_player_weapon();
+    // this next line helps debug. Previously we were getting different positions because the renderer was expecting
+    // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
+    // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
+    let children = []
+    for (let c=0; c<scene.children.length; c++) {
+        children.push(scene.children[c])
+    }
+    for (let e=0; e<earth.children.length; e++) {
+        children.push(earth.children[e])
+    }
+    let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
+    let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
+    if (intersects_with_click.length) {
+        intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
+    } else {
+        fire_player_weapon();
+    }
 }
 
 function check_if_weapon_can_fire_and_get_new_counts(compound) {

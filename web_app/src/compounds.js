@@ -17,8 +17,8 @@ import {Projectile, proxy_handler} from './objects.js';
 
 
 const element_to_likelihood = {
-    'H': 25,
-    'C': 11,
+    'H': 40,
+    'C': 9,
     'N': 9,
     'O': 10,
     'Au': 1,
@@ -77,7 +77,7 @@ const formula_to_name_dict = {
     'NaCl': 'Sodium Chloride (table salt)'
 }
 
-const material_map = {
+const projectile_material_map = {
     'H2': {
         'geometry': new THREE.SphereGeometry( 2, 10, 10 ),
         'material': new THREE.MeshToonMaterial({color: 0x10c42e})
@@ -103,8 +103,8 @@ const material_map = {
 
 export class Compound extends Projectile {
     constructor({formula, initial_pos, velocity, onclick}) {
-        let geometry = material_map[formula]['geometry']
-        let material = material_map[formula]['material']
+        let geometry = projectile_material_map[formula]['geometry']
+        let material = projectile_material_map[formula]['material']
         super({geometry, material, initial_pos, velocity, onclick})
         this.formula = formula
     }

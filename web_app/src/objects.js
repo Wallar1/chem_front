@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { get } from 'svelte/store';
 
-import { get_random_element, get_font_text_mesh } from './helper_functions';
+import { get_random_solid_element, get_random_gas_element, get_font_text_mesh } from './helper_functions';
 import { current_element_counts } from './stores.js';
 
 
@@ -148,16 +148,30 @@ const element_to_material = {
     'O': new THREE.MeshStandardMaterial({color: 0xffffff,}),
     'Au': new THREE.MeshStandardMaterial({color: 0xebd834,}),
 }
-const mine_geometry = new THREE.ConeGeometry( 5, 4, 32 );
+const mine_geometry = new THREE.ConeGeometry( 7, 7, 32 );
+
+function mine_or_cloud_onclick(element) {
+    return () => {
+        let added_amount = 1
+        let curr_el_cnts = get(current_element_counts)
+        if (curr_el_cnts[element]) {
+            curr_el_cnts[element] += added_amount;
+        } else {
+            curr_el_cnts[element] = added_amount;
+        }
+        current_element_counts.set(curr_el_cnts)
+    }   
+}
 
 class Mine extends GameObj {
-    constructor({position}) { 
+    constructor({position, onclick}) { 
         super();
-        this.element = get_random_element();;
+        this.element = get_random_solid_element();;
         this.should_delete = false;
         this.mesh = new THREE.Mesh(mine_geometry, element_to_material[this.element]);
-        let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
-        this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+        this.mesh.onclick = mine_or_cloud_onclick(this.element)
+        // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
+        // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
         get_font_text_mesh(this.element, this)
     }
 
@@ -166,16 +180,16 @@ class Mine extends GameObj {
         parent.add(this.mesh)
     }
 
-    collide(collided_obj) {
-        let added_amount = Math.floor(collided_obj.damage / 10);
-        let curr_el_cnts = get(current_element_counts)
-        if (curr_el_cnts[this.element]) {
-            curr_el_cnts[this.element] += added_amount;
-        } else {
-            curr_el_cnts[this.element] = added_amount;
-        }
-        current_element_counts.set(curr_el_cnts)
-    }
+    // collide(collided_obj) {
+    //     let added_amount = Math.floor(collided_obj.damage / 10);
+    //     let curr_el_cnts = get(current_element_counts)
+    //     if (curr_el_cnts[this.element]) {
+    //         curr_el_cnts[this.element] += added_amount;
+    //     } else {
+    //         curr_el_cnts[this.element] = added_amount;
+    //     }
+    //     current_element_counts.set(curr_el_cnts)
+    // }
 }
 
 
@@ -186,6 +200,47 @@ function create_mine(arg_dict) {
     return proxy
 }
 
+
+
+const cloud_material = new THREE.MeshStandardMaterial({color: 0xffffff,});
+const cloud_geometry = new THREE.SphereGeometry( 5, 10, 10 );
+
+class Cloud extends GameObj {
+    constructor({position, onclick}) { 
+        super();
+        this.element = get_random_gas_element();;
+        this.should_delete = false;
+        this.mesh = new THREE.Mesh(cloud_geometry, cloud_material);
+        this.mesh.onclick = mine_or_cloud_onclick(this.element)
+        // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
+        // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+        get_font_text_mesh(this.element, this)
+    }
+
+    add_to(parent) {
+        this.parent = parent;
+        parent.add(this.mesh)
+    }
+
+    // collide(collided_obj) {
+    //     let added_amount = Math.floor(collided_obj.damage / 10);
+    //     let curr_el_cnts = get(current_element_counts)
+    //     if (curr_el_cnts[this.element]) {
+    //         curr_el_cnts[this.element] += added_amount;
+    //     } else {
+    //         curr_el_cnts[this.element] = added_amount;
+    //     }
+    //     current_element_counts.set(curr_el_cnts)
+    // }
+}
+
+
+function create_cloud(arg_dict) {
+    let mine = new Cloud(arg_dict)
+    let proxy = new Proxy(mine, proxy_handler('mesh'));
+    proxy.position.copy(arg_dict['position'])
+    return proxy
+}
 
 
 class Test {
@@ -202,4 +257,4 @@ class Test {
 }
 
 
-export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler, Mine, create_mine};
+export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler, Mine, create_mine, create_cloud};
