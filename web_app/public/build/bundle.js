@@ -585,42 +585,66 @@ var app = (function () {
     */
 
     const scientists = {
-        'MaxPlanck': {
-            name: 'Max Planck',
-            src: 'https://t3.gstatic.com/licensed-image?q=tbn:ANd9GcStjVkByJ0OkjZHEdoqZtfws_WnkdbJh-piwo3ia607u-CxoB6v--8yrOsZzdhRivcTamp3qzWuPsgp0KY'
+        'Democritus': {
+            'name': 'Democritus',
+            'year': '380 BC',
+            'story': 'Declared that matter is composed of indivisible and indestructible particles called "atomos"',
+            'src': 'https://www.lookingforwisdom.com/content/images/size/w2000/2020/11/Coypel_Democritus.jpg',
         },
-        'ErnestRutherford': {
-            name: 'Ernest Rutherford',
-            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+        'Geber': {
+            'name': 'Jābir ibn Hayyān (Geber)',
+            'story': 'Father of chemistry: introduced a systematic classification of chemical substances, and provided instructions for deriving an inorganic compound (sal ammoniac or ammonium chloride) from organic substances (such as plants, blood, and hair) by chemical means. Declared there were 6 idealized elements: air, earth, fire, water, sulphur (combustability), and mercury (metallic properties).',
+            'year': '800',
+            'src': 'https://www.bbvaopenmind.com/wp-content/uploads/2021/04/BBVA-OpenMind-Miguel-Barral-Jabir-ibn-Hayyan-2.jpg'
+        },
+        'SirFrancisBacon': {
+            'name': 'Sir Francis Bacon',
+            'story': 'Developed the scientific method',
+            'year': '1605',
+            'src': 'https://www.biography.com/.image/t_share/MTIwNjA4NjMzNzMxNzc4MDYw/francis-bacon-9194632-1-402.jpg'
         },
         'RobertBoyle': {
-            name: 'Robert Boyle',
-            src: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Robert_Boyle_0001.jpg'
+            'name': 'Robert Boyle',
+            'story': "Founder of modern chemistry. Boyle's law states that the volume and pressure of a gas are inversely proportional when the temperature is constant. So when the pressure goes up, the volume goes down, and vice versa",
+            'year': '1662',
+            'src': 'https://i0.wp.com/theirishspirit.com/wp-content/uploads/2022/01/Robert-Boyle.jpg?fit=1326%2C986&ssl=1'
         },
-        'MaxPlanck2': {
-            name: 'Max Planck',
-            src: 'https://t3.gstatic.com/licensed-image?q=tbn:ANd9GcStjVkByJ0OkjZHEdoqZtfws_WnkdbJh-piwo3ia607u-CxoB6v--8yrOsZzdhRivcTamp3qzWuPsgp0KY'
+        AlessandroVolta: {
+            name: 'Alessandro Volta',
+            story: 'Constructed the first electrical battery and founded electrochemistry with the invention of galvonic cells.',
+            year: '1800',
+            src: 'https://upload.wikimedia.org/wikipedia/commons/5/52/Alessandro_Volta.jpeg'
         },
-        'ErnestRutherford2': {
-            name: 'Ernest Rutherford',
-            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+        Lavoisier: {
+            name: 'Antoine-Laurent de Lavoisier',
+            story: "Brought about a rennaissance in chemistry by discovering the Law of Conservation of Mass, inventing our system of naming with Berthollet, working with Laplace on calorimetry, and understanding combustion with his wife.",
+            year: '1780',
+            src: 'https://www.sciencehistory.org/sites/default/files/styles/rte_full_width/public/lavoisier3.jpg?itok=7fZV0U1C'
         },
-        'RobertBoyle2': {
-            name: 'Robert Boyle',
-            src: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Robert_Boyle_0001.jpg'
+        DuPont: {
+            name: 'Éleuthère Irénée du Pont',
+            story: 'Invented gun powder and founded the DuPont chemical company. Studied under Lavoisier.',
+            year: '1802',
+            src: 'https://worldbookblog.files.wordpress.com/2015/06/pc369888-src.jpg'
         },
-        'MaxPlanck3': {
-            name: 'Max Planck',
-            src: 'https://t3.gstatic.com/licensed-image?q=tbn:ANd9GcStjVkByJ0OkjZHEdoqZtfws_WnkdbJh-piwo3ia607u-CxoB6v--8yrOsZzdhRivcTamp3qzWuPsgp0KY'
+        JohnDalton: {
+            name: 'John Dalton',
+            story: "Discovered the relationship between a mixture of gases and their partial pressures (Dalton's Law). Provided a basis for modern atomic theory and stoichiometry.",
+            year: '1803',
+            src: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhdKbVsLm24B8B1n8DZOgsk5Mc-DxqCo7W0f2I6lzqHxummLeW7WH7Lqec2q5ptcVuS4MaRnoOV6-8ZcYYc8VbVVDevAS4fwaD19PEQdVHdmqPiivDxx3uuZA-mZ-jpnakWIAUvXr3-iX4LgLIjyJN3GVOB_zt8Ds51zklPbMx7NXJ--bOqI5Gs2Y8zzA/s1230/John_Dalton_by_Charles_Turner.jpg'
         },
-        'ErnestRutherford3': {
-            name: 'Ernest Rutherford',
-            src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+        Berzelius: {
+            name: 'Jöns Jacob Berzelius',
+            story: "Invented our chemical symbals for elements and subscripts/proportions (eg H2O), as well as identified several new elements (silicon, selenium, thorium, cerium, lithium, and vanadium).",
+            year: '1828',
+            src: 'https://www.worldofchemicals.com/Article/477/Jons%20Jacob%20Berzelius.jpg'
         },
-        'RobertBoyle3': {
-            name: 'Robert Boyle',
-            src: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Robert_Boyle_0001.jpg'
-        },
+        HumphryDavy: {
+            name: 'Humphry Davy',
+            story: "Discovered several earth metals (sodium, potassium, calcium, magnesium, strontium, and barium), as well as contributions to the discoveries of the elemental nature of chlorine and iodine.",
+            year: '1807',
+            src: 'https://cdn.britannica.com/96/12396-050-A1110D81/Humphry-Davy-Thomas-Lawrence-detail-oil-painting.jpg'
+        }
     };
 
     /**
@@ -42349,53 +42373,119 @@ var app = (function () {
     const file$6 = "src/components/scientist_timeline/scientist_card.svelte";
 
     function create_fragment$6(ctx) {
-    	let div;
+    	let div3;
     	let img;
     	let img_src_value;
+    	let img_alt_value;
     	let t0;
-    	let p;
+    	let div2;
+    	let div1;
+    	let p0;
+    	let t1_value = /*scientist*/ ctx[0].story + "";
     	let t1;
+    	let t2;
+    	let div0;
+    	let t4;
+    	let p1;
+    	let t5_value = /*scientist*/ ctx[0].name + "";
+    	let t5;
+    	let t6;
+    	let p2;
+    	let t7_value = /*scientist*/ ctx[0].year + "";
+    	let t7;
+    	let mounted;
+    	let dispose;
 
     	const block = {
     		c: function create() {
-    			div = element("div");
+    			div3 = element("div");
     			img = element("img");
     			t0 = space();
-    			p = element("p");
-    			t1 = text(/*name*/ ctx[0]);
-    			if (!src_url_equal(img.src, img_src_value = /*src*/ ctx[1])) attr_dev(img, "src", img_src_value);
-    			attr_dev(img, "alt", /*name*/ ctx[0]);
-    			attr_dev(img, "class", "svelte-143afoo");
-    			add_location(img, file$6, 6, 4, 88);
-    			add_location(p, file$6, 8, 4, 122);
-    			attr_dev(div, "class", "card svelte-143afoo");
-    			add_location(div, file$6, 5, 0, 61);
+    			div2 = element("div");
+    			div1 = element("div");
+    			p0 = element("p");
+    			t1 = text(t1_value);
+    			t2 = space();
+    			div0 = element("div");
+    			div0.textContent = "Battle!";
+    			t4 = space();
+    			p1 = element("p");
+    			t5 = text(t5_value);
+    			t6 = space();
+    			p2 = element("p");
+    			t7 = text(t7_value);
+    			if (!src_url_equal(img.src, img_src_value = /*scientist*/ ctx[0].src)) attr_dev(img, "src", img_src_value);
+    			attr_dev(img, "alt", img_alt_value = /*scientist*/ ctx[0].name);
+    			attr_dev(img, "class", "svelte-i7mye2");
+    			toggle_class(img, "hide_image", /*hide_image*/ ctx[1]);
+    			add_location(img, file$6, 14, 4, 378);
+    			attr_dev(p0, "class", "svelte-i7mye2");
+    			add_location(p0, file$6, 17, 12, 507);
+    			attr_dev(div0, "class", "button svelte-i7mye2");
+    			add_location(div0, file$6, 18, 12, 544);
+    			attr_dev(div1, "class", "story svelte-i7mye2");
+    			add_location(div1, file$6, 16, 8, 475);
+    			attr_dev(p1, "class", "svelte-i7mye2");
+    			add_location(p1, file$6, 20, 8, 656);
+    			attr_dev(p2, "class", "svelte-i7mye2");
+    			add_location(p2, file$6, 21, 8, 688);
+    			attr_dev(div2, "class", "text svelte-i7mye2");
+    			add_location(div2, file$6, 15, 4, 448);
+    			attr_dev(div3, "class", "card svelte-i7mye2");
+    			add_location(div3, file$6, 13, 0, 298);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div, anchor);
-    			append_dev(div, img);
-    			append_dev(div, t0);
-    			append_dev(div, p);
-    			append_dev(p, t1);
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, img);
+    			append_dev(div3, t0);
+    			append_dev(div3, div2);
+    			append_dev(div2, div1);
+    			append_dev(div1, p0);
+    			append_dev(p0, t1);
+    			append_dev(div1, t2);
+    			append_dev(div1, div0);
+    			append_dev(div2, t4);
+    			append_dev(div2, p1);
+    			append_dev(p1, t5);
+    			append_dev(div2, t6);
+    			append_dev(div2, p2);
+    			append_dev(p2, t7);
+
+    			if (!mounted) {
+    				dispose = [
+    					listen_dev(div0, "click", stop_propagation(/*click_handler*/ ctx[3]), false, false, true),
+    					listen_dev(div3, "click", stop_propagation(/*click_handler_1*/ ctx[4]), false, false, true)
+    				];
+
+    				mounted = true;
+    			}
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*src*/ 2 && !src_url_equal(img.src, img_src_value = /*src*/ ctx[1])) {
+    			if (dirty & /*scientist*/ 1 && !src_url_equal(img.src, img_src_value = /*scientist*/ ctx[0].src)) {
     				attr_dev(img, "src", img_src_value);
     			}
 
-    			if (dirty & /*name*/ 1) {
-    				attr_dev(img, "alt", /*name*/ ctx[0]);
+    			if (dirty & /*scientist*/ 1 && img_alt_value !== (img_alt_value = /*scientist*/ ctx[0].name)) {
+    				attr_dev(img, "alt", img_alt_value);
     			}
 
-    			if (dirty & /*name*/ 1) set_data_dev(t1, /*name*/ ctx[0]);
+    			if (dirty & /*hide_image*/ 2) {
+    				toggle_class(img, "hide_image", /*hide_image*/ ctx[1]);
+    			}
+
+    			if (dirty & /*scientist*/ 1 && t1_value !== (t1_value = /*scientist*/ ctx[0].story + "")) set_data_dev(t1, t1_value);
+    			if (dirty & /*scientist*/ 1 && t5_value !== (t5_value = /*scientist*/ ctx[0].name + "")) set_data_dev(t5, t5_value);
+    			if (dirty & /*scientist*/ 1 && t7_value !== (t7_value = /*scientist*/ ctx[0].year + "")) set_data_dev(t7, t7_value);
     		},
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div);
+    			if (detaching) detach_dev(div3);
+    			mounted = false;
+    			run_all(dispose);
     		}
     	};
 
@@ -42411,39 +42501,62 @@ var app = (function () {
     }
 
     function instance$6($$self, $$props, $$invalidate) {
+    	let $current_scene;
+    	let $current_scientist;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(5, $current_scene = $$value));
+    	validate_store(current_scientist, 'current_scientist');
+    	component_subscribe($$self, current_scientist, $$value => $$invalidate(6, $current_scientist = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Scientist_card', slots, []);
-    	let { name } = $$props;
-    	let { src } = $$props;
-    	const writable_props = ['name', 'src'];
+    	let { scientist } = $$props;
+
+    	function set_scene(scientist) {
+    		set_store_value(current_scientist, $current_scientist = scientist.name, $current_scientist);
+    		set_store_value(current_scene, $current_scene = possible_scenes.Battle, $current_scene);
+    	}
+
+    	let hide_image = false;
+    	const writable_props = ['scientist'];
 
     	Object.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_card> was created with unknown prop '${key}'`);
     	});
 
+    	const click_handler = e => set_scene(scientist);
+    	const click_handler_1 = _ => $$invalidate(1, hide_image = !hide_image);
+
     	$$self.$$set = $$props => {
-    		if ('name' in $$props) $$invalidate(0, name = $$props.name);
-    		if ('src' in $$props) $$invalidate(1, src = $$props.src);
+    		if ('scientist' in $$props) $$invalidate(0, scientist = $$props.scientist);
     	};
 
-    	$$self.$capture_state = () => ({ name, src });
+    	$$self.$capture_state = () => ({
+    		current_scene,
+    		possible_scenes,
+    		current_scientist,
+    		scientist,
+    		set_scene,
+    		hide_image,
+    		$current_scene,
+    		$current_scientist
+    	});
 
     	$$self.$inject_state = $$props => {
-    		if ('name' in $$props) $$invalidate(0, name = $$props.name);
-    		if ('src' in $$props) $$invalidate(1, src = $$props.src);
+    		if ('scientist' in $$props) $$invalidate(0, scientist = $$props.scientist);
+    		if ('hide_image' in $$props) $$invalidate(1, hide_image = $$props.hide_image);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [name, src];
+    	return [scientist, hide_image, set_scene, click_handler, click_handler_1];
     }
 
     class Scientist_card extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$6, create_fragment$6, safe_not_equal, { name: 0, src: 1 });
+    		init(this, options, instance$6, create_fragment$6, safe_not_equal, { scientist: 0 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
@@ -42455,28 +42568,16 @@ var app = (function () {
     		const { ctx } = this.$$;
     		const props = options.props || {};
 
-    		if (/*name*/ ctx[0] === undefined && !('name' in props)) {
-    			console.warn("<Scientist_card> was created without expected prop 'name'");
-    		}
-
-    		if (/*src*/ ctx[1] === undefined && !('src' in props)) {
-    			console.warn("<Scientist_card> was created without expected prop 'src'");
+    		if (/*scientist*/ ctx[0] === undefined && !('scientist' in props)) {
+    			console.warn("<Scientist_card> was created without expected prop 'scientist'");
     		}
     	}
 
-    	get name() {
+    	get scientist() {
     		throw new Error("<Scientist_card>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
 
-    	set name(value) {
-    		throw new Error("<Scientist_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	get src() {
-    		throw new Error("<Scientist_card>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set src(value) {
+    	set scientist(value) {
     		throw new Error("<Scientist_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
     }
@@ -42488,63 +42589,40 @@ var app = (function () {
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[4] = list[i];
+    	child_ctx[0] = list[i];
     	return child_ctx;
     }
 
-    // (13:4) {#each Object.values(scientists) as scientist}
+    // (7:4) {#each Object.values(scientists) as scientist}
     function create_each_block$2(ctx) {
-    	let div;
-    	let img;
-    	let img_src_value;
-    	let t0;
-    	let p;
-    	let t1_value = /*scientist*/ ctx[4].name + "";
-    	let t1;
-    	let t2;
-    	let mounted;
-    	let dispose;
+    	let scientistcard;
+    	let current;
 
-    	function click_handler(...args) {
-    		return /*click_handler*/ ctx[1](/*scientist*/ ctx[4], ...args);
-    	}
+    	scientistcard = new Scientist_card({
+    			props: { scientist: /*scientist*/ ctx[0] },
+    			$$inline: true
+    		});
 
     	const block = {
     		c: function create() {
-    			div = element("div");
-    			img = element("img");
-    			t0 = space();
-    			p = element("p");
-    			t1 = text(t1_value);
-    			t2 = space();
-    			if (!src_url_equal(img.src, img_src_value = /*scientist*/ ctx[4].src)) attr_dev(img, "src", img_src_value);
-    			attr_dev(img, "alt", /*scientist*/ ctx[4].name);
-    			attr_dev(img, "class", "svelte-1dka6al");
-    			add_location(img, file$5, 14, 12, 517);
-    			add_location(p, file$5, 15, 12, 578);
-    			attr_dev(div, "class", "card svelte-1dka6al");
-    			add_location(div, file$5, 13, 8, 431);
+    			create_component(scientistcard.$$.fragment);
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div, anchor);
-    			append_dev(div, img);
-    			append_dev(div, t0);
-    			append_dev(div, p);
-    			append_dev(p, t1);
-    			append_dev(div, t2);
-
-    			if (!mounted) {
-    				dispose = listen_dev(div, "click", stop_propagation(click_handler), false, false, true);
-    				mounted = true;
-    			}
+    			mount_component(scientistcard, target, anchor);
+    			current = true;
     		},
-    		p: function update(new_ctx, dirty) {
-    			ctx = new_ctx;
+    		p: noop,
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(scientistcard.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(scientistcard.$$.fragment, local);
+    			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div);
-    			mounted = false;
-    			dispose();
+    			destroy_component(scientistcard, detaching);
     		}
     	};
 
@@ -42552,7 +42630,7 @@ var app = (function () {
     		block,
     		id: create_each_block$2.name,
     		type: "each",
-    		source: "(13:4) {#each Object.values(scientists) as scientist}",
+    		source: "(7:4) {#each Object.values(scientists) as scientist}",
     		ctx
     	});
 
@@ -42561,6 +42639,7 @@ var app = (function () {
 
     function create_fragment$5(ctx) {
     	let div;
+    	let current;
     	let each_value = Object.values(scientists);
     	validate_each_argument(each_value);
     	let each_blocks = [];
@@ -42568,6 +42647,10 @@ var app = (function () {
     	for (let i = 0; i < each_value.length; i += 1) {
     		each_blocks[i] = create_each_block$2(get_each_context$2(ctx, each_value, i));
     	}
+
+    	const out = i => transition_out(each_blocks[i], 1, 1, () => {
+    		each_blocks[i] = null;
+    	});
 
     	const block = {
     		c: function create() {
@@ -42577,8 +42660,8 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(div, "class", "fullscreen svelte-1dka6al");
-    			add_location(div, file$5, 11, 0, 347);
+    			attr_dev(div, "class", "fullscreen svelte-1x2s2xy");
+    			add_location(div, file$5, 5, 0, 125);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -42589,9 +42672,11 @@ var app = (function () {
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].m(div, null);
     			}
+
+    			current = true;
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*set_scene, Object, scientists*/ 1) {
+    			if (dirty & /*Object, scientists*/ 0) {
     				each_value = Object.values(scientists);
     				validate_each_argument(each_value);
     				let i;
@@ -42601,22 +42686,42 @@ var app = (function () {
 
     					if (each_blocks[i]) {
     						each_blocks[i].p(child_ctx, dirty);
+    						transition_in(each_blocks[i], 1);
     					} else {
     						each_blocks[i] = create_each_block$2(child_ctx);
     						each_blocks[i].c();
+    						transition_in(each_blocks[i], 1);
     						each_blocks[i].m(div, null);
     					}
     				}
 
-    				for (; i < each_blocks.length; i += 1) {
-    					each_blocks[i].d(1);
+    				group_outros();
+
+    				for (i = each_value.length; i < each_blocks.length; i += 1) {
+    					out(i);
     				}
 
-    				each_blocks.length = each_value.length;
+    				check_outros();
     			}
     		},
-    		i: noop,
-    		o: noop,
+    		i: function intro(local) {
+    			if (current) return;
+
+    			for (let i = 0; i < each_value.length; i += 1) {
+    				transition_in(each_blocks[i]);
+    			}
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			each_blocks = each_blocks.filter(Boolean);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				transition_out(each_blocks[i]);
+    			}
+
+    			current = false;
+    		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
     			destroy_each(each_blocks, detaching);
@@ -42635,40 +42740,16 @@ var app = (function () {
     }
 
     function instance$5($$self, $$props, $$invalidate) {
-    	let $current_scene;
-    	let $current_scientist;
-    	validate_store(current_scene, 'current_scene');
-    	component_subscribe($$self, current_scene, $$value => $$invalidate(2, $current_scene = $$value));
-    	validate_store(current_scientist, 'current_scientist');
-    	component_subscribe($$self, current_scientist, $$value => $$invalidate(3, $current_scientist = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Scientist_timeline', slots, []);
-
-    	function set_scene(scientist) {
-    		set_store_value(current_scientist, $current_scientist = scientist.name, $current_scientist);
-    		set_store_value(current_scene, $current_scene = possible_scenes.Battle, $current_scene);
-    	}
-
     	const writable_props = [];
 
     	Object_1$2.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_timeline> was created with unknown prop '${key}'`);
     	});
 
-    	const click_handler = (scientist, e) => set_scene(scientist);
-
-    	$$self.$capture_state = () => ({
-    		current_scene,
-    		possible_scenes,
-    		current_scientist,
-    		scientists,
-    		ScientistCard: Scientist_card,
-    		set_scene,
-    		$current_scene,
-    		$current_scientist
-    	});
-
-    	return [set_scene, click_handler];
+    	$$self.$capture_state = () => ({ scientists, ScientistCard: Scientist_card });
+    	return [];
     }
 
     class Scientist_timeline extends SvelteComponentDev {
@@ -45592,8 +45673,8 @@ var app = (function () {
     			t1 = space();
     			div0 = element("div");
     			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$1, 14, 4, 413);
-    			add_location(div1, file$1, 11, 0, 358);
+    			add_location(div0, file$1, 13, 4, 353);
+    			add_location(div1, file$1, 10, 0, 298);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
