@@ -11,25 +11,16 @@ export const possible_scenes = Object.freeze({
 });
 export const current_scene = writable(possible_scenes.Timeline);
 
-export const last_pressed_key = writable('p');
-
 export const current_scientist = writable(scientists.RobertBoyle);
 
-export let watched_keys = ['q', 'w', 'e', 'r', 't'];
+export let watched_keys = ['q', 'w', 'e', 'r', ' '];
 export const key_to_compound = writable({
     'q': 'H2',
     'w': 'CH4',
     'e': 'NH3',
     'r': 'CN',
-    't': 'H2O'
+    ' ': 'H2O'
 })
-
-export const selected_compound = derived(
-	[last_pressed_key, key_to_compound],
-	([$last_pressed_key, $key_to_compound]) => {
-        return $key_to_compound[$last_pressed_key] ? $key_to_compound[$last_pressed_key] : 'H2';
-    }
-);
 
 let counts = {
     'H': 20,
