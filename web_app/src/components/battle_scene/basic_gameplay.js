@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
 import {create_enemy, create_mine, create_cloud} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
-import { selected_compound, current_element_counts } from '../../stores.js';
+import { key_to_compound, current_element_counts, watched_keys } from '../../stores.js';
 import { parse_formula_to_dict, get_random_element } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
@@ -209,7 +209,7 @@ const object_type_details = {
         'add_function': add_cloud_to_earth,
     },
     'enemy': {
-        'probability': 2,
+        'probability': 8,
         'extra_z_distance': 5,
         'add_function': add_enemy_to_earth
     }
@@ -222,7 +222,6 @@ function get_random_type() {
         object_probabilities[key] = entry['probability']
     }
     let object_type = get_random_element(object_probabilities)
-    console.log(object_probabilities, object_type)
     return object_type_details[object_type]
 }
 
@@ -362,6 +361,7 @@ function unique(arr, key_func) {
     })
     return ret_arr;
 }
+var audio = new Audio('sound.mov');
 function on_mouse_click(event) {
     // this next line helps debug. Previously we were getting different positions because the renderer was expecting
     // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
@@ -376,14 +376,21 @@ function on_mouse_click(event) {
     let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
     let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
     if (intersects_with_click.length) {
+        audio.play();
         intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
-    } else {
-        fire_player_weapon();
+    }
+}
+
+document.addEventListener('keydown', (e) => handle_keydown(e))
+
+function handle_keydown(e) {
+    if (watched_keys.includes(e.key)) {
+        let compound = get(key_to_compound)[e.key]
+        try_to_fire_player_weapon(compound)
     }
 }
 
 function check_if_weapon_can_fire_and_get_new_counts(compound) {
-
     let element_counts = get(current_element_counts)
     let entries = Object.entries(parse_formula_to_dict(compound));
     for (let i=0; i<entries.length; i++) {
@@ -396,8 +403,7 @@ function check_if_weapon_can_fire_and_get_new_counts(compound) {
     return [true, element_counts]
 }
 
-
-function fire_player_weapon(){
+function try_to_fire_player_weapon(compound){
     const initial_pos = camera.position.clone()
     initial_pos.y -= 10
     initial_pos.z -= 15
@@ -409,7 +415,6 @@ function fire_player_weapon(){
         // target.object.material.color.set('#eb4034')
     }
     let params = {'parent': scene, initial_pos, velocity, onclick}
-    let compound = get(selected_compound)
     let [can_fire_weapon, new_counts] = check_if_weapon_can_fire_and_get_new_counts(compound);
     if (!can_fire_weapon) return;
     let projectile = create_compound(compound, params)

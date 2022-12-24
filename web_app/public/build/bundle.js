@@ -87,13 +87,6 @@ var app = (function () {
         node.addEventListener(event, handler, options);
         return () => node.removeEventListener(event, handler, options);
     }
-    function prevent_default(fn) {
-        return function (event) {
-            event.preventDefault();
-            // @ts-ignore
-            return fn.call(this, event);
-        };
-    }
     function stop_propagation(fn) {
         return function (event) {
             event.stopPropagation();
@@ -37372,7 +37365,7 @@ var app = (function () {
 
     }
 
-    class Audio extends Object3D {
+    class Audio$1 extends Object3D {
 
     	constructor( listener ) {
 
@@ -42109,7 +42102,7 @@ var app = (function () {
 
     //
 
-    Audio.prototype.load = function ( file ) {
+    Audio$1.prototype.load = function ( file ) {
 
     	console.warn( 'THREE.Audio: .load has been deprecated. Use THREE.AudioLoader instead.' );
     	const scope = this;
@@ -42315,25 +42308,16 @@ var app = (function () {
     });
     const current_scene = writable(possible_scenes.Timeline);
 
-    const last_pressed_key = writable('p');
-
     const current_scientist = writable(scientists.RobertBoyle);
 
-    let watched_keys = ['q', 'w', 'e', 'r', 't'];
+    let watched_keys = ['q', 'w', 'e', 'r', ' '];
     const key_to_compound = writable({
         'q': 'H2',
         'w': 'CH4',
         'e': 'NH3',
         'r': 'CN',
-        't': 'H2O'
+        ' ': 'H2O'
     });
-
-    const selected_compound = derived(
-    	[last_pressed_key, key_to_compound],
-    	([$last_pressed_key, $key_to_compound]) => {
-            return $key_to_compound[$last_pressed_key] ? $key_to_compound[$last_pressed_key] : 'H2';
-        }
-    );
 
     let counts = {
         'H': 20,
@@ -44792,7 +44776,7 @@ var app = (function () {
             'add_function': add_cloud_to_earth,
         },
         'enemy': {
-            'probability': 2,
+            'probability': 8,
             'extra_z_distance': 5,
             'add_function': add_enemy_to_earth
         }
@@ -44805,7 +44789,6 @@ var app = (function () {
             object_probabilities[key] = entry['probability'];
         }
         let object_type = get_random_element(object_probabilities);
-        console.log(object_probabilities, object_type);
         return object_type_details[object_type]
     }
 
@@ -44945,6 +44928,7 @@ var app = (function () {
         });
         return ret_arr;
     }
+    var audio = new Audio('sound.mov');
     function on_mouse_click(event) {
         // this next line helps debug. Previously we were getting different positions because the renderer was expecting
         // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
@@ -44959,14 +44943,21 @@ var app = (function () {
         let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
         let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
         if (intersects_with_click.length) {
+            audio.play();
             intersects_with_click.forEach(intersect => intersect.object.onclick(intersect));
-        } else {
-            fire_player_weapon();
+        }
+    }
+
+    document.addEventListener('keydown', (e) => handle_keydown(e));
+
+    function handle_keydown(e) {
+        if (watched_keys.includes(e.key)) {
+            let compound = get_store_value(key_to_compound)[e.key];
+            try_to_fire_player_weapon(compound);
         }
     }
 
     function check_if_weapon_can_fire_and_get_new_counts(compound) {
-
         let element_counts = get_store_value(current_element_counts);
         let entries = Object.entries(parse_formula_to_dict(compound));
         for (let i=0; i<entries.length; i++) {
@@ -44979,8 +44970,7 @@ var app = (function () {
         return [true, element_counts]
     }
 
-
-    function fire_player_weapon(){
+    function try_to_fire_player_weapon(compound){
         const initial_pos = camera.position.clone();
         initial_pos.y -= 10;
         initial_pos.z -= 15;
@@ -44992,7 +44982,6 @@ var app = (function () {
             // target.object.material.color.set('#eb4034')
         };
         let params = {'parent': scene, initial_pos, velocity, onclick};
-        let compound = get_store_value(selected_compound);
         let [can_fire_weapon, new_counts] = check_if_weapon_can_fire_and_get_new_counts(compound);
         if (!can_fire_weapon) return;
         let projectile = create_compound(compound, params);
@@ -45029,73 +45018,87 @@ var app = (function () {
     const file$4 = "src/components/battle_scene/compound_card.svelte";
 
     function create_fragment$4(ctx) {
-    	let div2;
+    	let div1;
     	let div0;
     	let p0;
+
+    	let t0_value = (/*key*/ ctx[3] === ' '
+    	? 'Space'
+    	: /*key*/ ctx[3].toUpperCase()) + "";
+
     	let t0;
     	let t1;
-    	let t2;
     	let p1;
+    	let t2;
     	let t3;
     	let t4;
+    	let p2;
     	let t5;
-    	let div1;
     	let t6;
+    	let t7;
+    	let h2;
+    	let t8;
 
     	const block = {
     		c: function create() {
-    			div2 = element("div");
+    			div1 = element("div");
     			div0 = element("div");
     			p0 = element("p");
-    			t0 = text("Count Available: ");
-    			t1 = text(/*count_available*/ ctx[3]);
-    			t2 = space();
+    			t0 = text(t0_value);
+    			t1 = space();
     			p1 = element("p");
-    			t3 = text("Damage: ");
-    			t4 = text(/*damage*/ ctx[2]);
-    			t5 = space();
-    			div1 = element("div");
-    			t6 = text(/*el_name*/ ctx[0]);
-    			add_location(p0, file$4, 9, 8, 196);
-    			add_location(p1, file$4, 10, 8, 246);
-    			attr_dev(div0, "class", "stats svelte-1c92od4");
-    			add_location(div0, file$4, 8, 4, 168);
-    			attr_dev(div1, "class", "el_name svelte-1c92od4");
-    			add_location(div1, file$4, 12, 4, 285);
-    			attr_dev(div2, "class", "card svelte-1c92od4");
-    			toggle_class(div2, "highlighted", /*highlighted*/ ctx[1]);
-    			add_location(div2, file$4, 7, 0, 127);
+    			t2 = text("Count Available: ");
+    			t3 = text(/*count_available*/ ctx[2]);
+    			t4 = space();
+    			p2 = element("p");
+    			t5 = text("Damage: ");
+    			t6 = text(/*damage*/ ctx[1]);
+    			t7 = space();
+    			h2 = element("h2");
+    			t8 = text(/*el_name*/ ctx[0]);
+    			add_location(p0, file$4, 9, 8, 170);
+    			add_location(p1, file$4, 10, 8, 229);
+    			add_location(p2, file$4, 11, 8, 279);
+    			attr_dev(div0, "class", "stats svelte-1q20zkf");
+    			add_location(div0, file$4, 8, 4, 142);
+    			attr_dev(h2, "class", "el_name svelte-1q20zkf");
+    			add_location(h2, file$4, 13, 4, 318);
+    			attr_dev(div1, "class", "card svelte-1q20zkf");
+    			add_location(div1, file$4, 7, 0, 119);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div2, anchor);
-    			append_dev(div2, div0);
+    			insert_dev(target, div1, anchor);
+    			append_dev(div1, div0);
     			append_dev(div0, p0);
     			append_dev(p0, t0);
-    			append_dev(p0, t1);
-    			append_dev(div0, t2);
+    			append_dev(div0, t1);
     			append_dev(div0, p1);
+    			append_dev(p1, t2);
     			append_dev(p1, t3);
-    			append_dev(p1, t4);
-    			append_dev(div2, t5);
-    			append_dev(div2, div1);
-    			append_dev(div1, t6);
+    			append_dev(div0, t4);
+    			append_dev(div0, p2);
+    			append_dev(p2, t5);
+    			append_dev(p2, t6);
+    			append_dev(div1, t7);
+    			append_dev(div1, h2);
+    			append_dev(h2, t8);
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*count_available*/ 8) set_data_dev(t1, /*count_available*/ ctx[3]);
-    			if (dirty & /*damage*/ 4) set_data_dev(t4, /*damage*/ ctx[2]);
-    			if (dirty & /*el_name*/ 1) set_data_dev(t6, /*el_name*/ ctx[0]);
+    			if (dirty & /*key*/ 8 && t0_value !== (t0_value = (/*key*/ ctx[3] === ' '
+    			? 'Space'
+    			: /*key*/ ctx[3].toUpperCase()) + "")) set_data_dev(t0, t0_value);
 
-    			if (dirty & /*highlighted*/ 2) {
-    				toggle_class(div2, "highlighted", /*highlighted*/ ctx[1]);
-    			}
+    			if (dirty & /*count_available*/ 4) set_data_dev(t3, /*count_available*/ ctx[2]);
+    			if (dirty & /*damage*/ 2) set_data_dev(t6, /*damage*/ ctx[1]);
+    			if (dirty & /*el_name*/ 1) set_data_dev(t8, /*el_name*/ ctx[0]);
     		},
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div2);
+    			if (detaching) detach_dev(div1);
     		}
     	};
 
@@ -45114,10 +45117,10 @@ var app = (function () {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_card', slots, []);
     	let { el_name } = $$props;
-    	let { highlighted } = $$props;
     	let { damage } = $$props;
     	let { count_available } = $$props;
-    	const writable_props = ['el_name', 'highlighted', 'damage', 'count_available'];
+    	let { key } = $$props;
+    	const writable_props = ['el_name', 'damage', 'count_available', 'key'];
 
     	Object.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Compound_card> was created with unknown prop '${key}'`);
@@ -45125,30 +45128,25 @@ var app = (function () {
 
     	$$self.$$set = $$props => {
     		if ('el_name' in $$props) $$invalidate(0, el_name = $$props.el_name);
-    		if ('highlighted' in $$props) $$invalidate(1, highlighted = $$props.highlighted);
-    		if ('damage' in $$props) $$invalidate(2, damage = $$props.damage);
-    		if ('count_available' in $$props) $$invalidate(3, count_available = $$props.count_available);
+    		if ('damage' in $$props) $$invalidate(1, damage = $$props.damage);
+    		if ('count_available' in $$props) $$invalidate(2, count_available = $$props.count_available);
+    		if ('key' in $$props) $$invalidate(3, key = $$props.key);
     	};
 
-    	$$self.$capture_state = () => ({
-    		el_name,
-    		highlighted,
-    		damage,
-    		count_available
-    	});
+    	$$self.$capture_state = () => ({ el_name, damage, count_available, key });
 
     	$$self.$inject_state = $$props => {
     		if ('el_name' in $$props) $$invalidate(0, el_name = $$props.el_name);
-    		if ('highlighted' in $$props) $$invalidate(1, highlighted = $$props.highlighted);
-    		if ('damage' in $$props) $$invalidate(2, damage = $$props.damage);
-    		if ('count_available' in $$props) $$invalidate(3, count_available = $$props.count_available);
+    		if ('damage' in $$props) $$invalidate(1, damage = $$props.damage);
+    		if ('count_available' in $$props) $$invalidate(2, count_available = $$props.count_available);
+    		if ('key' in $$props) $$invalidate(3, key = $$props.key);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [el_name, highlighted, damage, count_available];
+    	return [el_name, damage, count_available, key];
     }
 
     class Compound_card extends SvelteComponentDev {
@@ -45157,9 +45155,9 @@ var app = (function () {
 
     		init(this, options, instance$4, create_fragment$4, safe_not_equal, {
     			el_name: 0,
-    			highlighted: 1,
-    			damage: 2,
-    			count_available: 3
+    			damage: 1,
+    			count_available: 2,
+    			key: 3
     		});
 
     		dispatch_dev("SvelteRegisterComponent", {
@@ -45176,16 +45174,16 @@ var app = (function () {
     			console.warn("<Compound_card> was created without expected prop 'el_name'");
     		}
 
-    		if (/*highlighted*/ ctx[1] === undefined && !('highlighted' in props)) {
-    			console.warn("<Compound_card> was created without expected prop 'highlighted'");
-    		}
-
-    		if (/*damage*/ ctx[2] === undefined && !('damage' in props)) {
+    		if (/*damage*/ ctx[1] === undefined && !('damage' in props)) {
     			console.warn("<Compound_card> was created without expected prop 'damage'");
     		}
 
-    		if (/*count_available*/ ctx[3] === undefined && !('count_available' in props)) {
+    		if (/*count_available*/ ctx[2] === undefined && !('count_available' in props)) {
     			console.warn("<Compound_card> was created without expected prop 'count_available'");
+    		}
+
+    		if (/*key*/ ctx[3] === undefined && !('key' in props)) {
+    			console.warn("<Compound_card> was created without expected prop 'key'");
     		}
     	}
 
@@ -45194,14 +45192,6 @@ var app = (function () {
     	}
 
     	set el_name(value) {
-    		throw new Error("<Compound_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	get highlighted() {
-    		throw new Error("<Compound_card>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set highlighted(value) {
     		throw new Error("<Compound_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
 
@@ -45220,6 +45210,14 @@ var app = (function () {
     	set count_available(value) {
     		throw new Error("<Compound_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
+
+    	get key() {
+    		throw new Error("<Compound_card>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set key(value) {
+    		throw new Error("<Compound_card>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
     }
 
     /* src/components/battle_scene/bottom_compound_bar.svelte generated by Svelte v3.50.0 */
@@ -45230,21 +45228,22 @@ var app = (function () {
 
     function get_each_context$1(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[4] = list[i];
+    	child_ctx[2] = list[i][0];
+    	child_ctx[3] = list[i][1];
     	return child_ctx;
     }
 
-    // (20:4) {#each Object.values($key_to_compound) as compound}
+    // (8:4) {#each Object.entries($key_to_compound) as [key, compound]}
     function create_each_block$1(ctx) {
     	let compoundcard;
     	let current;
 
     	compoundcard = new Compound_card({
     			props: {
-    				highlighted: /*compound*/ ctx[4] === /*$selected_compound*/ ctx[2],
-    				el_name: /*compound*/ ctx[4],
-    				damage: formula_to_damage_dict[/*compound*/ ctx[4]],
-    				count_available: /*$max_number_possible_for_each_compound*/ ctx[1][/*compound*/ ctx[4]]
+    				key: /*key*/ ctx[2],
+    				el_name: /*compound*/ ctx[3],
+    				damage: formula_to_damage_dict[/*compound*/ ctx[3]],
+    				count_available: /*$max_number_possible_for_each_compound*/ ctx[1][/*compound*/ ctx[3]]
     			},
     			$$inline: true
     		});
@@ -45259,10 +45258,10 @@ var app = (function () {
     		},
     		p: function update(ctx, dirty) {
     			const compoundcard_changes = {};
-    			if (dirty & /*$key_to_compound, $selected_compound*/ 5) compoundcard_changes.highlighted = /*compound*/ ctx[4] === /*$selected_compound*/ ctx[2];
-    			if (dirty & /*$key_to_compound*/ 1) compoundcard_changes.el_name = /*compound*/ ctx[4];
-    			if (dirty & /*$key_to_compound*/ 1) compoundcard_changes.damage = formula_to_damage_dict[/*compound*/ ctx[4]];
-    			if (dirty & /*$max_number_possible_for_each_compound, $key_to_compound*/ 3) compoundcard_changes.count_available = /*$max_number_possible_for_each_compound*/ ctx[1][/*compound*/ ctx[4]];
+    			if (dirty & /*$key_to_compound*/ 1) compoundcard_changes.key = /*key*/ ctx[2];
+    			if (dirty & /*$key_to_compound*/ 1) compoundcard_changes.el_name = /*compound*/ ctx[3];
+    			if (dirty & /*$key_to_compound*/ 1) compoundcard_changes.damage = formula_to_damage_dict[/*compound*/ ctx[3]];
+    			if (dirty & /*$max_number_possible_for_each_compound, $key_to_compound*/ 3) compoundcard_changes.count_available = /*$max_number_possible_for_each_compound*/ ctx[1][/*compound*/ ctx[3]];
     			compoundcard.$set(compoundcard_changes);
     		},
     		i: function intro(local) {
@@ -45283,7 +45282,7 @@ var app = (function () {
     		block,
     		id: create_each_block$1.name,
     		type: "each",
-    		source: "(20:4) {#each Object.values($key_to_compound) as compound}",
+    		source: "(8:4) {#each Object.entries($key_to_compound) as [key, compound]}",
     		ctx
     	});
 
@@ -45293,9 +45292,7 @@ var app = (function () {
     function create_fragment$3(ctx) {
     	let div;
     	let current;
-    	let mounted;
-    	let dispose;
-    	let each_value = Object.values(/*$key_to_compound*/ ctx[0]);
+    	let each_value = Object.entries(/*$key_to_compound*/ ctx[0]);
     	validate_each_argument(each_value);
     	let each_blocks = [];
 
@@ -45316,8 +45313,8 @@ var app = (function () {
     			}
 
     			attr_dev(div, "id", "sidebar-bottom");
-    			attr_dev(div, "class", "svelte-d2vxdq");
-    			add_location(div, file$3, 18, 0, 612);
+    			attr_dev(div, "class", "svelte-55y4qn");
+    			add_location(div, file$3, 6, 0, 225);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -45330,15 +45327,10 @@ var app = (function () {
     			}
 
     			current = true;
-
-    			if (!mounted) {
-    				dispose = listen_dev(window, "keypress", prevent_default(/*set_key*/ ctx[3]), false, true, false);
-    				mounted = true;
-    			}
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*Object, $key_to_compound, $selected_compound, formula_to_damage_dict, $max_number_possible_for_each_compound*/ 7) {
-    				each_value = Object.values(/*$key_to_compound*/ ctx[0]);
+    			if (dirty & /*Object, $key_to_compound, formula_to_damage_dict, $max_number_possible_for_each_compound*/ 3) {
+    				each_value = Object.entries(/*$key_to_compound*/ ctx[0]);
     				validate_each_argument(each_value);
     				let i;
 
@@ -45386,8 +45378,6 @@ var app = (function () {
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
     			destroy_each(each_blocks, detaching);
-    			mounted = false;
-    			dispose();
     		}
     	};
 
@@ -45405,26 +45395,12 @@ var app = (function () {
     function instance$3($$self, $$props, $$invalidate) {
     	let $key_to_compound;
     	let $max_number_possible_for_each_compound;
-    	let $selected_compound;
     	validate_store(key_to_compound, 'key_to_compound');
     	component_subscribe($$self, key_to_compound, $$value => $$invalidate(0, $key_to_compound = $$value));
     	validate_store(max_number_possible_for_each_compound, 'max_number_possible_for_each_compound');
     	component_subscribe($$self, max_number_possible_for_each_compound, $$value => $$invalidate(1, $max_number_possible_for_each_compound = $$value));
-    	validate_store(selected_compound, 'selected_compound');
-    	component_subscribe($$self, selected_compound, $$value => $$invalidate(2, $selected_compound = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Bottom_compound_bar', slots, []);
-
-    	function set_key(e) {
-    		if (watched_keys.includes(e.key)) {
-    			let number_of_compounds_possible = $max_number_possible_for_each_compound[$key_to_compound[e.key]];
-
-    			if (number_of_compounds_possible > 0) {
-    				last_pressed_key.set(e.key);
-    			}
-    		}
-    	}
-
     	const writable_props = [];
 
     	Object_1$1.keys($$props).forEach(key => {
@@ -45434,24 +45410,13 @@ var app = (function () {
     	$$self.$capture_state = () => ({
     		CompoundCard: Compound_card,
     		formula_to_damage_dict,
-    		last_pressed_key,
-    		watched_keys,
-    		current_element_counts,
     		key_to_compound,
-    		selected_compound,
     		max_number_possible_for_each_compound,
-    		set_key,
     		$key_to_compound,
-    		$max_number_possible_for_each_compound,
-    		$selected_compound
+    		$max_number_possible_for_each_compound
     	});
 
-    	return [
-    		$key_to_compound,
-    		$max_number_possible_for_each_compound,
-    		$selected_compound,
-    		set_key
-    	];
+    	return [$key_to_compound, $max_number_possible_for_each_compound];
     }
 
     class Bottom_compound_bar extends SvelteComponentDev {
