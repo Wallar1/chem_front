@@ -7,7 +7,7 @@
 </script>
 
 <main>
-	{#if true}
+	{#if $current_scene === possible_scenes.CompoundCreator}
 		<CompoundCreator/>
 	{:else if $current_scene === possible_scenes.Timeline}
 		<Timeline/>

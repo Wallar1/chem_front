@@ -1,7 +1,7 @@
 
 <script>
     import { onMount } from 'svelte';
-    import { CompoundCreator } from './compound_creator.js';
+    import { CompoundCreator } from './compound_creator_2.js';
     onMount(async () => {
         new CompoundCreator();
     })
