@@ -376,7 +376,7 @@ function on_mouse_click(event) {
     let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
     let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
     if (intersects_with_click.length) {
-        audio.play();
+        // audio.play();
         intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
     }
 }

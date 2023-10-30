@@ -9,7 +9,7 @@ export const possible_scenes = Object.freeze({
     'Battle': Symbol('battle'),
     'CompoundCreator': Symbol('compound creator')
 });
-export const current_scene = writable(possible_scenes.Timeline);
+export const current_scene = writable(possible_scenes.CompoundCreator);
 
 export const current_scientist = writable(scientists.RobertBoyle);
 
@@ -19,7 +19,7 @@ export const key_to_compound = writable({
     'w': 'CH4',
     'e': 'NH3',
     'r': 'CN',
-    ' ': 'H2O'
+    ' ': 'H2O' // spacebar
 })
 
 let counts = {

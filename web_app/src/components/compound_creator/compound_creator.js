@@ -67,7 +67,8 @@ export class CompoundCreator {
 function init() {
 
     camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 5000 );
-    camera.position.z = 1000;
+    console.log(camera.projectionMatrix)
+    camera.position.z = 700;
 
     scene = new THREE.Scene();
 
@@ -288,6 +289,7 @@ function loadMolecule( model ) {
             const atom = document.createElement( 'img' );
             atom.src = colorSprite;
 
+            
             const object = new CSS3DSprite( atom );
             object.position.copy( position );
             object.position.multiplyScalar( SPACING );
@@ -296,7 +298,6 @@ function loadMolecule( model ) {
             object.updateMatrix();
 
             root.add( object );
-
             objects.push( object );
 
         }
@@ -316,76 +317,59 @@ function loadMolecule( model ) {
 
             tmpVec1.subVectors( end, start );
             const bondLength = tmpVec1.length() - 50;  // TODO: why - 50?
+            const axis = tmpVec2.set( 0, 1, 0 ).cross( tmpVec1 );
+            const radians = Math.acos( tmpVec3.set( 0, 1, 0 ).dot( tmpVec4.copy( tmpVec1 ).normalize() ) );
+            const objMatrix = new THREE.Matrix4().makeRotationAxis( axis.normalize(), radians );
 
             let bond = document.createElement( 'div' );
             // bond.className = 'bond';
             addBondClassStyles(bond)
             bond.style.height = bondLength + 'px';
-
             let object = new CSS3DObject( bond );
             object.position.copy( start );
             object.position.lerp( end, 0.5 );  // so we move the object up halfway to the end?
-
             object.userData.bondLengthShort = bondLength + 'px';
             object.userData.bondLengthFull = ( bondLength + 55 ) + 'px';  // TODO: what is the 55?
-
-            //
-
-            const axis = tmpVec2.set( 0, 1, 0 ).cross( tmpVec1 );
-            const radians = Math.acos( tmpVec3.set( 0, 1, 0 ).dot( tmpVec4.copy( tmpVec1 ).normalize() ) );
-
-            const objMatrix = new THREE.Matrix4().makeRotationAxis( axis.normalize(), radians );
             object.matrix.copy( objMatrix );
             object.quaternion.setFromRotationMatrix( object.matrix );
-
             object.matrixAutoUpdate = false;
             object.updateMatrix();
-
             root.add( object );
-
             objects.push( object );
-            console.log(object)
 
-            //
-
-            bond = document.createElement( 'div' );
-            // bond.className = 'bond';
-            addBondClassStyles(bond)
-            bond.style.height = bondLength + 'px';
-
-            const joint = new THREE.Object3D( bond );
+            // why create joint? Because doing the 90 degree rotation is easy if you make a parent object,
+            // since the 90 degrees can be relative to the parent
+            let joint = new THREE.Object3D();
             joint.position.copy( start );
             joint.position.lerp( end, 0.5 );
-
             joint.matrix.copy( objMatrix );
             joint.quaternion.setFromRotationMatrix( joint.matrix );
-
             joint.matrixAutoUpdate = false;
             joint.updateMatrix();
-
-            object = new CSS3DObject( bond );
-            object.rotation.y = Math.PI / 2;
-
-            object.matrixAutoUpdate = false;
-            object.updateMatrix();
-
-            object.userData.bondLengthShort = bondLength + 'px';
-            object.userData.bondLengthFull = ( bondLength + 55 ) + 'px';
-
-            object.userData.joint = joint;
-
-            joint.add( object );
+            let bond2 = document.createElement( 'div' );
+            addBondClassStyles(bond2)
+            bond2.style.height = bondLength + 'px';
+            let object2 = new CSS3DObject( bond2 );
+            object2.rotation.y = Math.PI / 2;
+            object2.matrixAutoUpdate = false;
+            object2.updateMatrix();
+            object2.userData.bondLengthShort = bondLength + 'px';
+            object2.userData.bondLengthFull = ( bondLength + 55 ) + 'px';
+            object2.userData.joint = joint;
+            joint.add( object2 );
             root.add( joint );
-
-            objects.push( object );
-            console.log(object, joint)
+            objects.push( object2 );
 
         }
 
-        // changeVizType( params.vizType );  TODO: what is this doing?
+        // changeVizType( params.vizType );  // TODO: what is this doing?
 
     } );
 
+
+}
+
+function create_atom() {
 
 }
 
@@ -408,12 +392,6 @@ function animate() {
     // const time = Date.now() * 0.0004;
     // root.rotation.x = time;
     // root.rotation.y = time * 0.7;
-
-    render();
-
-}
-
-function render() {
 
     renderer.render( scene, camera );
 

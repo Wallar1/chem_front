@@ -42306,7 +42306,7 @@ var app = (function () {
         'Battle': Symbol('battle'),
         'CompoundCreator': Symbol('compound creator')
     });
-    const current_scene = writable(possible_scenes.Timeline);
+    const current_scene = writable(possible_scenes.CompoundCreator);
 
     const current_scientist = writable(scientists.RobertBoyle);
 
@@ -42316,7 +42316,7 @@ var app = (function () {
         'w': 'CH4',
         'e': 'NH3',
         'r': 'CN',
-        ' ': 'H2O'
+        ' ': 'H2O' // spacebar
     });
 
     let counts = {
@@ -42573,17 +42573,17 @@ var app = (function () {
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[0] = list[i];
+    	child_ctx[3] = list[i];
     	return child_ctx;
     }
 
-    // (7:4) {#each Object.values(scientists) as scientist}
+    // (14:4) {#each Object.values(scientists) as scientist}
     function create_each_block$2(ctx) {
     	let scientistcard;
     	let current;
 
     	scientistcard = new Scientist_card({
-    			props: { scientist: /*scientist*/ ctx[0] },
+    			props: { scientist: /*scientist*/ ctx[3] },
     			$$inline: true
     		});
 
@@ -42614,7 +42614,7 @@ var app = (function () {
     		block,
     		id: create_each_block$2.name,
     		type: "each",
-    		source: "(7:4) {#each Object.values(scientists) as scientist}",
+    		source: "(14:4) {#each Object.values(scientists) as scientist}",
     		ctx
     	});
 
@@ -42622,8 +42622,13 @@ var app = (function () {
     }
 
     function create_fragment$6(ctx) {
-    	let div;
+    	let div0;
+    	let t0;
+    	let div1;
+    	let p;
     	let current;
+    	let mounted;
+    	let dispose;
     	let each_value = Object.values(scientists);
     	validate_each_argument(each_value);
     	let each_blocks = [];
@@ -42638,26 +42643,40 @@ var app = (function () {
 
     	const block = {
     		c: function create() {
-    			div = element("div");
+    			div0 = element("div");
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(div, "class", "fullscreen svelte-1x2s2xy");
-    			add_location(div, file$6, 5, 0, 125);
+    			t0 = space();
+    			div1 = element("div");
+    			p = element("p");
+    			p.textContent = "Build Compounds In The Lab";
+    			attr_dev(div0, "class", "widescreen svelte-15irslr");
+    			add_location(div0, file$6, 12, 0, 303);
+    			add_location(p, file$6, 18, 4, 455);
+    			add_location(div1, file$6, 17, 0, 445);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div, anchor);
+    			insert_dev(target, div0, anchor);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
-    				each_blocks[i].m(div, null);
+    				each_blocks[i].m(div0, null);
     			}
 
+    			insert_dev(target, t0, anchor);
+    			insert_dev(target, div1, anchor);
+    			append_dev(div1, p);
     			current = true;
+
+    			if (!mounted) {
+    				dispose = listen_dev(p, "click", stop_propagation(/*click_handler*/ ctx[1]), false, false, true);
+    				mounted = true;
+    			}
     		},
     		p: function update(ctx, [dirty]) {
     			if (dirty & /*Object, scientists*/ 0) {
@@ -42675,7 +42694,7 @@ var app = (function () {
     						each_blocks[i] = create_each_block$2(child_ctx);
     						each_blocks[i].c();
     						transition_in(each_blocks[i], 1);
-    						each_blocks[i].m(div, null);
+    						each_blocks[i].m(div0, null);
     					}
     				}
 
@@ -42707,8 +42726,12 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div);
+    			if (detaching) detach_dev(div0);
     			destroy_each(each_blocks, detaching);
+    			if (detaching) detach_dev(t0);
+    			if (detaching) detach_dev(div1);
+    			mounted = false;
+    			dispose();
     		}
     	};
 
@@ -42724,16 +42747,34 @@ var app = (function () {
     }
 
     function instance$6($$self, $$props, $$invalidate) {
+    	let $current_scene;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(2, $current_scene = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Scientist_timeline', slots, []);
+
+    	function set_compound_creator_scene() {
+    		set_store_value(current_scene, $current_scene = possible_scenes.CompoundCreator, $current_scene);
+    	}
+
     	const writable_props = [];
 
     	Object_1$2.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_timeline> was created with unknown prop '${key}'`);
     	});
 
-    	$$self.$capture_state = () => ({ scientists, ScientistCard: Scientist_card });
-    	return [];
+    	const click_handler = e => set_compound_creator_scene();
+
+    	$$self.$capture_state = () => ({
+    		scientists,
+    		ScientistCard: Scientist_card,
+    		current_scene,
+    		possible_scenes,
+    		set_compound_creator_scene,
+    		$current_scene
+    	});
+
+    	return [set_compound_creator_scene, click_handler];
     }
 
     class Scientist_timeline extends SvelteComponentDev {
@@ -44928,7 +44969,7 @@ var app = (function () {
         });
         return ret_arr;
     }
-    var audio = new Audio('sound.mov');
+    new Audio('sound.mov');
     function on_mouse_click(event) {
         // this next line helps debug. Previously we were getting different positions because the renderer was expecting
         // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
@@ -44943,7 +44984,7 @@ var app = (function () {
         let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
         let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
         if (intersects_with_click.length) {
-            audio.play();
+            // audio.play();
             intersects_with_click.forEach(intersect => intersect.object.onclick(intersect));
         }
     }
@@ -46964,64 +47005,31 @@ var app = (function () {
 
     }
 
-    /**
-     * lil-gui
-     * https://lil-gui.georgealways.com
-     * @version 0.17.0
-     * @author George Michael Brower
-     * @license MIT
-     */
-     class t{constructor(i,e,s,n,l="div"){this.parent=i,this.object=e,this.property=s,this._disabled=!1,this._hidden=!1,this.initialValue=this.getValue(),this.domElement=document.createElement("div"),this.domElement.classList.add("controller"),this.domElement.classList.add(n),this.$name=document.createElement("div"),this.$name.classList.add("name"),t.nextNameID=t.nextNameID||0,this.$name.id="lil-gui-name-"+ ++t.nextNameID,this.$widget=document.createElement(l),this.$widget.classList.add("widget"),this.$disable=this.$widget,this.domElement.appendChild(this.$name),this.domElement.appendChild(this.$widget),this.parent.children.push(this),this.parent.controllers.push(this),this.parent.$children.appendChild(this.domElement),this._listenCallback=this._listenCallback.bind(this),this.name(s);}name(t){return this._name=t,this.$name.innerHTML=t,this}onChange(t){return this._onChange=t,this}_callOnChange(){this.parent._callOnChange(this),void 0!==this._onChange&&this._onChange.call(this,this.getValue()),this._changed=!0;}onFinishChange(t){return this._onFinishChange=t,this}_callOnFinishChange(){this._changed&&(this.parent._callOnFinishChange(this),void 0!==this._onFinishChange&&this._onFinishChange.call(this,this.getValue())),this._changed=!1;}reset(){return this.setValue(this.initialValue),this._callOnFinishChange(),this}enable(t=!0){return this.disable(!t)}disable(t=!0){return t===this._disabled||(this._disabled=t,this.domElement.classList.toggle("disabled",t),this.$disable.toggleAttribute("disabled",t)),this}show(t=!0){return this._hidden=!t,this.domElement.style.display=this._hidden?"none":"",this}hide(){return this.show(!1)}options(t){const i=this.parent.add(this.object,this.property,t);return i.name(this._name),this.destroy(),i}min(t){return this}max(t){return this}step(t){return this}decimals(t){return this}listen(t=!0){return this._listening=t,void 0!==this._listenCallbackID&&(cancelAnimationFrame(this._listenCallbackID),this._listenCallbackID=void 0),this._listening&&this._listenCallback(),this}_listenCallback(){this._listenCallbackID=requestAnimationFrame(this._listenCallback);const t=this.save();t!==this._listenPrevValue&&this.updateDisplay(),this._listenPrevValue=t;}getValue(){return this.object[this.property]}setValue(t){return this.object[this.property]=t,this._callOnChange(),this.updateDisplay(),this}updateDisplay(){return this}load(t){return this.setValue(t),this._callOnFinishChange(),this}save(){return this.getValue()}destroy(){this.listen(!1),this.parent.children.splice(this.parent.children.indexOf(this),1),this.parent.controllers.splice(this.parent.controllers.indexOf(this),1),this.parent.$children.removeChild(this.domElement);}}class i extends t{constructor(t,i,e){super(t,i,e,"boolean","label"),this.$input=document.createElement("input"),this.$input.setAttribute("type","checkbox"),this.$input.setAttribute("aria-labelledby",this.$name.id),this.$widget.appendChild(this.$input),this.$input.addEventListener("change",()=>{this.setValue(this.$input.checked),this._callOnFinishChange();}),this.$disable=this.$input,this.updateDisplay();}updateDisplay(){return this.$input.checked=this.getValue(),this}}function e(t){let i,e;return (i=t.match(/(#|0x)?([a-f0-9]{6})/i))?e=i[2]:(i=t.match(/rgb\(\s*(\d*)\s*,\s*(\d*)\s*,\s*(\d*)\s*\)/))?e=parseInt(i[1]).toString(16).padStart(2,0)+parseInt(i[2]).toString(16).padStart(2,0)+parseInt(i[3]).toString(16).padStart(2,0):(i=t.match(/^#?([a-f0-9])([a-f0-9])([a-f0-9])$/i))&&(e=i[1]+i[1]+i[2]+i[2]+i[3]+i[3]),!!e&&"#"+e}const s={isPrimitive:!0,match:t=>"string"==typeof t,fromHexString:e,toHexString:e},n={isPrimitive:!0,match:t=>"number"==typeof t,fromHexString:t=>parseInt(t.substring(1),16),toHexString:t=>"#"+t.toString(16).padStart(6,0)},l={isPrimitive:!1,match:Array.isArray,fromHexString(t,i,e=1){const s=n.fromHexString(t);i[0]=(s>>16&255)/255*e,i[1]=(s>>8&255)/255*e,i[2]=(255&s)/255*e;},toHexString:([t,i,e],s=1)=>n.toHexString(t*(s=255/s)<<16^i*s<<8^e*s<<0)},r={isPrimitive:!1,match:t=>Object(t)===t,fromHexString(t,i,e=1){const s=n.fromHexString(t);i.r=(s>>16&255)/255*e,i.g=(s>>8&255)/255*e,i.b=(255&s)/255*e;},toHexString:({r:t,g:i,b:e},s=1)=>n.toHexString(t*(s=255/s)<<16^i*s<<8^e*s<<0)},o=[s,n,l,r];class a extends t{constructor(t,i,s,n){var l;super(t,i,s,"color"),this.$input=document.createElement("input"),this.$input.setAttribute("type","color"),this.$input.setAttribute("tabindex",-1),this.$input.setAttribute("aria-labelledby",this.$name.id),this.$text=document.createElement("input"),this.$text.setAttribute("type","text"),this.$text.setAttribute("spellcheck","false"),this.$text.setAttribute("aria-labelledby",this.$name.id),this.$display=document.createElement("div"),this.$display.classList.add("display"),this.$display.appendChild(this.$input),this.$widget.appendChild(this.$display),this.$widget.appendChild(this.$text),this._format=(l=this.initialValue,o.find(t=>t.match(l))),this._rgbScale=n,this._initialValueHexString=this.save(),this._textFocused=!1,this.$input.addEventListener("input",()=>{this._setValueFromHexString(this.$input.value);}),this.$input.addEventListener("blur",()=>{this._callOnFinishChange();}),this.$text.addEventListener("input",()=>{const t=e(this.$text.value);t&&this._setValueFromHexString(t);}),this.$text.addEventListener("focus",()=>{this._textFocused=!0,this.$text.select();}),this.$text.addEventListener("blur",()=>{this._textFocused=!1,this.updateDisplay(),this._callOnFinishChange();}),this.$disable=this.$text,this.updateDisplay();}reset(){return this._setValueFromHexString(this._initialValueHexString),this}_setValueFromHexString(t){if(this._format.isPrimitive){const i=this._format.fromHexString(t);this.setValue(i);}else this._format.fromHexString(t,this.getValue(),this._rgbScale),this._callOnChange(),this.updateDisplay();}save(){return this._format.toHexString(this.getValue(),this._rgbScale)}load(t){return this._setValueFromHexString(t),this._callOnFinishChange(),this}updateDisplay(){return this.$input.value=this._format.toHexString(this.getValue(),this._rgbScale),this._textFocused||(this.$text.value=this.$input.value.substring(1)),this.$display.style.backgroundColor=this.$input.value,this}}class h extends t{constructor(t,i,e){super(t,i,e,"function"),this.$button=document.createElement("button"),this.$button.appendChild(this.$name),this.$widget.appendChild(this.$button),this.$button.addEventListener("click",t=>{t.preventDefault(),this.getValue().call(this.object);}),this.$button.addEventListener("touchstart",()=>{},{passive:!0}),this.$disable=this.$button;}}class d extends t{constructor(t,i,e,s,n,l){super(t,i,e,"number"),this._initInput(),this.min(s),this.max(n);const r=void 0!==l;this.step(r?l:this._getImplicitStep(),r),this.updateDisplay();}decimals(t){return this._decimals=t,this.updateDisplay(),this}min(t){return this._min=t,this._onUpdateMinMax(),this}max(t){return this._max=t,this._onUpdateMinMax(),this}step(t,i=!0){return this._step=t,this._stepExplicit=i,this}updateDisplay(){const t=this.getValue();if(this._hasSlider){let i=(t-this._min)/(this._max-this._min);i=Math.max(0,Math.min(i,1)),this.$fill.style.width=100*i+"%";}return this._inputFocused||(this.$input.value=void 0===this._decimals?t:t.toFixed(this._decimals)),this}_initInput(){this.$input=document.createElement("input"),this.$input.setAttribute("type","number"),this.$input.setAttribute("step","any"),this.$input.setAttribute("aria-labelledby",this.$name.id),this.$widget.appendChild(this.$input),this.$disable=this.$input;const t=t=>{const i=parseFloat(this.$input.value);isNaN(i)||(this._snapClampSetValue(i+t),this.$input.value=this.getValue());};let i,e,s,n,l,r=!1;const o=t=>{if(r){const s=t.clientX-i,n=t.clientY-e;Math.abs(n)>5?(t.preventDefault(),this.$input.blur(),r=!1,this._setDraggingStyle(!0,"vertical")):Math.abs(s)>5&&a();}if(!r){const i=t.clientY-s;l-=i*this._step*this._arrowKeyMultiplier(t),n+l>this._max?l=this._max-n:n+l<this._min&&(l=this._min-n),this._snapClampSetValue(n+l);}s=t.clientY;},a=()=>{this._setDraggingStyle(!1,"vertical"),this._callOnFinishChange(),window.removeEventListener("mousemove",o),window.removeEventListener("mouseup",a);};this.$input.addEventListener("input",()=>{let t=parseFloat(this.$input.value);isNaN(t)||(this._stepExplicit&&(t=this._snap(t)),this.setValue(this._clamp(t)));}),this.$input.addEventListener("keydown",i=>{"Enter"===i.code&&this.$input.blur(),"ArrowUp"===i.code&&(i.preventDefault(),t(this._step*this._arrowKeyMultiplier(i))),"ArrowDown"===i.code&&(i.preventDefault(),t(this._step*this._arrowKeyMultiplier(i)*-1));}),this.$input.addEventListener("wheel",i=>{this._inputFocused&&(i.preventDefault(),t(this._step*this._normalizeMouseWheel(i)));},{passive:!1}),this.$input.addEventListener("mousedown",t=>{i=t.clientX,e=s=t.clientY,r=!0,n=this.getValue(),l=0,window.addEventListener("mousemove",o),window.addEventListener("mouseup",a);}),this.$input.addEventListener("focus",()=>{this._inputFocused=!0;}),this.$input.addEventListener("blur",()=>{this._inputFocused=!1,this.updateDisplay(),this._callOnFinishChange();});}_initSlider(){this._hasSlider=!0,this.$slider=document.createElement("div"),this.$slider.classList.add("slider"),this.$fill=document.createElement("div"),this.$fill.classList.add("fill"),this.$slider.appendChild(this.$fill),this.$widget.insertBefore(this.$slider,this.$input),this.domElement.classList.add("hasSlider");const t=t=>{const i=this.$slider.getBoundingClientRect();let e=(s=t,n=i.left,l=i.right,r=this._min,o=this._max,(s-n)/(l-n)*(o-r)+r);var s,n,l,r,o;this._snapClampSetValue(e);},i=i=>{t(i.clientX);},e=()=>{this._callOnFinishChange(),this._setDraggingStyle(!1),window.removeEventListener("mousemove",i),window.removeEventListener("mouseup",e);};let s,n,l=!1;const r=i=>{i.preventDefault(),this._setDraggingStyle(!0),t(i.touches[0].clientX),l=!1;},o=i=>{if(l){const t=i.touches[0].clientX-s,e=i.touches[0].clientY-n;Math.abs(t)>Math.abs(e)?r(i):(window.removeEventListener("touchmove",o),window.removeEventListener("touchend",a));}else i.preventDefault(),t(i.touches[0].clientX);},a=()=>{this._callOnFinishChange(),this._setDraggingStyle(!1),window.removeEventListener("touchmove",o),window.removeEventListener("touchend",a);},h=this._callOnFinishChange.bind(this);let d;this.$slider.addEventListener("mousedown",s=>{this._setDraggingStyle(!0),t(s.clientX),window.addEventListener("mousemove",i),window.addEventListener("mouseup",e);}),this.$slider.addEventListener("touchstart",t=>{t.touches.length>1||(this._hasScrollBar?(s=t.touches[0].clientX,n=t.touches[0].clientY,l=!0):r(t),window.addEventListener("touchmove",o,{passive:!1}),window.addEventListener("touchend",a));},{passive:!1}),this.$slider.addEventListener("wheel",t=>{if(Math.abs(t.deltaX)<Math.abs(t.deltaY)&&this._hasScrollBar)return;t.preventDefault();const i=this._normalizeMouseWheel(t)*this._step;this._snapClampSetValue(this.getValue()+i),this.$input.value=this.getValue(),clearTimeout(d),d=setTimeout(h,400);},{passive:!1});}_setDraggingStyle(t,i="horizontal"){this.$slider&&this.$slider.classList.toggle("active",t),document.body.classList.toggle("lil-gui-dragging",t),document.body.classList.toggle("lil-gui-"+i,t);}_getImplicitStep(){return this._hasMin&&this._hasMax?(this._max-this._min)/1e3:.1}_onUpdateMinMax(){!this._hasSlider&&this._hasMin&&this._hasMax&&(this._stepExplicit||this.step(this._getImplicitStep(),!1),this._initSlider(),this.updateDisplay());}_normalizeMouseWheel(t){let{deltaX:i,deltaY:e}=t;Math.floor(t.deltaY)!==t.deltaY&&t.wheelDelta&&(i=0,e=-t.wheelDelta/120,e*=this._stepExplicit?1:10);return i+-e}_arrowKeyMultiplier(t){let i=this._stepExplicit?1:10;return t.shiftKey?i*=10:t.altKey&&(i/=10),i}_snap(t){const i=Math.round(t/this._step)*this._step;return parseFloat(i.toPrecision(15))}_clamp(t){return t<this._min&&(t=this._min),t>this._max&&(t=this._max),t}_snapClampSetValue(t){this.setValue(this._clamp(this._snap(t)));}get _hasScrollBar(){const t=this.parent.root.$children;return t.scrollHeight>t.clientHeight}get _hasMin(){return void 0!==this._min}get _hasMax(){return void 0!==this._max}}class c extends t{constructor(t,i,e,s){super(t,i,e,"option"),this.$select=document.createElement("select"),this.$select.setAttribute("aria-labelledby",this.$name.id),this.$display=document.createElement("div"),this.$display.classList.add("display"),this._values=Array.isArray(s)?s:Object.values(s),this._names=Array.isArray(s)?s:Object.keys(s),this._names.forEach(t=>{const i=document.createElement("option");i.innerHTML=t,this.$select.appendChild(i);}),this.$select.addEventListener("change",()=>{this.setValue(this._values[this.$select.selectedIndex]),this._callOnFinishChange();}),this.$select.addEventListener("focus",()=>{this.$display.classList.add("focus");}),this.$select.addEventListener("blur",()=>{this.$display.classList.remove("focus");}),this.$widget.appendChild(this.$select),this.$widget.appendChild(this.$display),this.$disable=this.$select,this.updateDisplay();}updateDisplay(){const t=this.getValue(),i=this._values.indexOf(t);return this.$select.selectedIndex=i,this.$display.innerHTML=-1===i?t:this._names[i],this}}class u extends t{constructor(t,i,e){super(t,i,e,"string"),this.$input=document.createElement("input"),this.$input.setAttribute("type","text"),this.$input.setAttribute("aria-labelledby",this.$name.id),this.$input.addEventListener("input",()=>{this.setValue(this.$input.value);}),this.$input.addEventListener("keydown",t=>{"Enter"===t.code&&this.$input.blur();}),this.$input.addEventListener("blur",()=>{this._callOnFinishChange();}),this.$widget.appendChild(this.$input),this.$disable=this.$input,this.updateDisplay();}updateDisplay(){return this.$input.value=this.getValue(),this}}let p=!1;class g{constructor({parent:t,autoPlace:i=void 0===t,container:e,width:s,title:n="Controls",injectStyles:l=!0,touchStyles:r=!0}={}){if(this.parent=t,this.root=t?t.root:this,this.children=[],this.controllers=[],this.folders=[],this._closed=!1,this._hidden=!1,this.domElement=document.createElement("div"),this.domElement.classList.add("lil-gui"),this.$title=document.createElement("div"),this.$title.classList.add("title"),this.$title.setAttribute("role","button"),this.$title.setAttribute("aria-expanded",!0),this.$title.setAttribute("tabindex",0),this.$title.addEventListener("click",()=>this.openAnimated(this._closed)),this.$title.addEventListener("keydown",t=>{"Enter"!==t.code&&"Space"!==t.code||(t.preventDefault(),this.$title.click());}),this.$title.addEventListener("touchstart",()=>{},{passive:!0}),this.$children=document.createElement("div"),this.$children.classList.add("children"),this.domElement.appendChild(this.$title),this.domElement.appendChild(this.$children),this.title(n),r&&this.domElement.classList.add("allow-touch-styles"),this.parent)return this.parent.children.push(this),this.parent.folders.push(this),void this.parent.$children.appendChild(this.domElement);this.domElement.classList.add("root"),!p&&l&&(!function(t){const i=document.createElement("style");i.innerHTML=t;const e=document.querySelector("head link[rel=stylesheet], head style");e?document.head.insertBefore(i,e):document.head.appendChild(i);}('.lil-gui{--background-color:#1f1f1f;--text-color:#ebebeb;--title-background-color:#111;--title-text-color:#ebebeb;--widget-color:#424242;--hover-color:#4f4f4f;--focus-color:#595959;--number-color:#2cc9ff;--string-color:#a2db3c;--font-size:11px;--input-font-size:11px;--font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;--font-family-mono:Menlo,Monaco,Consolas,"Droid Sans Mono",monospace;--padding:4px;--spacing:4px;--widget-height:20px;--name-width:45%;--slider-knob-width:2px;--slider-input-width:27%;--color-input-width:27%;--slider-input-min-width:45px;--color-input-min-width:45px;--folder-indent:7px;--widget-padding:0 0 0 3px;--widget-border-radius:2px;--checkbox-size:calc(var(--widget-height)*0.75);--scrollbar-width:5px;background-color:var(--background-color);color:var(--text-color);font-family:var(--font-family);font-size:var(--font-size);font-style:normal;font-weight:400;line-height:1;text-align:left;touch-action:manipulation;user-select:none;-webkit-user-select:none}.lil-gui,.lil-gui *{box-sizing:border-box;margin:0;padding:0}.lil-gui.root{display:flex;flex-direction:column;width:var(--width,245px)}.lil-gui.root>.title{background:var(--title-background-color);color:var(--title-text-color)}.lil-gui.root>.children{overflow-x:hidden;overflow-y:auto}.lil-gui.root>.children::-webkit-scrollbar{background:var(--background-color);height:var(--scrollbar-width);width:var(--scrollbar-width)}.lil-gui.root>.children::-webkit-scrollbar-thumb{background:var(--focus-color);border-radius:var(--scrollbar-width)}.lil-gui.force-touch-styles{--widget-height:28px;--padding:6px;--spacing:6px;--font-size:13px;--input-font-size:16px;--folder-indent:10px;--scrollbar-width:7px;--slider-input-min-width:50px;--color-input-min-width:65px}.lil-gui.autoPlace{max-height:100%;position:fixed;right:15px;top:0;z-index:1001}.lil-gui .controller{align-items:center;display:flex;margin:var(--spacing) 0;padding:0 var(--padding)}.lil-gui .controller.disabled{opacity:.5}.lil-gui .controller.disabled,.lil-gui .controller.disabled *{pointer-events:none!important}.lil-gui .controller>.name{flex-shrink:0;line-height:var(--widget-height);min-width:var(--name-width);padding-right:var(--spacing);white-space:pre}.lil-gui .controller .widget{align-items:center;display:flex;min-height:var(--widget-height);position:relative;width:100%}.lil-gui .controller.string input{color:var(--string-color)}.lil-gui .controller.boolean .widget{cursor:pointer}.lil-gui .controller.color .display{border-radius:var(--widget-border-radius);height:var(--widget-height);position:relative;width:100%}.lil-gui .controller.color input[type=color]{cursor:pointer;height:100%;opacity:0;width:100%}.lil-gui .controller.color input[type=text]{flex-shrink:0;font-family:var(--font-family-mono);margin-left:var(--spacing);min-width:var(--color-input-min-width);width:var(--color-input-width)}.lil-gui .controller.option select{max-width:100%;opacity:0;position:absolute;width:100%}.lil-gui .controller.option .display{background:var(--widget-color);border-radius:var(--widget-border-radius);height:var(--widget-height);line-height:var(--widget-height);max-width:100%;overflow:hidden;padding-left:.55em;padding-right:1.75em;pointer-events:none;position:relative;word-break:break-all}.lil-gui .controller.option .display.active{background:var(--focus-color)}.lil-gui .controller.option .display:after{bottom:0;content:"↕";font-family:lil-gui;padding-right:.375em;position:absolute;right:0;top:0}.lil-gui .controller.option .widget,.lil-gui .controller.option select{cursor:pointer}.lil-gui .controller.number input{color:var(--number-color)}.lil-gui .controller.number.hasSlider input{flex-shrink:0;margin-left:var(--spacing);min-width:var(--slider-input-min-width);width:var(--slider-input-width)}.lil-gui .controller.number .slider{background-color:var(--widget-color);border-radius:var(--widget-border-radius);cursor:ew-resize;height:var(--widget-height);overflow:hidden;padding-right:var(--slider-knob-width);touch-action:pan-y;width:100%}.lil-gui .controller.number .slider.active{background-color:var(--focus-color)}.lil-gui .controller.number .slider.active .fill{opacity:.95}.lil-gui .controller.number .fill{border-right:var(--slider-knob-width) solid var(--number-color);box-sizing:content-box;height:100%}.lil-gui-dragging .lil-gui{--hover-color:var(--widget-color)}.lil-gui-dragging *{cursor:ew-resize!important}.lil-gui-dragging.lil-gui-vertical *{cursor:ns-resize!important}.lil-gui .title{--title-height:calc(var(--widget-height) + var(--spacing)*1.25);-webkit-tap-highlight-color:transparent;text-decoration-skip:objects;cursor:pointer;font-weight:600;height:var(--title-height);line-height:calc(var(--title-height) - 4px);outline:none;padding:0 var(--padding)}.lil-gui .title:before{content:"▾";display:inline-block;font-family:lil-gui;padding-right:2px}.lil-gui .title:active{background:var(--title-background-color);opacity:.75}.lil-gui.root>.title:focus{text-decoration:none!important}.lil-gui.closed>.title:before{content:"▸"}.lil-gui.closed>.children{opacity:0;transform:translateY(-7px)}.lil-gui.closed:not(.transition)>.children{display:none}.lil-gui.transition>.children{overflow:hidden;pointer-events:none;transition-duration:.3s;transition-property:height,opacity,transform;transition-timing-function:cubic-bezier(.2,.6,.35,1)}.lil-gui .children:empty:before{content:"Empty";display:block;font-style:italic;height:var(--widget-height);line-height:var(--widget-height);margin:var(--spacing) 0;opacity:.5;padding:0 var(--padding)}.lil-gui.root>.children>.lil-gui>.title{border-width:0;border-bottom:1px solid var(--widget-color);border-left:0 solid var(--widget-color);border-right:0 solid var(--widget-color);border-top:1px solid var(--widget-color);transition:border-color .3s}.lil-gui.root>.children>.lil-gui.closed>.title{border-bottom-color:transparent}.lil-gui+.controller{border-top:1px solid var(--widget-color);margin-top:0;padding-top:var(--spacing)}.lil-gui .lil-gui .lil-gui>.title{border:none}.lil-gui .lil-gui .lil-gui>.children{border:none;border-left:2px solid var(--widget-color);margin-left:var(--folder-indent)}.lil-gui .lil-gui .controller{border:none}.lil-gui input{-webkit-tap-highlight-color:transparent;background:var(--widget-color);border:0;border-radius:var(--widget-border-radius);color:var(--text-color);font-family:var(--font-family);font-size:var(--input-font-size);height:var(--widget-height);outline:none;width:100%}.lil-gui input:disabled{opacity:1}.lil-gui input[type=number],.lil-gui input[type=text]{padding:var(--widget-padding)}.lil-gui input[type=number]:focus,.lil-gui input[type=text]:focus{background:var(--focus-color)}.lil-gui input::-webkit-inner-spin-button,.lil-gui input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.lil-gui input[type=number]{-moz-appearance:textfield}.lil-gui input[type=checkbox]{appearance:none;-webkit-appearance:none;border-radius:var(--widget-border-radius);cursor:pointer;height:var(--checkbox-size);text-align:center;width:var(--checkbox-size)}.lil-gui input[type=checkbox]:checked:before{content:"✓";font-family:lil-gui;font-size:var(--checkbox-size);line-height:var(--checkbox-size)}.lil-gui button{-webkit-tap-highlight-color:transparent;background:var(--widget-color);border:1px solid var(--widget-color);border-radius:var(--widget-border-radius);color:var(--text-color);cursor:pointer;font-family:var(--font-family);font-size:var(--font-size);height:var(--widget-height);line-height:calc(var(--widget-height) - 4px);outline:none;text-align:center;text-transform:none;width:100%}.lil-gui button:active{background:var(--focus-color)}@font-face{font-family:lil-gui;src:url("data:application/font-woff;charset=utf-8;base64,d09GRgABAAAAAAUsAAsAAAAACJwAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAABHU1VCAAABCAAAAH4AAADAImwmYE9TLzIAAAGIAAAAPwAAAGBKqH5SY21hcAAAAcgAAAD0AAACrukyyJBnbHlmAAACvAAAAF8AAACEIZpWH2hlYWQAAAMcAAAAJwAAADZfcj2zaGhlYQAAA0QAAAAYAAAAJAC5AHhobXR4AAADXAAAABAAAABMAZAAAGxvY2EAAANsAAAAFAAAACgCEgIybWF4cAAAA4AAAAAeAAAAIAEfABJuYW1lAAADoAAAASIAAAIK9SUU/XBvc3QAAATEAAAAZgAAAJCTcMc2eJxVjbEOgjAURU+hFRBK1dGRL+ALnAiToyMLEzFpnPz/eAshwSa97517c/MwwJmeB9kwPl+0cf5+uGPZXsqPu4nvZabcSZldZ6kfyWnomFY/eScKqZNWupKJO6kXN3K9uCVoL7iInPr1X5baXs3tjuMqCtzEuagm/AAlzQgPAAB4nGNgYRBlnMDAysDAYM/gBiT5oLQBAwuDJAMDEwMrMwNWEJDmmsJwgCFeXZghBcjlZMgFCzOiKOIFAB71Bb8AeJy1kjFuwkAQRZ+DwRAwBtNQRUGKQ8OdKCAWUhAgKLhIuAsVSpWz5Bbkj3dEgYiUIszqWdpZe+Z7/wB1oCYmIoboiwiLT2WjKl/jscrHfGg/pKdMkyklC5Zs2LEfHYpjcRoPzme9MWWmk3dWbK9ObkWkikOetJ554fWyoEsmdSlt+uR0pCJR34b6t/TVg1SY3sYvdf8vuiKrpyaDXDISiegp17p7579Gp3p++y7HPAiY9pmTibljrr85qSidtlg4+l25GLCaS8e6rRxNBmsnERunKbaOObRz7N72ju5vdAjYpBXHgJylOAVsMseDAPEP8LYoUHicY2BiAAEfhiAGJgZWBgZ7RnFRdnVJELCQlBSRlATJMoLV2DK4glSYs6ubq5vbKrJLSbGrgEmovDuDJVhe3VzcXFwNLCOILB/C4IuQ1xTn5FPilBTj5FPmBAB4WwoqAHicY2BkYGAA4sk1sR/j+W2+MnAzpDBgAyEMQUCSg4EJxAEAwUgFHgB4nGNgZGBgSGFggJMhDIwMqEAYAByHATJ4nGNgAIIUNEwmAABl3AGReJxjYAACIQYlBiMGJ3wQAEcQBEV4nGNgZGBgEGZgY2BiAAEQyQWEDAz/wXwGAAsPATIAAHicXdBNSsNAHAXwl35iA0UQXYnMShfS9GPZA7T7LgIu03SSpkwzYTIt1BN4Ak/gKTyAeCxfw39jZkjymzcvAwmAW/wgwHUEGDb36+jQQ3GXGot79L24jxCP4gHzF/EIr4jEIe7wxhOC3g2TMYy4Q7+Lu/SHuEd/ivt4wJd4wPxbPEKMX3GI5+DJFGaSn4qNzk8mcbKSR6xdXdhSzaOZJGtdapd4vVPbi6rP+cL7TGXOHtXKll4bY1Xl7EGnPtp7Xy2n00zyKLVHfkHBa4IcJ2oD3cgggWvt/V/FbDrUlEUJhTn/0azVWbNTNr0Ens8de1tceK9xZmfB1CPjOmPH4kitmvOubcNpmVTN3oFJyjzCvnmrwhJTzqzVj9jiSX911FjeAAB4nG3HMRKCMBBA0f0giiKi4DU8k0V2GWbIZDOh4PoWWvq6J5V8If9NVNQcaDhyouXMhY4rPTcG7jwYmXhKq8Wz+p762aNaeYXom2n3m2dLTVgsrCgFJ7OTmIkYbwIbC6vIB7WmFfAAAA==") format("woff")}@media (pointer:coarse){.lil-gui.allow-touch-styles{--widget-height:28px;--padding:6px;--spacing:6px;--font-size:13px;--input-font-size:16px;--folder-indent:10px;--scrollbar-width:7px;--slider-input-min-width:50px;--color-input-min-width:65px}}@media (hover:hover){.lil-gui .controller.color .display:hover:before{border:1px solid #fff9;border-radius:var(--widget-border-radius);bottom:0;content:" ";display:block;left:0;position:absolute;right:0;top:0}.lil-gui .controller.option .display.focus{background:var(--focus-color)}.lil-gui .controller.option .widget:hover .display{background:var(--hover-color)}.lil-gui .controller.number .slider:hover{background-color:var(--hover-color)}body:not(.lil-gui-dragging) .lil-gui .title:hover{background:var(--title-background-color);opacity:.85}.lil-gui .title:focus{text-decoration:underline var(--focus-color)}.lil-gui input:hover{background:var(--hover-color)}.lil-gui input:active{background:var(--focus-color)}.lil-gui input[type=checkbox]:focus{box-shadow:inset 0 0 0 1px var(--focus-color)}.lil-gui button:hover{background:var(--hover-color);border-color:var(--hover-color)}.lil-gui button:focus{border-color:var(--focus-color)}}'),p=!0),e?e.appendChild(this.domElement):i&&(this.domElement.classList.add("autoPlace"),document.body.appendChild(this.domElement)),s&&this.domElement.style.setProperty("--width",s+"px"),this.domElement.addEventListener("keydown",t=>t.stopPropagation()),this.domElement.addEventListener("keyup",t=>t.stopPropagation());}add(t,e,s,n,l){if(Object(s)===s)return new c(this,t,e,s);const r=t[e];switch(typeof r){case"number":return new d(this,t,e,s,n,l);case"boolean":return new i(this,t,e);case"string":return new u(this,t,e);case"function":return new h(this,t,e)}console.error("gui.add failed\n\tproperty:",e,"\n\tobject:",t,"\n\tvalue:",r);}addColor(t,i,e=1){return new a(this,t,i,e)}addFolder(t){return new g({parent:this,title:t})}load(t,i=!0){return t.controllers&&this.controllers.forEach(i=>{i instanceof h||i._name in t.controllers&&i.load(t.controllers[i._name]);}),i&&t.folders&&this.folders.forEach(i=>{i._title in t.folders&&i.load(t.folders[i._title]);}),this}save(t=!0){const i={controllers:{},folders:{}};return this.controllers.forEach(t=>{if(!(t instanceof h)){if(t._name in i.controllers)throw new Error(`Cannot save GUI with duplicate property "${t._name}"`);i.controllers[t._name]=t.save();}}),t&&this.folders.forEach(t=>{if(t._title in i.folders)throw new Error(`Cannot save GUI with duplicate folder "${t._title}"`);i.folders[t._title]=t.save();}),i}open(t=!0){return this._closed=!t,this.$title.setAttribute("aria-expanded",!this._closed),this.domElement.classList.toggle("closed",this._closed),this}close(){return this.open(!1)}show(t=!0){return this._hidden=!t,this.domElement.style.display=this._hidden?"none":"",this}hide(){return this.show(!1)}openAnimated(t=!0){return this._closed=!t,this.$title.setAttribute("aria-expanded",!this._closed),requestAnimationFrame(()=>{const i=this.$children.clientHeight;this.$children.style.height=i+"px",this.domElement.classList.add("transition");const e=t=>{t.target===this.$children&&(this.$children.style.height="",this.domElement.classList.remove("transition"),this.$children.removeEventListener("transitionend",e));};this.$children.addEventListener("transitionend",e);const s=t?this.$children.scrollHeight:0;this.domElement.classList.toggle("closed",!t),requestAnimationFrame(()=>{this.$children.style.height=s+"px";});}),this}title(t){return this._title=t,this.$title.innerHTML=t,this}reset(t=!0){return (t?this.controllersRecursive():this.controllers).forEach(t=>t.reset()),this}onChange(t){return this._onChange=t,this}_callOnChange(t){this.parent&&this.parent._callOnChange(t),void 0!==this._onChange&&this._onChange.call(this,{object:t.object,property:t.property,value:t.getValue(),controller:t});}onFinishChange(t){return this._onFinishChange=t,this}_callOnFinishChange(t){this.parent&&this.parent._callOnFinishChange(t),void 0!==this._onFinishChange&&this._onFinishChange.call(this,{object:t.object,property:t.property,value:t.getValue(),controller:t});}destroy(){this.parent&&(this.parent.children.splice(this.parent.children.indexOf(this),1),this.parent.folders.splice(this.parent.folders.indexOf(this),1)),this.domElement.parentElement&&this.domElement.parentElement.removeChild(this.domElement),Array.from(this.children).forEach(t=>t.destroy());}controllersRecursive(){let t=Array.from(this.controllers);return this.folders.forEach(i=>{t=t.concat(i.controllersRecursive());}),t}foldersRecursive(){let t=Array.from(this.folders);return this.folders.forEach(i=>{t=t.concat(i.foldersRecursive());}),t}}
+    /*
+    Notes about a pdb file:
+    in the atom section (HETATM for heterogenous atom), it shows the name of the atom, the residue, and the position of the atom relative to the center
+    in the bond section (CONECT) it shows the atom and then which other atoms it is bonded to. Ex: 1 2 3 4 means atom 1 is connected to 2, 3, and 4.
+    */
 
-    // copied from https://threejs.org/examples/#css3d_molecules
 
-    let camera, scene, renderer;
-    let controls;
-    let root;
+    let camera, scene, renderer, controls, root;
 
-    const objects = [];
-    const tmpVec1 = new Vector3();
-    const tmpVec2 = new Vector3();
-    const tmpVec3 = new Vector3();
-    const tmpVec4 = new Vector3();
-    const offset = new Vector3();
-
-    const VIZ_TYPE = {
-        'Atoms': 0,
-        'Bonds': 1,
-        'Atoms + Bonds': 2
-    };
-
-    const MOLECULES = {
-        'Ethanol': 'ethanol.pdb',
-        'Aspirin': 'aspirin.pdb',
+    const MOLECULE_PATHS = {
         'Caffeine': 'caffeine.pdb',
-        'Nicotine': 'nicotine.pdb',
-        'LSD': 'lsd.pdb',
-        'Cocaine': 'cocaine.pdb',
-        'Cholesterol': 'cholesterol.pdb',
-        'Lycopene': 'lycopene.pdb',
-        'Glucose': 'glucose.pdb',
-        'Aluminium oxide': 'Al2O3.pdb',
-        'Cubane': 'cubane.pdb',
-        'Copper': 'cu.pdb',
-        'Fluorite': 'caf2.pdb',
-        'Salt': 'nacl.pdb',
-        'YBCO superconductor': 'ybco.pdb',
-        'Buckyball': 'buckyball.pdb',
-        // 'Diamond': 'diamond.pdb',
-        'Graphite': 'graphite.pdb'
-    };
-
-    const params = {
-        vizType: 2,
-        molecule: 'caffeine.pdb'
     };
 
     const loader = new PDBLoader();
     const colorSpriteMap = {};
     const baseSprite = document.createElement( 'img' );
     const SPACING = 75;  // this is the distance between the atoms, and the length of the bonds
+    const tmpVec1 = new Vector3();
+    const tmpVec2 = new Vector3();
+    const tmpVec3 = new Vector3();
+    const tmpVec4 = new Vector3();
+    const offset = new Vector3();
+
+    let current_molecule = 'Caffeine';
+
 
     class CompoundCreator {
         constructor() {
@@ -47030,157 +47038,66 @@ var app = (function () {
         }
     }
 
-    function init() {
 
-        camera = new PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 5000 );
-        camera.position.z = 1000;
+    function init() {
+        camera = new PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.z = 700;
 
         scene = new Scene();
 
         root = new Object3D();
-        scene.add( root );
-
-        //
+        scene.add(root);
 
         renderer = new CSS3DRenderer();
-        renderer.setSize( window.innerWidth, window.innerHeight );
-        document.getElementById( 'canvas-container' ).appendChild( renderer.domElement );
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        //
-
-        controls = new TrackballControls( camera, renderer.domElement );
+        controls = new TrackballControls(camera, renderer.domElement);
         controls.rotateSpeed = 5;
 
-        //
-
-        baseSprite.onload = function () {
-
-            loadMolecule( params.molecule );
-
+        baseSprite.src = 'ball.png';
+        baseSprite.onload = function() {
+            loadMolecule(MOLECULE_PATHS[current_molecule]);
         };
 
-        baseSprite.src = 'ball.png';
-
-        //
-
-        window.addEventListener( 'resize', onWindowResize );
-
-        //
-
-        const gui = new g();
-
-        gui.add( params, 'vizType', VIZ_TYPE ).onChange( changeVizType );
-        gui.add( params, 'molecule', MOLECULES ).onChange( loadMolecule );
-        gui.open();
-
+        window.addEventListener('resize', onWindowResize);
     }
 
-    function changeVizType( value ) {
-
-        if ( value === 0 ) showAtoms();
-        else if ( value === 1 ) showBonds();
-        else showAtomsBonds();
-
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    //
-
-    function showAtoms() {
-
-        for ( let i = 0; i < objects.length; i ++ ) {
-
-            const object = objects[ i ];
-
-            if ( object instanceof CSS3DSprite ) {
-
-                object.element.style.display = '';
-                object.visible = true;
-
-            } else {
-
-                object.element.style.display = 'none';
-                object.visible = false;
-
-            }
-
-        }
-
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
     }
 
-    function showBonds() {
-
-        for ( let i = 0; i < objects.length; i ++ ) {
-
-            const object = objects[ i ];
-
-            if ( object instanceof CSS3DSprite ) {
-
-                object.element.style.display = 'none';
-                object.visible = false;
-
-            } else {
-
-                object.element.style.display = '';
-                object.element.style.height = object.userData.bondLengthFull;
-                object.visible = true;
-
-            }
-
-        }
-
-    }
-
-    function showAtomsBonds() {
-
-        for ( let i = 0; i < objects.length; i ++ ) {
-
-            const object = objects[ i ];
-
-            object.element.style.display = '';
-            object.visible = true;
-
-            if ( ! ( object instanceof CSS3DSprite ) ) {
-                object.element.style.height = object.userData.bondLengthShort;
-            }
-
-        }
-
-    }
-
-    //
-
-    function colorify( ctx, width, height, color ) {
-
+    function colorify(ctx, width, height, color) {
         const r = color.r, g = color.g, b = color.b;
 
-        const imageData = ctx.getImageData( 0, 0, width, height );
+        const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
-        for ( let i = 0, l = data.length; i < l; i += 4 ) {
-
-            data[ i + 0 ] *= r;
-            data[ i + 1 ] *= g;
-            data[ i + 2 ] *= b;
-
+        for (let i = 0, l = data.length; i < l; i += 4) {
+            data[i + 0] *= r;
+            data[i + 1] *= g;
+            data[i + 2] *= b;
         }
-        ctx.putImageData( imageData, 0, 0 );
+        ctx.putImageData( imageData, 0, 0);
     }
 
-    function imageToCanvas( image ) {
+    function imageToCanvas(image) {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
 
-        const width = image.width;
-        const height = image.height;
-
-        const canvas = document.createElement( 'canvas' );
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const context = canvas.getContext( '2d' );
-        context.drawImage( image, 0, 0, width, height );
-
-        return canvas;
-
+        const context = canvas.getContext('2d');
+        context.drawImage(image, 0, 0, image.width, image.height);
+        return canvas
     }
+
 
     function addBondClassStyles (el) {
         /*
@@ -47196,193 +47113,157 @@ var app = (function () {
        el.style.display = 'block';
     }
 
-    //
+    function loadMolecule(model) {
+        const model_file_path = 'models/pdb/' + model;
 
-    function loadMolecule( model ) {
-
-        const url = 'models/pdb/' + model;
-
-        for ( let i = 0; i < objects.length; i ++ ) {
-
-            const object = objects[ i ];
-            object.parent.remove( object );
-
-        }
-
-        objects.length = 0;
-
-        loader.load( url, function ( pdb ) {
-
+        loader.load(model_file_path, function(pdb) {
             const geometryAtoms = pdb.geometryAtoms;
             const geometryBonds = pdb.geometryBonds;
             const json = pdb.json;
 
             geometryAtoms.computeBoundingBox();
-            geometryAtoms.boundingBox.getCenter( offset ).negate();
+            geometryAtoms.boundingBox.getCenter(offset).negate();
+            geometryAtoms.translate(offset.x, offset.y, offset.z);
+            geometryBonds.translate(offset.x, offset.y, offset.z);
 
-            geometryAtoms.translate( offset.x, offset.y, offset.z );
-            geometryBonds.translate( offset.x, offset.y, offset.z );
-
-            const positionAtoms = geometryAtoms.getAttribute( 'position' );
-            const colorAtoms = geometryAtoms.getAttribute( 'color' );
-
+            const positionAtoms = geometryAtoms.getAttribute('position');
+            const colorAtoms = geometryAtoms.getAttribute('color');
             const position = new Vector3();
             const color = new Color();
 
-            for ( let i = 0; i < positionAtoms.count; i ++ ) {
+            for (let i=0; i< positionAtoms.count; i++) {
+                position.fromBufferAttribute(positionAtoms, i);
+                color.fromBufferAttribute(colorAtoms, i);
 
-                position.fromBufferAttribute( positionAtoms, i );
-                color.fromBufferAttribute( colorAtoms, i );
+                const atomJSON = json.atoms[i];
+                const element = atomJSON[4];
 
-                const atomJSON = json.atoms[ i ];
-                const element = atomJSON[ 4 ];
+                if (!colorSpriteMap[element]) {
+                    const canvas = imageToCanvas(baseSprite);
+                    const context = canvas.getContext('2d');
 
-                if ( ! colorSpriteMap[ element ] ) {
-
-                    const canvas = imageToCanvas( baseSprite );
-                    const context = canvas.getContext( '2d' );
-
-                    colorify( context, canvas.width, canvas.height, color );
+                    colorify(context, canvas.width, canvas.height, color);
 
                     const dataUrl = canvas.toDataURL();
-                    colorSpriteMap[ element ] = dataUrl;
+                    colorSpriteMap[element] = [];
+                    colorSpriteMap[element][0] = dataUrl;
 
+                    const blank_canvas = imageToCanvas(baseSprite);
+                    const blank_context = blank_canvas.getContext('2d');
+                    colorify(blank_context, blank_canvas.width, blank_canvas.height, new Color(0.1, 0.1, 0.1));
+                    const blank_dataUrl = blank_canvas.toDataURL();
+                    colorSpriteMap[element][1] = blank_dataUrl;
                 }
 
-                const colorSprite = colorSpriteMap[ element ];
+                const colorSprite = colorSpriteMap[element][0];
+                const blankSprite = colorSpriteMap[element][1];
+                const atom = document.createElement('img');
+                atom.src = blankSprite;
+                atom.addEventListener('click', (e) => {
+                    atom.src = colorSprite;  // this is the dataUrl
+                });
 
-                const atom = document.createElement( 'img' );
-                atom.src = colorSprite;
-
-                const object = new CSS3DSprite( atom );
-                object.position.copy( position );
-                object.position.multiplyScalar( SPACING );
+                const object = new CSS3DSprite(atom);
+                object.position.copy(position);
+                object.position.multiplyScalar(SPACING);
 
                 object.matrixAutoUpdate = false;
                 object.updateMatrix();
-
-                root.add( object );
-
-                objects.push( object );
-
+                
+                root.add(object);
             }
 
-            const positionBonds = geometryBonds.getAttribute( 'position' );
-
+            const positionBonds = geometryBonds.getAttribute('position');
             const start = new Vector3();
             const end = new Vector3();
 
-            for ( let i = 0; i < positionBonds.count; i += 2 ) {
+            for (let i=0; i < positionBonds.count; i += 2) {
+                start.fromBufferAttribute(positionBonds, i);
+                start.multiplyScalar(SPACING);
+                end.fromBufferAttribute(positionBonds, i+1);
+                end.multiplyScalar(SPACING);
 
-                start.fromBufferAttribute( positionBonds, i );
-                end.fromBufferAttribute( positionBonds, i + 1 );
+                /*
+                Remember the dot product is how similar the lines are (cosine similarity - it is the cosine of the angle between them).
+                Perpendicular lines are not similar and will be 0 (and cos(90) = 0),
+                whereas parallel lines are very similar (and cos(0) = 1)
+                It is equal to AxBx + AyBy + AzBz, or the product of the magitudes times the cosine of the angle between the lines.
+                Ex, imagine lines going from the origin to [1, 3] and [1, 4]. The magnitude of each about 3.5 and 4.5, and cosine(pi/2) = .9. So the result is about 13.
+                In physics it could be used to find the work done. Force dot distance = work. If your force and distance are in the same direction,
+                there is work, and if the object moves perpendicular to the force, the force didnt do any work.
+                Dot product is also the projection of one vector onto the other.
 
-                start.multiplyScalar( SPACING );
-                end.multiplyScalar( SPACING );
+                Cross product gives a vector perpendicular to the vectors, with the magnitude equal to the area of the parallelogram between them
+                A X B = (Ay​Bz​−Az​By​, Az​Bx​−Ax​Bz​, Ax​By​−Ay​Bx​)
+                90 degrees would give you the biggest area.
+                Cross product is used in torque. Torque = radius cross force. So if you have a pole on a spoke,
+                and your force is pointed straight at the spoke so the force and the pole are in the same direction, there is no torque. But if
+                you push perpendicular to the direction of the pole, you get the maximum torque.
 
-                tmpVec1.subVectors( end, start );
-                const bondLength = tmpVec1.length() - 50;  // TODO: why - 50?
+                Cross product is also useful to find the area of a triangle if you have 3 points. Take two of the vectors, do the cross product. That is
+                the area of the parallelogram. Just divide that by 2 to get the triangle.
 
-                let bond = document.createElement( 'div' );
-                // bond.className = 'bond';
+                Also the cross product is useful to find normal vectors to a surface, so it can help determine how a surface will be lit.
+                And the surfaces that are facing away from the camera can be ignored (backface culling)
+
+                TLDR:
+                here it is used to
+                */
+                tmpVec1.subVectors(end, start);  // this subtracts end - start, so you basically get the directional vector starting from 0
+                console.log(baseSprite.width);
+                const bondLength = tmpVec1.length() - 51;  // 50 because the bonds go to the center of the atom, but we dont want them to show over the atom, and the image is 64 pixels but the ball is only about 50
+                // Note: cross sets the vector to the result and returns itself, dot just returns the magnitude of the similarity
+                
+                // this gives you a normal vector to the direction of the bond and the vertical
+                // which is used as the axis to rotate around.
+                const axis = tmpVec2.set(0, 1, 0).cross(tmpVec1);
+                // this gives you the radians between the distance vector (vec1) and the y axis
+                // it works because normalizing the vector makes its magnitude 1, and the y axis vector has a magnitude of 1, so mag x mag x cos(angle) = 1 x 1 x cos(angle)
+                // and then we take the acos, which gives us just the angle (in radians)
+                const radians = Math.acos(tmpVec3.set(0, 1, 0).dot(tmpVec4.copy(tmpVec1).normalize()));
+                const objMatrix = new Matrix4().makeRotationAxis( axis.normalize(), radians);
+
+                let bond = document.createElement('div');
                 addBondClassStyles(bond);
                 bond.style.height = bondLength + 'px';
 
-                let object = new CSS3DObject( bond );
-                object.position.copy( start );
-                object.position.lerp( end, 0.5 );  // so we move the object up halfway to the end?
-
-                object.userData.bondLengthShort = bondLength + 'px';
-                object.userData.bondLengthFull = ( bondLength + 55 ) + 'px';  // TODO: what is the 55?
-
-                //
-
-                const axis = tmpVec2.set( 0, 1, 0 ).cross( tmpVec1 );
-                const radians = Math.acos( tmpVec3.set( 0, 1, 0 ).dot( tmpVec4.copy( tmpVec1 ).normalize() ) );
-
-                const objMatrix = new Matrix4().makeRotationAxis( axis.normalize(), radians );
-                object.matrix.copy( objMatrix );
-                object.quaternion.setFromRotationMatrix( object.matrix );
-
+                let object = new CSS3DObject(bond);
+                object.position.copy(start);
+                object.position.lerp(end, 0.5);  // moves the object to the halfway point between start and end, so it is centered
+                // object.userData.bondLengthShort = bondLength + 'px';
+                // object.userData.bondLengthFull = (bondLength + 55) + 'px';   // TODO: what is the 55? is it to counter the - 50 above?
+                object.matrix.copy(objMatrix);
+                object.quaternion.setFromRotationMatrix(object.matrix);
                 object.matrixAutoUpdate = false;
                 object.updateMatrix();
+                root.add(object);
 
-                root.add( object );
-
-                objects.push( object );
-                console.log(object);
-
-                //
-
-                bond = document.createElement( 'div' );
-                // bond.className = 'bond';
-                addBondClassStyles(bond);
-                bond.style.height = bondLength + 'px';
-
-                const joint = new Object3D( bond );
-                joint.position.copy( start );
-                joint.position.lerp( end, 0.5 );
-
-                joint.matrix.copy( objMatrix );
-                joint.quaternion.setFromRotationMatrix( joint.matrix );
-
+                // why create joint? Because doing the 90 degree rotation is easy if you make a parent object,
+                // since the 90 degrees can be relative to the parent
+                let joint = new Object3D();
+                joint.position.copy(start);
+                joint.position.lerp(end, 0.5);
+                joint.matrix.copy(objMatrix);
+                joint.quaternion.setFromRotationMatrix(joint.matrix);
                 joint.matrixAutoUpdate = false;
                 joint.updateMatrix();
 
-                object = new CSS3DObject( bond );
-                object.rotation.y = Math.PI / 2;
-
-                object.matrixAutoUpdate = false;
-                object.updateMatrix();
-
-                object.userData.bondLengthShort = bondLength + 'px';
-                object.userData.bondLengthFull = ( bondLength + 55 ) + 'px';
-
-                object.userData.joint = joint;
-
-                joint.add( object );
-                root.add( joint );
-
-                objects.push( object );
-                console.log(object, joint);
-
+                let bond2 = document.createElement('div');
+                addBondClassStyles(bond2);
+                bond2.style.height = bondLength + 'px';
+                let object2 = new CSS3DObject(bond2);
+                object2.rotation.y = Math.PI / 2;
+                object2.matrixAutoUpdate = false;
+                object2.updateMatrix();
+                // these settings were used when only displaying bonds for example
+                // object2.userData.bondLengthShort = bondLength + 'px';
+                // object2.userData.bondLengthFull = (bondLength + 55) + 'px';
+                // object2.userData.joint = joint;
+                joint.add(object2);
+                root.add(joint);
             }
 
-            // changeVizType( params.vizType );  TODO: what is this doing?
-
-        } );
-
-
-    }
-
-    //
-
-    function onWindowResize() {
-
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-
-        renderer.setSize( window.innerWidth, window.innerHeight );
-
-    }
-
-    function animate() {
-
-        requestAnimationFrame( animate );
-        controls.update();
-
-        // const time = Date.now() * 0.0004;
-        // root.rotation.x = time;
-        // root.rotation.y = time * 0.7;
-
-        render();
-
-    }
-
-    function render() {
-
-        renderer.render( scene, camera );
-
+        });
     }
 
     /* src/components/compound_creator/main.svelte generated by Svelte v3.50.0 */
@@ -47397,10 +47278,10 @@ var app = (function () {
     			div1 = element("div");
     			div0 = element("div");
     			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$1, 10, 4, 205);
+    			add_location(div0, file$1, 10, 4, 207);
     			attr_dev(div1, "id", "outer");
     			attr_dev(div1, "class", "svelte-1i2m9uj");
-    			add_location(div1, file$1, 9, 0, 184);
+    			add_location(div1, file$1, 9, 0, 186);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -47471,7 +47352,7 @@ var app = (function () {
     		c: function create() {
     			p = element("p");
     			p.textContent = "Loading ...";
-    			add_location(p, file, 18, 2, 582);
+    			add_location(p, file, 18, 2, 628);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
@@ -47502,7 +47383,7 @@ var app = (function () {
     		c: function create() {
     			p = element("p");
     			p.textContent = "compound creator";
-    			add_location(p, file, 16, 2, 547);
+    			add_location(p, file, 16, 2, 593);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
@@ -47603,7 +47484,7 @@ var app = (function () {
     	return block;
     }
 
-    // (10:1) {#if true}
+    // (10:1) {#if $current_scene === possible_scenes.CompoundCreator}
     function create_if_block(ctx) {
     	let compoundcreator;
     	let current;
@@ -47635,7 +47516,7 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(10:1) {#if true}",
+    		source: "(10:1) {#if $current_scene === possible_scenes.CompoundCreator}",
     		ctx
     	});
 
@@ -47659,10 +47540,14 @@ var app = (function () {
     	const if_blocks = [];
 
     	function select_block_type(ctx, dirty) {
-    		return 0;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.CompoundCreator) return 0;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.Timeline) return 1;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.Battle) return 2;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.CompoundCreator) return 3;
+    		return 4;
     	}
 
-    	current_block_type_index = select_block_type();
+    	current_block_type_index = select_block_type(ctx);
     	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
 
     	const block = {
@@ -47681,7 +47566,7 @@ var app = (function () {
     		},
     		p: function update(ctx, [dirty]) {
     			let previous_block_index = current_block_type_index;
-    			current_block_type_index = select_block_type();
+    			current_block_type_index = select_block_type(ctx);
 
     			if (current_block_type_index !== previous_block_index) {
     				group_outros();
