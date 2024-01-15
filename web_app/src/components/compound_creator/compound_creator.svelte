@@ -1,13 +1,15 @@
 
 <script>
     import { onMount } from 'svelte';
-    import { CompoundCreator } from './compound_creator_2.js';
+    import { CompoundCreator } from './compound_creator_3.js';
+    import RightSideBar from './right_element_bar.svelte';
     onMount(async () => {
         new CompoundCreator();
     })
 </script>
 
 <div id='outer'>
+    <RightSideBar/>
     <div id='canvas-container'></div>
 </div>
 

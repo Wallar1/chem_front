@@ -26715,7 +26715,7 @@ var app = (function () {
     const _skinWeight = /*@__PURE__*/ new Vector4();
 
     const _vector$5 = /*@__PURE__*/ new Vector3();
-    const _matrix$2 = /*@__PURE__*/ new Matrix4();
+    const _matrix = /*@__PURE__*/ new Matrix4();
 
     class SkinnedMesh extends Mesh {
 
@@ -26841,9 +26841,9 @@ var app = (function () {
 
     				const boneIndex = _skinIndex.getComponent( i );
 
-    				_matrix$2.multiplyMatrices( skeleton.bones[ boneIndex ].matrixWorld, skeleton.boneInverses[ boneIndex ] );
+    				_matrix.multiplyMatrices( skeleton.bones[ boneIndex ].matrixWorld, skeleton.boneInverses[ boneIndex ] );
 
-    				target.addScaledVector( _vector$5.copy( _basePosition ).applyMatrix4( _matrix$2 ), weight );
+    				target.addScaledVector( _vector$5.copy( _basePosition ).applyMatrix4( _matrix ), weight );
 
     			}
 
@@ -28023,6 +28023,303 @@ var app = (function () {
     			thetaStart: thetaStart,
     			thetaLength: thetaLength
     		};
+
+    	}
+
+    }
+
+    class PolyhedronGeometry extends BufferGeometry {
+
+    	constructor( vertices, indices, radius = 1, detail = 0 ) {
+
+    		super();
+
+    		this.type = 'PolyhedronGeometry';
+
+    		this.parameters = {
+    			vertices: vertices,
+    			indices: indices,
+    			radius: radius,
+    			detail: detail
+    		};
+
+    		// default buffer data
+
+    		const vertexBuffer = [];
+    		const uvBuffer = [];
+
+    		// the subdivision creates the vertex buffer data
+
+    		subdivide( detail );
+
+    		// all vertices should lie on a conceptual sphere with a given radius
+
+    		applyRadius( radius );
+
+    		// finally, create the uv data
+
+    		generateUVs();
+
+    		// build non-indexed geometry
+
+    		this.setAttribute( 'position', new Float32BufferAttribute( vertexBuffer, 3 ) );
+    		this.setAttribute( 'normal', new Float32BufferAttribute( vertexBuffer.slice(), 3 ) );
+    		this.setAttribute( 'uv', new Float32BufferAttribute( uvBuffer, 2 ) );
+
+    		if ( detail === 0 ) {
+
+    			this.computeVertexNormals(); // flat normals
+
+    		} else {
+
+    			this.normalizeNormals(); // smooth normals
+
+    		}
+
+    		// helper functions
+
+    		function subdivide( detail ) {
+
+    			const a = new Vector3();
+    			const b = new Vector3();
+    			const c = new Vector3();
+
+    			// iterate over all faces and apply a subdivison with the given detail value
+
+    			for ( let i = 0; i < indices.length; i += 3 ) {
+
+    				// get the vertices of the face
+
+    				getVertexByIndex( indices[ i + 0 ], a );
+    				getVertexByIndex( indices[ i + 1 ], b );
+    				getVertexByIndex( indices[ i + 2 ], c );
+
+    				// perform subdivision
+
+    				subdivideFace( a, b, c, detail );
+
+    			}
+
+    		}
+
+    		function subdivideFace( a, b, c, detail ) {
+
+    			const cols = detail + 1;
+
+    			// we use this multidimensional array as a data structure for creating the subdivision
+
+    			const v = [];
+
+    			// construct all of the vertices for this subdivision
+
+    			for ( let i = 0; i <= cols; i ++ ) {
+
+    				v[ i ] = [];
+
+    				const aj = a.clone().lerp( c, i / cols );
+    				const bj = b.clone().lerp( c, i / cols );
+
+    				const rows = cols - i;
+
+    				for ( let j = 0; j <= rows; j ++ ) {
+
+    					if ( j === 0 && i === cols ) {
+
+    						v[ i ][ j ] = aj;
+
+    					} else {
+
+    						v[ i ][ j ] = aj.clone().lerp( bj, j / rows );
+
+    					}
+
+    				}
+
+    			}
+
+    			// construct all of the faces
+
+    			for ( let i = 0; i < cols; i ++ ) {
+
+    				for ( let j = 0; j < 2 * ( cols - i ) - 1; j ++ ) {
+
+    					const k = Math.floor( j / 2 );
+
+    					if ( j % 2 === 0 ) {
+
+    						pushVertex( v[ i ][ k + 1 ] );
+    						pushVertex( v[ i + 1 ][ k ] );
+    						pushVertex( v[ i ][ k ] );
+
+    					} else {
+
+    						pushVertex( v[ i ][ k + 1 ] );
+    						pushVertex( v[ i + 1 ][ k + 1 ] );
+    						pushVertex( v[ i + 1 ][ k ] );
+
+    					}
+
+    				}
+
+    			}
+
+    		}
+
+    		function applyRadius( radius ) {
+
+    			const vertex = new Vector3();
+
+    			// iterate over the entire buffer and apply the radius to each vertex
+
+    			for ( let i = 0; i < vertexBuffer.length; i += 3 ) {
+
+    				vertex.x = vertexBuffer[ i + 0 ];
+    				vertex.y = vertexBuffer[ i + 1 ];
+    				vertex.z = vertexBuffer[ i + 2 ];
+
+    				vertex.normalize().multiplyScalar( radius );
+
+    				vertexBuffer[ i + 0 ] = vertex.x;
+    				vertexBuffer[ i + 1 ] = vertex.y;
+    				vertexBuffer[ i + 2 ] = vertex.z;
+
+    			}
+
+    		}
+
+    		function generateUVs() {
+
+    			const vertex = new Vector3();
+
+    			for ( let i = 0; i < vertexBuffer.length; i += 3 ) {
+
+    				vertex.x = vertexBuffer[ i + 0 ];
+    				vertex.y = vertexBuffer[ i + 1 ];
+    				vertex.z = vertexBuffer[ i + 2 ];
+
+    				const u = azimuth( vertex ) / 2 / Math.PI + 0.5;
+    				const v = inclination( vertex ) / Math.PI + 0.5;
+    				uvBuffer.push( u, 1 - v );
+
+    			}
+
+    			correctUVs();
+
+    			correctSeam();
+
+    		}
+
+    		function correctSeam() {
+
+    			// handle case when face straddles the seam, see #3269
+
+    			for ( let i = 0; i < uvBuffer.length; i += 6 ) {
+
+    				// uv data of a single face
+
+    				const x0 = uvBuffer[ i + 0 ];
+    				const x1 = uvBuffer[ i + 2 ];
+    				const x2 = uvBuffer[ i + 4 ];
+
+    				const max = Math.max( x0, x1, x2 );
+    				const min = Math.min( x0, x1, x2 );
+
+    				// 0.9 is somewhat arbitrary
+
+    				if ( max > 0.9 && min < 0.1 ) {
+
+    					if ( x0 < 0.2 ) uvBuffer[ i + 0 ] += 1;
+    					if ( x1 < 0.2 ) uvBuffer[ i + 2 ] += 1;
+    					if ( x2 < 0.2 ) uvBuffer[ i + 4 ] += 1;
+
+    				}
+
+    			}
+
+    		}
+
+    		function pushVertex( vertex ) {
+
+    			vertexBuffer.push( vertex.x, vertex.y, vertex.z );
+
+    		}
+
+    		function getVertexByIndex( index, vertex ) {
+
+    			const stride = index * 3;
+
+    			vertex.x = vertices[ stride + 0 ];
+    			vertex.y = vertices[ stride + 1 ];
+    			vertex.z = vertices[ stride + 2 ];
+
+    		}
+
+    		function correctUVs() {
+
+    			const a = new Vector3();
+    			const b = new Vector3();
+    			const c = new Vector3();
+
+    			const centroid = new Vector3();
+
+    			const uvA = new Vector2();
+    			const uvB = new Vector2();
+    			const uvC = new Vector2();
+
+    			for ( let i = 0, j = 0; i < vertexBuffer.length; i += 9, j += 6 ) {
+
+    				a.set( vertexBuffer[ i + 0 ], vertexBuffer[ i + 1 ], vertexBuffer[ i + 2 ] );
+    				b.set( vertexBuffer[ i + 3 ], vertexBuffer[ i + 4 ], vertexBuffer[ i + 5 ] );
+    				c.set( vertexBuffer[ i + 6 ], vertexBuffer[ i + 7 ], vertexBuffer[ i + 8 ] );
+
+    				uvA.set( uvBuffer[ j + 0 ], uvBuffer[ j + 1 ] );
+    				uvB.set( uvBuffer[ j + 2 ], uvBuffer[ j + 3 ] );
+    				uvC.set( uvBuffer[ j + 4 ], uvBuffer[ j + 5 ] );
+
+    				centroid.copy( a ).add( b ).add( c ).divideScalar( 3 );
+
+    				const azi = azimuth( centroid );
+
+    				correctUV( uvA, j + 0, a, azi );
+    				correctUV( uvB, j + 2, b, azi );
+    				correctUV( uvC, j + 4, c, azi );
+
+    			}
+
+    		}
+
+    		function correctUV( uv, stride, vector, azimuth ) {
+
+    			if ( ( azimuth < 0 ) && ( uv.x === 1 ) ) {
+
+    				uvBuffer[ stride ] = uv.x - 1;
+
+    			}
+
+    			if ( ( vector.x === 0 ) && ( vector.z === 0 ) ) {
+
+    				uvBuffer[ stride ] = azimuth / 2 / Math.PI + 0.5;
+
+    			}
+
+    		}
+
+    		// Angle around the Y axis, counter-clockwise when looking from above.
+
+    		function azimuth( vector ) {
+
+    			return Math.atan2( vector.z, - vector.x );
+
+    		}
+
+
+    		// Angle above the XZ plane.
+
+    		function inclination( vector ) {
+
+    			return Math.atan2( - vector.y, Math.sqrt( ( vector.x * vector.x ) + ( vector.z * vector.z ) ) );
+
+    		}
 
     	}
 
@@ -29686,6 +29983,38 @@ var app = (function () {
     	if ( options.extrudePath !== undefined ) data.options.extrudePath = options.extrudePath.toJSON();
 
     	return data;
+
+    }
+
+    class IcosahedronGeometry extends PolyhedronGeometry {
+
+    	constructor( radius = 1, detail = 0 ) {
+
+    		const t = ( 1 + Math.sqrt( 5 ) ) / 2;
+
+    		const vertices = [
+    			- 1, t, 0, 	1, t, 0, 	- 1, - t, 0, 	1, - t, 0,
+    			0, - 1, t, 	0, 1, t,	0, - 1, - t, 	0, 1, - t,
+    			t, 0, - 1, 	t, 0, 1, 	- t, 0, - 1, 	- t, 0, 1
+    		];
+
+    		const indices = [
+    			0, 11, 5, 	0, 5, 1, 	0, 1, 7, 	0, 7, 10, 	0, 10, 11,
+    			1, 5, 9, 	5, 11, 4,	11, 10, 2,	10, 7, 6,	7, 1, 8,
+    			3, 9, 4, 	3, 4, 2,	3, 2, 6,	3, 6, 8,	3, 8, 9,
+    			4, 9, 5, 	2, 4, 11,	6, 2, 10,	8, 6, 7,	9, 8, 1
+    		];
+
+    		super( vertices, indices, radius, detail );
+
+    		this.type = 'IcosahedronGeometry';
+
+    		this.parameters = {
+    			radius: radius,
+    			detail: detail
+    		};
+
+    	}
 
     }
 
@@ -42202,9 +42531,9 @@ var app = (function () {
 
     // import * as FontLoaderJs from 'three/addons/loaders/FontLoader.js';
 
-    const loader$1 = new FontLoader();
+    const loader = new FontLoader();
     function get_font_text_mesh(characters, parent) {
-        loader$1.load( 'helvetiker_regular.typeface.json', function ( font ) {
+        loader.load( 'helvetiker_regular.typeface.json', function ( font ) {
             const matLite = new MeshBasicMaterial( {
                 color: 0x006699,
                 side: DoubleSide
@@ -42352,11 +42681,34 @@ var app = (function () {
         }
     );
 
+    const atoms = writable({
+        'C': {
+            'color': [144, 144, 144],
+            'bonds': 4,
+        },
+        'N': {
+            'color': [48, 80, 248],
+            'bonds': 3,
+        },
+        'O': {
+            'color': [255, 13, 13],
+            'bonds': 2,
+        },
+        'H': {
+            'color': [20, 20, 20],
+            'bonds': 1,
+        },
+    });
+
+    const selected_atom = writable('C');
+
+    const creator_moves_remaining = writable(0);
+
     /* src/components/scientist_timeline/scientist_card.svelte generated by Svelte v3.50.0 */
 
-    const file$7 = "src/components/scientist_timeline/scientist_card.svelte";
+    const file$8 = "src/components/scientist_timeline/scientist_card.svelte";
 
-    function create_fragment$7(ctx) {
+    function create_fragment$8(ctx) {
     	let div3;
     	let img;
     	let img_src_value;
@@ -42402,21 +42754,21 @@ var app = (function () {
     			attr_dev(img, "alt", img_alt_value = /*scientist*/ ctx[0].name);
     			attr_dev(img, "class", "svelte-i7mye2");
     			toggle_class(img, "hide_image", /*hide_image*/ ctx[1]);
-    			add_location(img, file$7, 14, 4, 378);
+    			add_location(img, file$8, 14, 4, 378);
     			attr_dev(p0, "class", "svelte-i7mye2");
-    			add_location(p0, file$7, 17, 12, 507);
+    			add_location(p0, file$8, 17, 12, 507);
     			attr_dev(div0, "class", "button svelte-i7mye2");
-    			add_location(div0, file$7, 18, 12, 544);
+    			add_location(div0, file$8, 18, 12, 544);
     			attr_dev(div1, "class", "story svelte-i7mye2");
-    			add_location(div1, file$7, 16, 8, 475);
+    			add_location(div1, file$8, 16, 8, 475);
     			attr_dev(p1, "class", "svelte-i7mye2");
-    			add_location(p1, file$7, 20, 8, 656);
+    			add_location(p1, file$8, 20, 8, 656);
     			attr_dev(p2, "class", "svelte-i7mye2");
-    			add_location(p2, file$7, 21, 8, 688);
+    			add_location(p2, file$8, 21, 8, 688);
     			attr_dev(div2, "class", "text svelte-i7mye2");
-    			add_location(div2, file$7, 15, 4, 448);
+    			add_location(div2, file$8, 15, 4, 448);
     			attr_dev(div3, "class", "card svelte-i7mye2");
-    			add_location(div3, file$7, 13, 0, 298);
+    			add_location(div3, file$8, 13, 0, 298);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -42475,7 +42827,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$7.name,
+    		id: create_fragment$8.name,
     		type: "component",
     		source: "",
     		ctx
@@ -42484,7 +42836,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$7($$self, $$props, $$invalidate) {
+    function instance$8($$self, $$props, $$invalidate) {
     	let $current_scene;
     	let $current_scientist;
     	validate_store(current_scene, 'current_scene');
@@ -42540,13 +42892,13 @@ var app = (function () {
     class Scientist_card extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$7, create_fragment$7, safe_not_equal, { scientist: 0 });
+    		init$1(this, options, instance$8, create_fragment$8, safe_not_equal, { scientist: 0 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Scientist_card",
     			options,
-    			id: create_fragment$7.name
+    			id: create_fragment$8.name
     		});
 
     		const { ctx } = this.$$;
@@ -42568,17 +42920,17 @@ var app = (function () {
 
     /* src/components/scientist_timeline/scientist_timeline.svelte generated by Svelte v3.50.0 */
 
-    const { Object: Object_1$2 } = globals;
-    const file$6 = "src/components/scientist_timeline/scientist_timeline.svelte";
+    const { Object: Object_1$3 } = globals;
+    const file$7 = "src/components/scientist_timeline/scientist_timeline.svelte";
 
-    function get_each_context$2(ctx, list, i) {
+    function get_each_context$3(ctx, list, i) {
     	const child_ctx = ctx.slice();
     	child_ctx[3] = list[i];
     	return child_ctx;
     }
 
     // (14:4) {#each Object.values(scientists) as scientist}
-    function create_each_block$2(ctx) {
+    function create_each_block$3(ctx) {
     	let scientistcard;
     	let current;
 
@@ -42612,7 +42964,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_each_block$2.name,
+    		id: create_each_block$3.name,
     		type: "each",
     		source: "(14:4) {#each Object.values(scientists) as scientist}",
     		ctx
@@ -42621,7 +42973,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$6(ctx) {
+    function create_fragment$7(ctx) {
     	let div0;
     	let t0;
     	let div1;
@@ -42634,7 +42986,7 @@ var app = (function () {
     	let each_blocks = [];
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block$2(get_each_context$2(ctx, each_value, i));
+    		each_blocks[i] = create_each_block$3(get_each_context$3(ctx, each_value, i));
     	}
 
     	const out = i => transition_out(each_blocks[i], 1, 1, () => {
@@ -42654,9 +43006,9 @@ var app = (function () {
     			p = element("p");
     			p.textContent = "Build Compounds In The Lab";
     			attr_dev(div0, "class", "widescreen svelte-15irslr");
-    			add_location(div0, file$6, 12, 0, 303);
-    			add_location(p, file$6, 18, 4, 455);
-    			add_location(div1, file$6, 17, 0, 445);
+    			add_location(div0, file$7, 12, 0, 303);
+    			add_location(p, file$7, 18, 4, 455);
+    			add_location(div1, file$7, 17, 0, 445);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -42685,13 +43037,13 @@ var app = (function () {
     				let i;
 
     				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context$2(ctx, each_value, i);
+    					const child_ctx = get_each_context$3(ctx, each_value, i);
 
     					if (each_blocks[i]) {
     						each_blocks[i].p(child_ctx, dirty);
     						transition_in(each_blocks[i], 1);
     					} else {
-    						each_blocks[i] = create_each_block$2(child_ctx);
+    						each_blocks[i] = create_each_block$3(child_ctx);
     						each_blocks[i].c();
     						transition_in(each_blocks[i], 1);
     						each_blocks[i].m(div0, null);
@@ -42737,7 +43089,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$6.name,
+    		id: create_fragment$7.name,
     		type: "component",
     		source: "",
     		ctx
@@ -42746,7 +43098,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$6($$self, $$props, $$invalidate) {
+    function instance$7($$self, $$props, $$invalidate) {
     	let $current_scene;
     	validate_store(current_scene, 'current_scene');
     	component_subscribe($$self, current_scene, $$value => $$invalidate(2, $current_scene = $$value));
@@ -42759,7 +43111,7 @@ var app = (function () {
 
     	const writable_props = [];
 
-    	Object_1$2.keys($$props).forEach(key => {
+    	Object_1$3.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_timeline> was created with unknown prop '${key}'`);
     	});
 
@@ -42780,13 +43132,13 @@ var app = (function () {
     class Scientist_timeline extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$6, create_fragment$6, safe_not_equal, {});
+    		init$1(this, options, instance$7, create_fragment$7, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Scientist_timeline",
     			options,
-    			id: create_fragment$6.name
+    			id: create_fragment$7.name
     		});
     	}
     }
@@ -44654,8 +45006,8 @@ var app = (function () {
     var world_units_scale = 1/frame_rate;  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
     var scene$1 = new Scene();
     var camera$1 = create_camera();
-    var mouse_ray = new Raycaster();
-    var mouse = new Vector2();
+    var mouse_ray$1 = new Raycaster();
+    var mouse$1 = new Vector2();
 
     // Earth settings
     var earth_radius = 60;
@@ -44688,10 +45040,10 @@ var app = (function () {
             scene$1.background = create_background();
             scene$1.add(earth);
         
-            mouse_ray.setFromCamera( mouse, camera$1 );
+            mouse_ray$1.setFromCamera( mouse$1, camera$1 );
             window.addEventListener('resize', () => this.resize_window(), false);
-            window.addEventListener('mousemove', (event) => on_mouse_move(event), false);
-            window.addEventListener('click', (event) => on_mouse_click(), false);
+            window.addEventListener('mousemove', (event) => on_mouse_move$1(event), false);
+            window.addEventListener('click', (event) => on_mouse_click$1(), false);
 
             this.renderer.render(scene$1, camera$1);
             camera$1.lookAt(new Vector3(0, 30, -100));
@@ -44950,12 +45302,12 @@ var app = (function () {
         return texture;
     }
 
-    function on_mouse_move(event){
+    function on_mouse_move$1(event){
         // calculate mouse position in normalized device coordinates
         // (-1 to +1) for both components
-        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-        mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-        mouse_ray.setFromCamera( mouse, camera$1 );
+        mouse$1.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse$1.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        mouse_ray$1.setFromCamera( mouse$1, camera$1 );
     }
     function unique(arr, key_func) {
         const ret_arr = [];
@@ -44970,7 +45322,7 @@ var app = (function () {
         return ret_arr;
     }
     new Audio('sound.mov');
-    function on_mouse_click(event) {
+    function on_mouse_click$1(event) {
         // this next line helps debug. Previously we were getting different positions because the renderer was expecting
         // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
         // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
@@ -44981,11 +45333,11 @@ var app = (function () {
         for (let e=0; e<earth.children.length; e++) {
             children.push(earth.children[e]);
         }
-        let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
+        let intersects = unique(mouse_ray$1.intersectObjects( children, false ), (o) => o.object.uuid);
         let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
         if (intersects_with_click.length) {
             // audio.play();
-            intersects_with_click.forEach(intersect => intersect.object.onclick(intersect));
+            intersects_with_click.forEach(intersect => intersect.object.onclick());  // removed interesct, i dont think it did anything
         }
     }
 
@@ -45015,7 +45367,7 @@ var app = (function () {
         const initial_pos = camera$1.position.clone();
         initial_pos.y -= 10;
         initial_pos.z -= 15;
-        const velocity = mouse_ray.ray.direction.clone();
+        const velocity = mouse_ray$1.ray.direction.clone();
         velocity.multiplyScalar(8 * speed);
         velocity.y += (5 * speed);
         const onclick = (target) => {
@@ -45056,9 +45408,9 @@ var app = (function () {
 
     /* src/components/battle_scene/compound_card.svelte generated by Svelte v3.50.0 */
 
-    const file$5 = "src/components/battle_scene/compound_card.svelte";
+    const file$6 = "src/components/battle_scene/compound_card.svelte";
 
-    function create_fragment$5(ctx) {
+    function create_fragment$6(ctx) {
     	let div1;
     	let div0;
     	let p0;
@@ -45097,15 +45449,15 @@ var app = (function () {
     			t7 = space();
     			h2 = element("h2");
     			t8 = text(/*el_name*/ ctx[0]);
-    			add_location(p0, file$5, 9, 8, 170);
-    			add_location(p1, file$5, 10, 8, 229);
-    			add_location(p2, file$5, 11, 8, 279);
+    			add_location(p0, file$6, 9, 8, 170);
+    			add_location(p1, file$6, 10, 8, 229);
+    			add_location(p2, file$6, 11, 8, 279);
     			attr_dev(div0, "class", "stats svelte-1q20zkf");
-    			add_location(div0, file$5, 8, 4, 142);
+    			add_location(div0, file$6, 8, 4, 142);
     			attr_dev(h2, "class", "el_name svelte-1q20zkf");
-    			add_location(h2, file$5, 13, 4, 318);
+    			add_location(h2, file$6, 13, 4, 318);
     			attr_dev(div1, "class", "card svelte-1q20zkf");
-    			add_location(div1, file$5, 7, 0, 119);
+    			add_location(div1, file$6, 7, 0, 119);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -45145,7 +45497,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$5.name,
+    		id: create_fragment$6.name,
     		type: "component",
     		source: "",
     		ctx
@@ -45154,7 +45506,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$5($$self, $$props, $$invalidate) {
+    function instance$6($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_card', slots, []);
     	let { el_name } = $$props;
@@ -45194,7 +45546,7 @@ var app = (function () {
     	constructor(options) {
     		super(options);
 
-    		init$1(this, options, instance$5, create_fragment$5, safe_not_equal, {
+    		init$1(this, options, instance$6, create_fragment$6, safe_not_equal, {
     			el_name: 0,
     			damage: 1,
     			count_available: 2,
@@ -45205,7 +45557,7 @@ var app = (function () {
     			component: this,
     			tagName: "Compound_card",
     			options,
-    			id: create_fragment$5.name
+    			id: create_fragment$6.name
     		});
 
     		const { ctx } = this.$$;
@@ -45263,11 +45615,11 @@ var app = (function () {
 
     /* src/components/battle_scene/bottom_compound_bar.svelte generated by Svelte v3.50.0 */
 
-    const { Object: Object_1$1 } = globals;
+    const { Object: Object_1$2 } = globals;
 
-    const file$4 = "src/components/battle_scene/bottom_compound_bar.svelte";
+    const file$5 = "src/components/battle_scene/bottom_compound_bar.svelte";
 
-    function get_each_context$1(ctx, list, i) {
+    function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
     	child_ctx[2] = list[i][0];
     	child_ctx[3] = list[i][1];
@@ -45275,7 +45627,7 @@ var app = (function () {
     }
 
     // (8:4) {#each Object.entries($key_to_compound) as [key, compound]}
-    function create_each_block$1(ctx) {
+    function create_each_block$2(ctx) {
     	let compoundcard;
     	let current;
 
@@ -45321,7 +45673,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_each_block$1.name,
+    		id: create_each_block$2.name,
     		type: "each",
     		source: "(8:4) {#each Object.entries($key_to_compound) as [key, compound]}",
     		ctx
@@ -45330,7 +45682,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$4(ctx) {
+    function create_fragment$5(ctx) {
     	let div;
     	let current;
     	let each_value = Object.entries(/*$key_to_compound*/ ctx[0]);
@@ -45338,7 +45690,7 @@ var app = (function () {
     	let each_blocks = [];
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+    		each_blocks[i] = create_each_block$2(get_each_context$2(ctx, each_value, i));
     	}
 
     	const out = i => transition_out(each_blocks[i], 1, 1, () => {
@@ -45355,7 +45707,7 @@ var app = (function () {
 
     			attr_dev(div, "id", "sidebar-bottom");
     			attr_dev(div, "class", "svelte-55y4qn");
-    			add_location(div, file$4, 6, 0, 225);
+    			add_location(div, file$5, 6, 0, 225);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -45376,13 +45728,13 @@ var app = (function () {
     				let i;
 
     				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context$1(ctx, each_value, i);
+    					const child_ctx = get_each_context$2(ctx, each_value, i);
 
     					if (each_blocks[i]) {
     						each_blocks[i].p(child_ctx, dirty);
     						transition_in(each_blocks[i], 1);
     					} else {
-    						each_blocks[i] = create_each_block$1(child_ctx);
+    						each_blocks[i] = create_each_block$2(child_ctx);
     						each_blocks[i].c();
     						transition_in(each_blocks[i], 1);
     						each_blocks[i].m(div, null);
@@ -45424,7 +45776,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$4.name,
+    		id: create_fragment$5.name,
     		type: "component",
     		source: "",
     		ctx
@@ -45433,7 +45785,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$4($$self, $$props, $$invalidate) {
+    function instance$5($$self, $$props, $$invalidate) {
     	let $key_to_compound;
     	let $max_number_possible_for_each_compound;
     	validate_store(key_to_compound, 'key_to_compound');
@@ -45444,7 +45796,7 @@ var app = (function () {
     	validate_slots('Bottom_compound_bar', slots, []);
     	const writable_props = [];
 
-    	Object_1$1.keys($$props).forEach(key => {
+    	Object_1$2.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Bottom_compound_bar> was created with unknown prop '${key}'`);
     	});
 
@@ -45463,23 +45815,23 @@ var app = (function () {
     class Bottom_compound_bar extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$4, create_fragment$4, safe_not_equal, {});
+    		init$1(this, options, instance$5, create_fragment$5, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Bottom_compound_bar",
     			options,
-    			id: create_fragment$4.name
+    			id: create_fragment$5.name
     		});
     	}
     }
 
     /* src/components/battle_scene/right_element_bar.svelte generated by Svelte v3.50.0 */
 
-    const { Object: Object_1 } = globals;
-    const file$3 = "src/components/battle_scene/right_element_bar.svelte";
+    const { Object: Object_1$1 } = globals;
+    const file$4 = "src/components/battle_scene/right_element_bar.svelte";
 
-    function get_each_context(ctx, list, i) {
+    function get_each_context$1(ctx, list, i) {
     	const child_ctx = ctx.slice();
     	child_ctx[1] = list[i][0];
     	child_ctx[2] = list[i][1];
@@ -45487,7 +45839,7 @@ var app = (function () {
     }
 
     // (7:4) {#each Object.entries($current_element_counts) as [el, count]}
-    function create_each_block(ctx) {
+    function create_each_block$1(ctx) {
     	let div;
     	let p;
     	let t0_value = /*el*/ ctx[1] + "";
@@ -45505,9 +45857,9 @@ var app = (function () {
     			t1 = text(": ");
     			t2 = text(t2_value);
     			t3 = space();
-    			add_location(p, file$3, 8, 12, 243);
+    			add_location(p, file$4, 8, 12, 243);
     			attr_dev(div, "class", "el-count svelte-1wylw3y");
-    			add_location(div, file$3, 7, 8, 208);
+    			add_location(div, file$4, 7, 8, 208);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -45528,7 +45880,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_each_block.name,
+    		id: create_each_block$1.name,
     		type: "each",
     		source: "(7:4) {#each Object.entries($current_element_counts) as [el, count]}",
     		ctx
@@ -45537,7 +45889,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$3(ctx) {
+    function create_fragment$4(ctx) {
     	let div1;
     	let div0;
     	let t;
@@ -45546,7 +45898,7 @@ var app = (function () {
     	let each_blocks = [];
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block(get_each_context(ctx, each_value, i));
+    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
     	}
 
     	const block = {
@@ -45561,10 +45913,10 @@ var app = (function () {
 
     			attr_dev(div0, "id", "spacer");
     			attr_dev(div0, "class", "svelte-1wylw3y");
-    			add_location(div0, file$3, 5, 4, 109);
+    			add_location(div0, file$4, 5, 4, 109);
     			attr_dev(div1, "id", "sidebar-right");
     			attr_dev(div1, "class", "svelte-1wylw3y");
-    			add_location(div1, file$3, 4, 0, 80);
+    			add_location(div1, file$4, 4, 0, 80);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -45585,12 +45937,12 @@ var app = (function () {
     				let i;
 
     				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context(ctx, each_value, i);
+    					const child_ctx = get_each_context$1(ctx, each_value, i);
 
     					if (each_blocks[i]) {
     						each_blocks[i].p(child_ctx, dirty);
     					} else {
-    						each_blocks[i] = create_each_block(child_ctx);
+    						each_blocks[i] = create_each_block$1(child_ctx);
     						each_blocks[i].c();
     						each_blocks[i].m(div1, null);
     					}
@@ -45613,7 +45965,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$3.name,
+    		id: create_fragment$4.name,
     		type: "component",
     		source: "",
     		ctx
@@ -45622,7 +45974,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$3($$self, $$props, $$invalidate) {
+    function instance$4($$self, $$props, $$invalidate) {
     	let $current_element_counts;
     	validate_store(current_element_counts, 'current_element_counts');
     	component_subscribe($$self, current_element_counts, $$value => $$invalidate(0, $current_element_counts = $$value));
@@ -45630,7 +45982,7 @@ var app = (function () {
     	validate_slots('Right_element_bar', slots, []);
     	const writable_props = [];
 
-    	Object_1.keys($$props).forEach(key => {
+    	Object_1$1.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Right_element_bar> was created with unknown prop '${key}'`);
     	});
 
@@ -45642,24 +45994,24 @@ var app = (function () {
     	return [$current_element_counts];
     }
 
-    class Right_element_bar extends SvelteComponentDev {
+    class Right_element_bar$1 extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$3, create_fragment$3, safe_not_equal, {});
+    		init$1(this, options, instance$4, create_fragment$4, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Right_element_bar",
     			options,
-    			id: create_fragment$3.name
+    			id: create_fragment$4.name
     		});
     	}
     }
 
     /* src/components/battle_scene/battle.svelte generated by Svelte v3.50.0 */
-    const file$2 = "src/components/battle_scene/battle.svelte";
+    const file$3 = "src/components/battle_scene/battle.svelte";
 
-    function create_fragment$2(ctx) {
+    function create_fragment$3(ctx) {
     	let div1;
     	let rightsidebar;
     	let t0;
@@ -45667,7 +46019,7 @@ var app = (function () {
     	let t1;
     	let div0;
     	let current;
-    	rightsidebar = new Right_element_bar({ $$inline: true });
+    	rightsidebar = new Right_element_bar$1({ $$inline: true });
     	bottomcompoundbar = new Bottom_compound_bar({ $$inline: true });
 
     	const block = {
@@ -45679,8 +46031,8 @@ var app = (function () {
     			t1 = space();
     			div0 = element("div");
     			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$2, 13, 4, 353);
-    			add_location(div1, file$2, 10, 0, 298);
+    			add_location(div0, file$3, 13, 4, 353);
+    			add_location(div1, file$3, 10, 0, 298);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -45715,7 +46067,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$2.name,
+    		id: create_fragment$3.name,
     		type: "component",
     		source: "",
     		ctx
@@ -45724,7 +46076,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$2($$self, $$props, $$invalidate) {
+    function instance$3($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Battle', slots, []);
 
@@ -45742,7 +46094,7 @@ var app = (function () {
     		onMount,
     		BattleScene,
     		BottomCompoundBar: Bottom_compound_bar,
-    		RightSideBar: Right_element_bar
+    		RightSideBar: Right_element_bar$1
     	});
 
     	return [];
@@ -45751,13 +46103,13 @@ var app = (function () {
     class Battle extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$2, create_fragment$2, safe_not_equal, {});
+    		init$1(this, options, instance$3, create_fragment$3, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Battle",
     			options,
-    			id: create_fragment$2.name
+    			id: create_fragment$3.name
     		});
     	}
     }
@@ -46502,7 +46854,204 @@ var app = (function () {
 
     }
 
-    class PDBLoader extends Loader {
+    class CSS2DObject extends Object3D {
+
+     	constructor( element ) {
+
+    		super();
+
+    		this.element = element || document.createElement( 'div' );
+
+    		this.element.style.position = 'absolute';
+
+    		this.addEventListener( 'removed', function () {
+
+    			this.traverse( function ( object ) {
+
+    				if ( object.element instanceof Element && object.element.parentNode !== null ) {
+
+    					object.element.parentNode.removeChild( object.element );
+
+    				}
+
+    			} );
+
+    		} );
+
+    	}
+
+    	copy( source, recursive ) {
+
+    		super.copy( source, recursive );
+
+    		this.element = source.element.cloneNode( true );
+
+    		return this;
+
+    	}
+
+    }
+
+    CSS2DObject.prototype.isCSS2DObject = true;
+
+    //
+
+    const _vector = new Vector3();
+    const _viewMatrix = new Matrix4();
+    const _viewProjectionMatrix = new Matrix4();
+    const _a = new Vector3();
+    const _b = new Vector3();
+
+    class CSS2DRenderer {
+
+    	constructor() {
+
+    		const _this = this;
+
+    		let _width, _height;
+    		let _widthHalf, _heightHalf;
+
+    		const cache = {
+    			objects: new WeakMap()
+    		};
+
+    		const domElement = document.createElement( 'div' );
+    		domElement.style.overflow = 'hidden';
+
+    		this.domElement = domElement;
+
+    		this.getSize = function () {
+
+    			return {
+    				width: _width,
+    				height: _height
+    			};
+
+    		};
+
+    		this.render = function ( scene, camera ) {
+
+    			if ( scene.autoUpdate === true ) scene.updateMatrixWorld();
+    			if ( camera.parent === null ) camera.updateMatrixWorld();
+
+    			_viewMatrix.copy( camera.matrixWorldInverse );
+    			_viewProjectionMatrix.multiplyMatrices( camera.projectionMatrix, _viewMatrix );
+
+    			renderObject( scene, scene, camera );
+    			zOrder( scene );
+
+    		};
+
+    		this.setSize = function ( width, height ) {
+
+    			_width = width;
+    			_height = height;
+
+    			_widthHalf = _width / 2;
+    			_heightHalf = _height / 2;
+
+    			domElement.style.width = width + 'px';
+    			domElement.style.height = height + 'px';
+
+    		};
+
+    		function renderObject( object, scene, camera ) {
+
+    			if ( object.isCSS2DObject ) {
+
+    				object.onBeforeRender( _this, scene, camera );
+
+    				_vector.setFromMatrixPosition( object.matrixWorld );
+    				_vector.applyMatrix4( _viewProjectionMatrix );
+
+    				const element = object.element;
+
+    				if ( /apple/i.test( navigator.vendor ) ) {
+
+    					// https://github.com/mrdoob/three.js/issues/21415
+    					element.style.transform = 'translate(-50%,-50%) translate(' + Math.round( _vector.x * _widthHalf + _widthHalf ) + 'px,' + Math.round( - _vector.y * _heightHalf + _heightHalf ) + 'px)';
+
+    				} else {
+
+    					element.style.transform = 'translate(-50%,-50%) translate(' + ( _vector.x * _widthHalf + _widthHalf ) + 'px,' + ( - _vector.y * _heightHalf + _heightHalf ) + 'px)';
+
+    				}
+
+    				element.style.display = ( object.visible && _vector.z >= - 1 && _vector.z <= 1 ) ? '' : 'none';
+
+    				const objectData = {
+    					distanceToCameraSquared: getDistanceToSquared( camera, object )
+    				};
+
+    				cache.objects.set( object, objectData );
+
+    				if ( element.parentNode !== domElement ) {
+
+    					domElement.appendChild( element );
+
+    				}
+
+    				object.onAfterRender( _this, scene, camera );
+
+    			}
+
+    			for ( let i = 0, l = object.children.length; i < l; i ++ ) {
+
+    				renderObject( object.children[ i ], scene, camera );
+
+    			}
+
+    		}
+
+    		function getDistanceToSquared( object1, object2 ) {
+
+    			_a.setFromMatrixPosition( object1.matrixWorld );
+    			_b.setFromMatrixPosition( object2.matrixWorld );
+
+    			return _a.distanceToSquared( _b );
+
+    		}
+
+    		function filterAndFlatten( scene ) {
+
+    			const result = [];
+
+    			scene.traverse( function ( object ) {
+
+    				if ( object.isCSS2DObject ) result.push( object );
+
+    			} );
+
+    			return result;
+
+    		}
+
+    		function zOrder( scene ) {
+
+    			const sorted = filterAndFlatten( scene ).sort( function ( a, b ) {
+
+    				const distanceA = cache.objects.get( a ).distanceToCameraSquared;
+    				const distanceB = cache.objects.get( b ).distanceToCameraSquared;
+
+    				return distanceA - distanceB;
+
+    			} );
+
+    			const zMax = sorted.length;
+
+    			for ( let i = 0, l = sorted.length; i < l; i ++ ) {
+
+    				sorted[ i ].element.style.zIndex = zMax - i;
+
+    			}
+
+    		}
+
+    	}
+
+    }
+
+    class CSVLoader extends Loader {
 
     	constructor( manager ) {
 
@@ -46547,488 +47096,67 @@ var app = (function () {
     	// Based on CanvasMol PDB parser
 
     	parse( text ) {
-
-    		function trim( text ) {
-
-    			return text.replace( /^\s\s*/, '' ).replace( /\s\s*$/, '' );
-
-    		}
-
-    		function capitalize( text ) {
-
-    			return text.charAt( 0 ).toUpperCase() + text.substr( 1 ).toLowerCase();
-
-    		}
-
-    		function hash( s, e ) {
-
-    			return 's' + Math.min( s, e ) + 'e' + Math.max( s, e );
-
-    		}
-
-    		function parseBond( start, length, satom, i ) {
-
-    			const eatom = parseInt( lines[ i ].substr( start, length ) );
-
-    			if ( eatom ) {
-
-    				const h = hash( satom, eatom );
-
-    				if ( _bhash[ h ] === undefined ) {
-
-    					_bonds.push( [ satom - 1, eatom - 1, 1 ] );
-    					_bhash[ h ] = _bonds.length - 1;
-
-    				}
-
-    			}
-
-    		}
-
-    		function buildGeometry() {
-
-    			const build = {
-    				geometryAtoms: new BufferGeometry(),
-    				geometryBonds: new BufferGeometry(),
-    				json: {
-    					atoms: atoms
-    				}
-    			};
-
-    			const geometryAtoms = build.geometryAtoms;
-    			const geometryBonds = build.geometryBonds;
-
-    			const verticesAtoms = [];
-    			const colorsAtoms = [];
-    			const verticesBonds = [];
-
-    			// atoms
-
-    			for ( let i = 0, l = atoms.length; i < l; i ++ ) {
-
-    				const atom = atoms[ i ];
-
-    				const x = atom[ 0 ];
-    				const y = atom[ 1 ];
-    				const z = atom[ 2 ];
-
-    				verticesAtoms.push( x, y, z );
-
-    				const r = atom[ 3 ][ 0 ] / 255;
-    				const g = atom[ 3 ][ 1 ] / 255;
-    				const b = atom[ 3 ][ 2 ] / 255;
-
-    				colorsAtoms.push( r, g, b );
-
-    			}
-
-    			// bonds
-
-    			for ( let i = 0, l = _bonds.length; i < l; i ++ ) {
-
-    				const bond = _bonds[ i ];
-
-    				const start = bond[ 0 ];
-    				const end = bond[ 1 ];
-
-    				const startAtom = _atomMap[ start ];
-    				const endAtom = _atomMap[ end ];
-
-    				let x = startAtom[ 0 ];
-    				let y = startAtom[ 1 ];
-    				let z = startAtom[ 2 ];
-
-    				verticesBonds.push( x, y, z );
-
-    				x = endAtom[ 0 ];
-    				y = endAtom[ 1 ];
-    				z = endAtom[ 2 ];
-
-    				verticesBonds.push( x, y, z );
-
-    			}
-
-    			// build geometry
-
-    			geometryAtoms.setAttribute( 'position', new Float32BufferAttribute( verticesAtoms, 3 ) );
-    			geometryAtoms.setAttribute( 'color', new Float32BufferAttribute( colorsAtoms, 3 ) );
-
-    			geometryBonds.setAttribute( 'position', new Float32BufferAttribute( verticesBonds, 3 ) );
-
-    			return build;
-
-    		}
-
-    		const CPK = { h: [ 255, 255, 255 ], he: [ 217, 255, 255 ], li: [ 204, 128, 255 ], be: [ 194, 255, 0 ], b: [ 255, 181, 181 ], c: [ 144, 144, 144 ], n: [ 48, 80, 248 ], o: [ 255, 13, 13 ], f: [ 144, 224, 80 ], ne: [ 179, 227, 245 ], na: [ 171, 92, 242 ], mg: [ 138, 255, 0 ], al: [ 191, 166, 166 ], si: [ 240, 200, 160 ], p: [ 255, 128, 0 ], s: [ 255, 255, 48 ], cl: [ 31, 240, 31 ], ar: [ 128, 209, 227 ], k: [ 143, 64, 212 ], ca: [ 61, 255, 0 ], sc: [ 230, 230, 230 ], ti: [ 191, 194, 199 ], v: [ 166, 166, 171 ], cr: [ 138, 153, 199 ], mn: [ 156, 122, 199 ], fe: [ 224, 102, 51 ], co: [ 240, 144, 160 ], ni: [ 80, 208, 80 ], cu: [ 200, 128, 51 ], zn: [ 125, 128, 176 ], ga: [ 194, 143, 143 ], ge: [ 102, 143, 143 ], as: [ 189, 128, 227 ], se: [ 255, 161, 0 ], br: [ 166, 41, 41 ], kr: [ 92, 184, 209 ], rb: [ 112, 46, 176 ], sr: [ 0, 255, 0 ], y: [ 148, 255, 255 ], zr: [ 148, 224, 224 ], nb: [ 115, 194, 201 ], mo: [ 84, 181, 181 ], tc: [ 59, 158, 158 ], ru: [ 36, 143, 143 ], rh: [ 10, 125, 140 ], pd: [ 0, 105, 133 ], ag: [ 192, 192, 192 ], cd: [ 255, 217, 143 ], in: [ 166, 117, 115 ], sn: [ 102, 128, 128 ], sb: [ 158, 99, 181 ], te: [ 212, 122, 0 ], i: [ 148, 0, 148 ], xe: [ 66, 158, 176 ], cs: [ 87, 23, 143 ], ba: [ 0, 201, 0 ], la: [ 112, 212, 255 ], ce: [ 255, 255, 199 ], pr: [ 217, 255, 199 ], nd: [ 199, 255, 199 ], pm: [ 163, 255, 199 ], sm: [ 143, 255, 199 ], eu: [ 97, 255, 199 ], gd: [ 69, 255, 199 ], tb: [ 48, 255, 199 ], dy: [ 31, 255, 199 ], ho: [ 0, 255, 156 ], er: [ 0, 230, 117 ], tm: [ 0, 212, 82 ], yb: [ 0, 191, 56 ], lu: [ 0, 171, 36 ], hf: [ 77, 194, 255 ], ta: [ 77, 166, 255 ], w: [ 33, 148, 214 ], re: [ 38, 125, 171 ], os: [ 38, 102, 150 ], ir: [ 23, 84, 135 ], pt: [ 208, 208, 224 ], au: [ 255, 209, 35 ], hg: [ 184, 184, 208 ], tl: [ 166, 84, 77 ], pb: [ 87, 89, 97 ], bi: [ 158, 79, 181 ], po: [ 171, 92, 0 ], at: [ 117, 79, 69 ], rn: [ 66, 130, 150 ], fr: [ 66, 0, 102 ], ra: [ 0, 125, 0 ], ac: [ 112, 171, 250 ], th: [ 0, 186, 255 ], pa: [ 0, 161, 255 ], u: [ 0, 143, 255 ], np: [ 0, 128, 255 ], pu: [ 0, 107, 255 ], am: [ 84, 92, 242 ], cm: [ 120, 92, 227 ], bk: [ 138, 79, 227 ], cf: [ 161, 54, 212 ], es: [ 179, 31, 212 ], fm: [ 179, 31, 186 ], md: [ 179, 13, 166 ], no: [ 189, 13, 135 ], lr: [ 199, 0, 102 ], rf: [ 204, 0, 89 ], db: [ 209, 0, 79 ], sg: [ 217, 0, 69 ], bh: [ 224, 0, 56 ], hs: [ 230, 0, 46 ], mt: [ 235, 0, 38 ], ds: [ 235, 0, 38 ], rg: [ 235, 0, 38 ], cn: [ 235, 0, 38 ], uut: [ 235, 0, 38 ], uuq: [ 235, 0, 38 ], uup: [ 235, 0, 38 ], uuh: [ 235, 0, 38 ], uus: [ 235, 0, 38 ], uuo: [ 235, 0, 38 ] };
-
     		const atoms = [];
-
-    		const _bonds = [];
-    		const _bhash = {};
-    		const _atomMap = {};
-
-    		// parse
+    		const bonds = [];
 
     		const lines = text.split( '\n' );
-
-    		for ( let i = 0, l = lines.length; i < l; i ++ ) {
-
-    			if ( lines[ i ].substr( 0, 4 ) === 'ATOM' || lines[ i ].substr( 0, 6 ) === 'HETATM' ) {
-
-    				const x = parseFloat( lines[ i ].substr( 30, 7 ) );
-    				const y = parseFloat( lines[ i ].substr( 38, 7 ) );
-    				const z = parseFloat( lines[ i ].substr( 46, 7 ) );
-    				const index = parseInt( lines[ i ].substr( 6, 5 ) ) - 1;
-
-    				let e = trim( lines[ i ].substr( 76, 2 ) ).toLowerCase();
-
-    				if ( e === '' ) {
-
-    					e = trim( lines[ i ].substr( 12, 2 ) ).toLowerCase();
-
-    				}
-
-    				const atomData = [ x, y, z, CPK[ e ], capitalize( e ) ];
-
-    				atoms.push( atomData );
-    				_atomMap[ index ] = atomData;
-
-    			} else if ( lines[ i ].substr( 0, 6 ) === 'CONECT' ) {
-
-    				const satom = parseInt( lines[ i ].substr( 6, 5 ) );
-
-    				parseBond( 11, 5, satom, i );
-    				parseBond( 16, 5, satom, i );
-    				parseBond( 21, 5, satom, i );
-    				parseBond( 26, 5, satom, i );
-
-    			}
-
-    		}
-
-    		// build and return geometry
-
-    		return buildGeometry();
-
-    	}
-
-    }
-
-    /**
-     * Based on http://www.emagix.net/academic/mscs-project/item/camera-sync-with-css3-and-webgl-threejs
-     */
-
-    class CSS3DObject extends Object3D {
-
-    	constructor( element ) {
-
-    		super();
-
-    		this.element = element || document.createElement( 'div' );
-    		this.element.style.position = 'absolute';
-    		this.element.style.pointerEvents = 'auto';
-
-    		this.addEventListener( 'removed', function () {
-
-    			this.traverse( function ( object ) {
-
-    				if ( object.element instanceof Element && object.element.parentNode !== null ) {
-
-    					object.element.parentNode.removeChild( object.element );
-
-    				}
-
-    			} );
-
-    		} );
-
-    	}
-
-    	copy( source, recursive ) {
-
-    		super.copy( source, recursive );
-
-    		this.element = source.element.cloneNode( true );
-
-    		return this;
-
-    	}
-
-    }
-
-    CSS3DObject.prototype.isCSS3DObject = true;
-
-    class CSS3DSprite extends CSS3DObject {
-
-    	constructor( element ) {
-
-    		super( element );
-
-    		this.rotation2D = 0;
-
-    	}
-
-    	copy( source, recursive ) {
-
-    		super.copy( source, recursive );
-
-    		this.rotation2D = source.rotation2D;
-
-    		return this;
-
-    	}
-
-    }
-
-    CSS3DSprite.prototype.isCSS3DSprite = true;
-
-    //
-
-    const _matrix = new Matrix4();
-    const _matrix2 = new Matrix4();
-
-    class CSS3DRenderer {
-
-    	constructor() {
-
-    		const _this = this;
-
-    		let _width, _height;
-    		let _widthHalf, _heightHalf;
-
-    		const cache = {
-    			camera: { fov: 0, style: '' },
-    			objects: new WeakMap()
-    		};
-
-    		const domElement = document.createElement( 'div' );
-    		domElement.style.overflow = 'hidden';
-
-    		this.domElement = domElement;
-
-    		const cameraElement = document.createElement( 'div' );
-
-    		cameraElement.style.transformStyle = 'preserve-3d';
-    		cameraElement.style.pointerEvents = 'none';
-
-    		domElement.appendChild( cameraElement );
-
-    		this.getSize = function () {
-
-    			return {
-    				width: _width,
-    				height: _height
-    			};
-
-    		};
-
-    		this.render = function ( scene, camera ) {
-
-    			const fov = camera.projectionMatrix.elements[ 5 ] * _heightHalf;
-
-    			if ( cache.camera.fov !== fov ) {
-
-    				domElement.style.perspective = camera.isPerspectiveCamera ? fov + 'px' : '';
-    				cache.camera.fov = fov;
-
-    			}
-
-    			if ( scene.autoUpdate === true ) scene.updateMatrixWorld();
-    			if ( camera.parent === null ) camera.updateMatrixWorld();
-
-    			let tx, ty;
-
-    			if ( camera.isOrthographicCamera ) {
-
-    				tx = - ( camera.right + camera.left ) / 2;
-    				ty = ( camera.top + camera.bottom ) / 2;
-
-    			}
-
-    			const cameraCSSMatrix = camera.isOrthographicCamera ?
-    				'scale(' + fov + ')' + 'translate(' + epsilon( tx ) + 'px,' + epsilon( ty ) + 'px)' + getCameraCSSMatrix( camera.matrixWorldInverse ) :
-    				'translateZ(' + fov + 'px)' + getCameraCSSMatrix( camera.matrixWorldInverse );
-
-    			const style = cameraCSSMatrix +
-    				'translate(' + _widthHalf + 'px,' + _heightHalf + 'px)';
-
-    			if ( cache.camera.style !== style ) {
-
-    				cameraElement.style.transform = style;
-
-    				cache.camera.style = style;
-
-    			}
-
-    			renderObject( scene, scene, camera);
-
-    		};
-
-    		this.setSize = function ( width, height ) {
-
-    			_width = width;
-    			_height = height;
-    			_widthHalf = _width / 2;
-    			_heightHalf = _height / 2;
-
-    			domElement.style.width = width + 'px';
-    			domElement.style.height = height + 'px';
-
-    			cameraElement.style.width = width + 'px';
-    			cameraElement.style.height = height + 'px';
-
-    		};
-
-    		function epsilon( value ) {
-
-    			return Math.abs( value ) < 1e-10 ? 0 : value;
-
-    		}
-
-    		function getCameraCSSMatrix( matrix ) {
-
-    			const elements = matrix.elements;
-
-    			return 'matrix3d(' +
-    				epsilon( elements[ 0 ] ) + ',' +
-    				epsilon( - elements[ 1 ] ) + ',' +
-    				epsilon( elements[ 2 ] ) + ',' +
-    				epsilon( elements[ 3 ] ) + ',' +
-    				epsilon( elements[ 4 ] ) + ',' +
-    				epsilon( - elements[ 5 ] ) + ',' +
-    				epsilon( elements[ 6 ] ) + ',' +
-    				epsilon( elements[ 7 ] ) + ',' +
-    				epsilon( elements[ 8 ] ) + ',' +
-    				epsilon( - elements[ 9 ] ) + ',' +
-    				epsilon( elements[ 10 ] ) + ',' +
-    				epsilon( elements[ 11 ] ) + ',' +
-    				epsilon( elements[ 12 ] ) + ',' +
-    				epsilon( - elements[ 13 ] ) + ',' +
-    				epsilon( elements[ 14 ] ) + ',' +
-    				epsilon( elements[ 15 ] ) +
-    			')';
-
-    		}
-
-    		function getObjectCSSMatrix( matrix ) {
-
-    			const elements = matrix.elements;
-    			const matrix3d = 'matrix3d(' +
-    				epsilon( elements[ 0 ] ) + ',' +
-    				epsilon( elements[ 1 ] ) + ',' +
-    				epsilon( elements[ 2 ] ) + ',' +
-    				epsilon( elements[ 3 ] ) + ',' +
-    				epsilon( - elements[ 4 ] ) + ',' +
-    				epsilon( - elements[ 5 ] ) + ',' +
-    				epsilon( - elements[ 6 ] ) + ',' +
-    				epsilon( - elements[ 7 ] ) + ',' +
-    				epsilon( elements[ 8 ] ) + ',' +
-    				epsilon( elements[ 9 ] ) + ',' +
-    				epsilon( elements[ 10 ] ) + ',' +
-    				epsilon( elements[ 11 ] ) + ',' +
-    				epsilon( elements[ 12 ] ) + ',' +
-    				epsilon( elements[ 13 ] ) + ',' +
-    				epsilon( elements[ 14 ] ) + ',' +
-    				epsilon( elements[ 15 ] ) +
-    			')';
-
-    			return 'translate(-50%,-50%)' + matrix3d;
-
-    		}
-
-    		function renderObject( object, scene, camera, cameraCSSMatrix ) {
-
-    			if ( object.isCSS3DObject ) {
-
-    				object.onBeforeRender( _this, scene, camera );
-
-    				let style;
-
-    				if ( object.isCSS3DSprite ) {
-
-    					// http://swiftcoder.wordpress.com/2008/11/25/constructing-a-billboard-matrix/
-
-    					_matrix.copy( camera.matrixWorldInverse );
-    					_matrix.transpose();
-
-    					if ( object.rotation2D !== 0 ) _matrix.multiply( _matrix2.makeRotationZ( object.rotation2D ) );
-
-    					_matrix.copyPosition( object.matrixWorld );
-    					_matrix.scale( object.scale );
-
-    					_matrix.elements[ 3 ] = 0;
-    					_matrix.elements[ 7 ] = 0;
-    					_matrix.elements[ 11 ] = 0;
-    					_matrix.elements[ 15 ] = 1;
-
-    					style = getObjectCSSMatrix( _matrix );
-
+    		for ( let i = 0; i < lines.length; i ++ ) {
+    			const atom_or_bond = lines[i].split(',');
+    			for (let i = 0; i<atom_or_bond.length; i++) {
+    				atom_or_bond[i] = atom_or_bond[i].trim();
+    				if (i === 3) {
+    					atom_or_bond[i] = atom_or_bond[i].toUpperCase();
     				} else {
-
-    					style = getObjectCSSMatrix( object.matrixWorld );
-
+    					atom_or_bond[i] = parseFloat(atom_or_bond[i]);
     				}
-
-    				const element = object.element;
-    				const cachedObject = cache.objects.get( object );
-
-    				if ( cachedObject === undefined || cachedObject.style !== style ) {
-
-    					element.style.transform = style;
-
-    					const objectData = { style: style };
-    					cache.objects.set( object, objectData );
-
-    				}
-
-    				element.style.display = object.visible ? '' : 'none';
-
-    				if ( element.parentNode !== cameraElement ) {
-
-    					cameraElement.appendChild( element );
-
-    				}
-
-    				object.onAfterRender( _this, scene, camera );
-
     			}
-
-    			for ( let i = 0, l = object.children.length; i < l; i ++ ) {
-
-    				renderObject( object.children[ i ], scene, camera);
-
+    			if (atom_or_bond.length === 3) {
+    				// bond. First 2 numbers are the atom indices, and the 3rd is the number of bonds between them
+    				bonds.push({
+    					'atoms': atom_or_bond.slice(0,2),
+    					'count': parseInt(atom_or_bond[2]),
+    				});
+    			} else if (atom_or_bond.length === 4) {
+    				// atom. First 3 numbers are the x, y, z coordinates, and the 4th is the atom type
+    				atoms[i] = {
+    					'coordinates': atom_or_bond.slice(0,3),
+    					'element': atom_or_bond[3],
+    				};
     			}
-
     		}
-
+    		return {'atoms': atoms, 'bonds': bonds};
     	}
 
     }
 
-    /*
-    Notes about a pdb file:
-    in the atom section (HETATM for heterogenous atom), it shows the name of the atom, the residue, and the position of the atom relative to the center
-    in the bond section (CONECT) it shows the atom and then which other atoms it is bonded to. Ex: 1 2 3 4 means atom 1 is connected to 2, 3, and 4.
-    */
+    let camera, scene, renderer, labelRenderer;
+    let controls;
 
-
-    let camera, scene, renderer, controls, root;
+    let root;
 
     const MOLECULE_PATHS = {
-        'Caffeine': 'caffeine.pdb',
+        'Aspirin': 'aspirin.sdf',
+        'Ethyne(Acetylene)': 'ethyne.sdf',
     };
 
-    const loader = new PDBLoader();
-    const colorSpriteMap = {};
-    const baseSprite = document.createElement( 'img' );
-    const SPACING = 75;  // this is the distance between the atoms, and the length of the bonds
-    const tmpVec1 = new Vector3();
-    const tmpVec2 = new Vector3();
-    const tmpVec3 = new Vector3();
-    const tmpVec4 = new Vector3();
-    const offset = new Vector3();
+    let current_molecule = 'Aspirin';
 
-    let current_molecule = 'Caffeine';
+    var mouse_ray = new Raycaster();
+    var mouse = new Vector2();
+
+
+    const csv_loader = new CSVLoader();
+    const SPACING = 75;
+    const ATOM_SIZE = 25;
+
+    const normalMaterial = new MeshNormalMaterial();
+
+    let errors_allowed = 5;
+
+    // one problem is when you do "get" it isnt reactive. You just get the value at that time. If the value changes, you need to get it again
+    // const atom_info = get(atoms);
+    // const creator_moves_remaining_count = get(creator_moves_remaining);
+    // const selected_atom_ = get(selected_atom);
 
 
     class CompoundCreator {
@@ -47038,263 +47166,541 @@ var app = (function () {
         }
     }
 
-
-    function init() {
-        camera = new PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 2000);
-        camera.position.z = 700;
-
-        scene = new Scene();
-
-        root = new Object3D();
-        scene.add(root);
-
-        renderer = new CSS3DRenderer();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-        controls = new TrackballControls(camera, renderer.domElement);
-        controls.rotateSpeed = 5;
-
-        baseSprite.src = 'ball.png';
-        baseSprite.onload = function() {
-            loadMolecule(MOLECULE_PATHS[current_molecule]);
-        };
-
-        window.addEventListener('resize', onWindowResize);
-    }
-
     function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        labelRenderer.setSize( window.innerWidth, window.innerHeight );
+        animate();
     }
 
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
         renderer.render(scene, camera);
+        labelRenderer.render( scene, camera );
     }
 
-    function colorify(ctx, width, height, color) {
-        const r = color.r, g = color.g, b = color.b;
+    function init() {
 
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const data = imageData.data;
-        for (let i = 0, l = data.length; i < l; i += 4) {
-            data[i + 0] *= r;
-            data[i + 1] *= g;
-            data[i + 2] *= b;
+        scene = new Scene();
+        scene.background = new Color( 0x5d879c );
+
+        camera = new PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 5000 );
+        camera.position.z = 500;
+        scene.add( camera );
+
+        scene.add( new AmbientLight( 0x515151, 3 ) );
+
+        root = new Group();
+        scene.add( root );
+
+        renderer = new WebGLRenderer( { antialias: true } );
+        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        document.getElementById( 'canvas-container' ).appendChild( renderer.domElement );
+
+        labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize( window.innerWidth, window.innerHeight );
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        document.getElementById( 'canvas-container' ).appendChild( labelRenderer.domElement );
+
+        controls = new TrackballControls( camera, renderer.domElement );
+        controls.minDistance = 100;
+        controls.maxDistance = 1000;
+
+        loadMolecule( MOLECULE_PATHS[current_molecule] );
+        window.addEventListener( 'resize', onWindowResize );
+        window.addEventListener('click', (event) => on_mouse_click(), false);
+        window.addEventListener('mousemove', (event) => on_mouse_move(event), false);
+        mouse_ray.setFromCamera( mouse, camera );
+    }
+
+
+    function on_mouse_move(event){
+        // calculate mouse position in normalized device coordinates
+        // (-1 to +1) for both components
+        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        mouse_ray.setFromCamera( mouse, camera );
+    }
+
+    function recursively_get_all_scene_objects() {
+        const all_scene_objects = [];
+        get_scene_objects_helper(scene, all_scene_objects);
+        return all_scene_objects
+    }
+
+    function get_scene_objects_helper(root, current_object_list) {
+        if (root instanceof Mesh) {
+            current_object_list.push(root);
         }
-        ctx.putImageData( imageData, 0, 0);
-    }
-
-    function imageToCanvas(image) {
-        const canvas = document.createElement('canvas');
-        canvas.width = image.width;
-        canvas.height = image.height;
-
-        const context = canvas.getContext('2d');
-        context.drawImage(image, 0, 0, image.width, image.height);
-        return canvas
-    }
-
-
-    function addBondClassStyles (el) {
-        /*
-        Adds these styles inline, because svelte is funky and if the element doesnt exist yet, it doesnt add the style.
-        There might be a better way
-        .bond {
-            width: 5px;
-            background: rgb(242, 242, 242);
-            display: block;
-        */
-       el.style.width = '5px';
-       el.style.background = 'rgb(242, 242, 242)';
-       el.style.display = 'block';
-    }
-
-    function loadMolecule(model) {
-        const model_file_path = 'models/pdb/' + model;
-
-        loader.load(model_file_path, function(pdb) {
-            const geometryAtoms = pdb.geometryAtoms;
-            const geometryBonds = pdb.geometryBonds;
-            const json = pdb.json;
-
-            geometryAtoms.computeBoundingBox();
-            geometryAtoms.boundingBox.getCenter(offset).negate();
-            geometryAtoms.translate(offset.x, offset.y, offset.z);
-            geometryBonds.translate(offset.x, offset.y, offset.z);
-
-            const positionAtoms = geometryAtoms.getAttribute('position');
-            const colorAtoms = geometryAtoms.getAttribute('color');
-            const position = new Vector3();
-            const color = new Color();
-
-            for (let i=0; i< positionAtoms.count; i++) {
-                position.fromBufferAttribute(positionAtoms, i);
-                color.fromBufferAttribute(colorAtoms, i);
-
-                const atomJSON = json.atoms[i];
-                const element = atomJSON[4];
-
-                if (!colorSpriteMap[element]) {
-                    const canvas = imageToCanvas(baseSprite);
-                    const context = canvas.getContext('2d');
-
-                    colorify(context, canvas.width, canvas.height, color);
-
-                    const dataUrl = canvas.toDataURL();
-                    colorSpriteMap[element] = [];
-                    colorSpriteMap[element][0] = dataUrl;
-
-                    const blank_canvas = imageToCanvas(baseSprite);
-                    const blank_context = blank_canvas.getContext('2d');
-                    colorify(blank_context, blank_canvas.width, blank_canvas.height, new Color(0.1, 0.1, 0.1));
-                    const blank_dataUrl = blank_canvas.toDataURL();
-                    colorSpriteMap[element][1] = blank_dataUrl;
-                }
-
-                const colorSprite = colorSpriteMap[element][0];
-                const blankSprite = colorSpriteMap[element][1];
-                const atom = document.createElement('img');
-                atom.src = blankSprite;
-                atom.addEventListener('click', (e) => {
-                    atom.src = colorSprite;  // this is the dataUrl
-                });
-
-                const object = new CSS3DSprite(atom);
-                object.position.copy(position);
-                object.position.multiplyScalar(SPACING);
-
-                object.matrixAutoUpdate = false;
-                object.updateMatrix();
-                
-                root.add(object);
+        if (root.children.length) {
+            for (let c=0; c<root.children.length; c++) {
+                let child = root.children[c];
+                get_scene_objects_helper(child, current_object_list);
             }
+        }
+    }
 
-            const positionBonds = geometryBonds.getAttribute('position');
+    function on_mouse_click(event) {
+        // this next line helps debug. Previously we were getting different positions because the renderer was expecting
+        // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
+        // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
+        let all_scene_objects = recursively_get_all_scene_objects();
+        // let intersects = unique(mouse_ray.intersectObjects( all_scene_objects, false ), (o) => o.object.uuid);
+        let intersects = mouse_ray.intersectObjects( all_scene_objects, false );
+        let intersects_with_click = intersects.filter(intersect => intersect.object.onclick) || [];
+        if (intersects_with_click.length) {
+            creator_moves_remaining.set(get_store_value(creator_moves_remaining) - 1);
+            intersects_with_click[0].object.onclick();
+        }
+        // intersects_with_click.forEach(intersect => {
+        //     console.log(intersect)
+        //     intersect.object.onclick()
+        // })
+    }
+
+    function loadMolecule( model ) {
+
+        const url = 'models/sdf/' + model;
+
+        while ( root.children.length > 0 ) {
+
+            const object = root.children[ 0 ];
+            object.parent.remove( object );
+
+        }
+
+        csv_loader.load( url, function ( csv ) {
+            let csv_atoms = csv.atoms;
+            let csv_bonds = csv.bonds;
+            creator_moves_remaining.set(csv_atoms.length + errors_allowed);
+
+            const bondGeometry = new BoxGeometry( 1, 1, 1 );
+            const atomGeometry = new IcosahedronGeometry( 1, 3 );
+            const materials = {};
+            for (let i = 1; i < csv_atoms.length; i++) {
+                const csv_atom = csv_atoms[i];
+                const element = csv_atom.element.toLowerCase();
+                if (!materials[element]) {
+                    let color_info = get_store_value(atoms)[element.toUpperCase()]['color'];
+                    let color = new Color(`rgb(${color_info[0]}, ${color_info[1]}, ${color_info[2]})`);
+                    materials[element] = new MeshToonMaterial( { color: color } );
+                }
+                const atom_obj = new Mesh( atomGeometry, normalMaterial );
+                atom_obj.position.set( ...csv_atom.coordinates );
+                atom_obj.position.multiplyScalar(SPACING);
+                atom_obj.scale.set( ATOM_SIZE, ATOM_SIZE, ATOM_SIZE );
+                atom_obj.onclick = () => {
+                    if (element === get_store_value(selected_atom).toLowerCase()) {
+                        atom_obj.material = materials[element];
+                    }
+                };
+                root.add( atom_obj );
+            }
             const start = new Vector3();
             const end = new Vector3();
-
-            for (let i=0; i < positionBonds.count; i += 2) {
-                start.fromBufferAttribute(positionBonds, i);
+            const bondMaterial = new MeshToonMaterial( { color: 0xffffff } );
+            for (let i = 0; i < csv_bonds.length; i++) {
+                const csv_bond = csv_bonds[i];
+                start.set(...csv_atoms[csv_bond.atoms[0]].coordinates);
                 start.multiplyScalar(SPACING);
-                end.fromBufferAttribute(positionBonds, i+1);
+                end.set(...csv_atoms[csv_bond.atoms[1]].coordinates);
                 end.multiplyScalar(SPACING);
-
-                /*
-                Remember the dot product is how similar the lines are (cosine similarity - it is the cosine of the angle between them).
-                Perpendicular lines are not similar and will be 0 (and cos(90) = 0),
-                whereas parallel lines are very similar (and cos(0) = 1)
-                It is equal to AxBx + AyBy + AzBz, or the product of the magitudes times the cosine of the angle between the lines.
-                Ex, imagine lines going from the origin to [1, 3] and [1, 4]. The magnitude of each about 3.5 and 4.5, and cosine(pi/2) = .9. So the result is about 13.
-                In physics it could be used to find the work done. Force dot distance = work. If your force and distance are in the same direction,
-                there is work, and if the object moves perpendicular to the force, the force didnt do any work.
-                Dot product is also the projection of one vector onto the other.
-
-                Cross product gives a vector perpendicular to the vectors, with the magnitude equal to the area of the parallelogram between them
-                A X B = (Ay​Bz​−Az​By​, Az​Bx​−Ax​Bz​, Ax​By​−Ay​Bx​)
-                90 degrees would give you the biggest area.
-                Cross product is used in torque. Torque = radius cross force. So if you have a pole on a spoke,
-                and your force is pointed straight at the spoke so the force and the pole are in the same direction, there is no torque. But if
-                you push perpendicular to the direction of the pole, you get the maximum torque.
-
-                Cross product is also useful to find the area of a triangle if you have 3 points. Take two of the vectors, do the cross product. That is
-                the area of the parallelogram. Just divide that by 2 to get the triangle.
-
-                Also the cross product is useful to find normal vectors to a surface, so it can help determine how a surface will be lit.
-                And the surfaces that are facing away from the camera can be ignored (backface culling)
-
-                TLDR:
-                here it is used to
-                */
-                tmpVec1.subVectors(end, start);  // this subtracts end - start, so you basically get the directional vector starting from 0
-                console.log(baseSprite.width);
-                const bondLength = tmpVec1.length() - 51;  // 50 because the bonds go to the center of the atom, but we dont want them to show over the atom, and the image is 64 pixels but the ball is only about 50
-                // Note: cross sets the vector to the result and returns itself, dot just returns the magnitude of the similarity
-                
-                // this gives you a normal vector to the direction of the bond and the vertical
-                // which is used as the axis to rotate around.
-                const axis = tmpVec2.set(0, 1, 0).cross(tmpVec1);
-                // this gives you the radians between the distance vector (vec1) and the y axis
-                // it works because normalizing the vector makes its magnitude 1, and the y axis vector has a magnitude of 1, so mag x mag x cos(angle) = 1 x 1 x cos(angle)
-                // and then we take the acos, which gives us just the angle (in radians)
-                const radians = Math.acos(tmpVec3.set(0, 1, 0).dot(tmpVec4.copy(tmpVec1).normalize()));
-                const objMatrix = new Matrix4().makeRotationAxis( axis.normalize(), radians);
-
-                let bond = document.createElement('div');
-                addBondClassStyles(bond);
-                bond.style.height = bondLength + 'px';
-
-                let object = new CSS3DObject(bond);
-                object.position.copy(start);
-                object.position.lerp(end, 0.5);  // moves the object to the halfway point between start and end, so it is centered
-                // object.userData.bondLengthShort = bondLength + 'px';
-                // object.userData.bondLengthFull = (bondLength + 55) + 'px';   // TODO: what is the 55? is it to counter the - 50 above?
-                object.matrix.copy(objMatrix);
-                object.quaternion.setFromRotationMatrix(object.matrix);
-                object.matrixAutoUpdate = false;
-                object.updateMatrix();
-                root.add(object);
-
-                // why create joint? Because doing the 90 degree rotation is easy if you make a parent object,
-                // since the 90 degrees can be relative to the parent
-                let joint = new Object3D();
-                joint.position.copy(start);
-                joint.position.lerp(end, 0.5);
-                joint.matrix.copy(objMatrix);
-                joint.quaternion.setFromRotationMatrix(joint.matrix);
-                joint.matrixAutoUpdate = false;
-                joint.updateMatrix();
-
-                let bond2 = document.createElement('div');
-                addBondClassStyles(bond2);
-                bond2.style.height = bondLength + 'px';
-                let object2 = new CSS3DObject(bond2);
-                object2.rotation.y = Math.PI / 2;
-                object2.matrixAutoUpdate = false;
-                object2.updateMatrix();
-                // these settings were used when only displaying bonds for example
-                // object2.userData.bondLengthShort = bondLength + 'px';
-                // object2.userData.bondLengthFull = (bondLength + 55) + 'px';
-                // object2.userData.joint = joint;
-                joint.add(object2);
-                root.add(joint);
+                const parent_object = new Object3D();
+                parent_object.position.copy( start );
+                parent_object.position.lerp( end, 0.5 );
+                parent_object.scale.set( 5, 5, start.distanceTo( end ) );
+                parent_object.lookAt( end );
+                parent_object.scale.set( 5, 5, start.distanceTo( end ) );
+                root.add( parent_object );
+                if (csv_bond.count === 1) {
+                    const object = new Mesh( bondGeometry, bondMaterial );
+                    parent_object.add( object );
+                } else if (csv_bond.count === 2) {
+                    const object = new Mesh( bondGeometry, bondMaterial );
+                    object.position.y = 1;
+                    parent_object.add( object );
+                    const object2 = new Mesh( bondGeometry, bondMaterial );
+                    object2.position.y = -1;
+                    parent_object.add( object2 );
+                } else if (csv_bond.count === 3) {
+                    const object = new Mesh( bondGeometry, bondMaterial );
+                    object.position.y = 2;
+                    parent_object.add( object );
+                    const object2 = new Mesh( bondGeometry, bondMaterial );
+                    parent_object.add( object2 );
+                    const object3 = new Mesh( bondGeometry, bondMaterial );
+                    object3.position.y = -2;
+                    parent_object.add( object3 );
+                } else {
+                    throw new Error('Too many bonds!');
+                }
             }
 
-        });
+            // geometryAtoms.computeBoundingBox();
+            // geometryAtoms.boundingBox.getCenter( offset ).negate();
+
+            // geometryAtoms.translate( offset.x, offset.y, offset.z );
+            // geometryBonds.translate( offset.x, offset.y, offset.z );
+
+            // let positions = geometryAtoms.getAttribute( 'position' );
+            // const colors = geometryAtoms.getAttribute( 'color' );
+
+            // const position = new THREE.Vector3();
+            // const color = new THREE.Color();
+
+            // for ( let i = 0; i < positions.count; i ++ ) {
+
+            //     position.x = positions.getX( i );
+            //     position.y = positions.getY( i );
+            //     position.z = positions.getZ( i );
+
+            //     color.r = colors.getX( i );
+            //     color.g = colors.getY( i );
+            //     color.b = colors.getZ( i );
+
+            //     const material = new THREE.MeshPhongMaterial( { color: color } );
+
+            //     const object = new THREE.Mesh( sphereGeometry, material );
+            //     object.position.copy( position );
+            //     object.position.multiplyScalar( 75 );
+            //     object.scale.multiplyScalar( 25 );
+            //     root.add( object );
+
+            //     const atom = json.atoms[ i ];
+
+            //     const text = document.createElement( 'div' );
+            //     text.className = 'label';
+            //     text.style.color = 'rgb(' + atom[ 3 ][ 0 ] + ',' + atom[ 3 ][ 1 ] + ',' + atom[ 3 ][ 2 ] + ')';
+            //     text.textContent = atom[ 4 ];
+
+            //     const label = new CSS2DObject( text );
+            //     label.position.copy( object.position );
+            //     root.add( label );
+
+            // }
+
+            // positions = geometryBonds.getAttribute( 'position' );
+
+            // const start = new THREE.Vector3();
+            // const end = new THREE.Vector3();
+
+            // for ( let i = 0; i < positions.count; i += 2 ) {
+
+            //     start.x = positions.getX( i );
+            //     start.y = positions.getY( i );
+            //     start.z = positions.getZ( i );
+
+            //     end.x = positions.getX( i + 1 );
+            //     end.y = positions.getY( i + 1 );
+            //     end.z = positions.getZ( i + 1 );
+
+            //     start.multiplyScalar( 75 );
+            //     end.multiplyScalar( 75 );
+
+            //     const object = new THREE.Mesh( boxGeometry, new THREE.MeshPhongMaterial( { color: 0xffffff } ) );
+            //     object.position.copy( start );
+            //     object.position.lerp( end, 0.5 );
+            //     object.scale.set( 5, 5, start.distanceTo( end ) );
+            //     object.lookAt( end );
+            //     root.add( object );
+
+            // }
+
+            animate();
+
+        } );
+
     }
 
-    /* src/components/compound_creator/main.svelte generated by Svelte v3.50.0 */
-    const file$1 = "src/components/compound_creator/main.svelte";
+    /* src/components/compound_creator/right_element_bar.svelte generated by Svelte v3.50.0 */
+
+    const { Object: Object_1, console: console_1 } = globals;
+    const file$2 = "src/components/compound_creator/right_element_bar.svelte";
+
+    function get_each_context(ctx, list, i) {
+    	const child_ctx = ctx.slice();
+    	child_ctx[6] = list[i];
+    	return child_ctx;
+    }
+
+    // (11:4) {#each Object.keys($atoms) as atom_symbol}
+    function create_each_block(ctx) {
+    	let div;
+    	let t_value = /*atom_symbol*/ ctx[6] + "";
+    	let t;
+    	let mounted;
+    	let dispose;
+
+    	function click_handler_1(...args) {
+    		return /*click_handler_1*/ ctx[5](/*atom_symbol*/ ctx[6], ...args);
+    	}
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			t = text(t_value);
+    			add_location(div, file$2, 11, 8, 342);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    			append_dev(div, t);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(click_handler_1), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(new_ctx, dirty) {
+    			ctx = new_ctx;
+    			if (dirty & /*$atoms*/ 2 && t_value !== (t_value = /*atom_symbol*/ ctx[6] + "")) set_data_dev(t, t_value);
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_each_block.name,
+    		type: "each",
+    		source: "(11:4) {#each Object.keys($atoms) as atom_symbol}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$2(ctx) {
+    	let div3;
+    	let div0;
+    	let t0;
+    	let t1;
+    	let div1;
+    	let t2;
+    	let t3;
+    	let div2;
+    	let t4;
+    	let mounted;
+    	let dispose;
+    	let each_value = Object.keys(/*$atoms*/ ctx[1]);
+    	validate_each_argument(each_value);
+    	let each_blocks = [];
+
+    	for (let i = 0; i < each_value.length; i += 1) {
+    		each_blocks[i] = create_each_block(get_each_context(ctx, each_value, i));
+    	}
+
+    	const block = {
+    		c: function create() {
+    			div3 = element("div");
+    			div0 = element("div");
+    			t0 = space();
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].c();
+    			}
+
+    			t1 = space();
+    			div1 = element("div");
+    			t2 = text(/*$creator_moves_remaining*/ ctx[2]);
+    			t3 = space();
+    			div2 = element("div");
+    			t4 = text(/*$selected_atom*/ ctx[0]);
+    			attr_dev(div0, "id", "spacer");
+    			attr_dev(div0, "class", "svelte-qn44li");
+    			add_location(div0, file$2, 9, 4, 215);
+    			add_location(div1, file$2, 13, 4, 446);
+    			add_location(div2, file$2, 14, 4, 488);
+    			attr_dev(div3, "id", "sidebar-right");
+    			attr_dev(div3, "class", "svelte-qn44li");
+    			add_location(div3, file$2, 8, 0, 186);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, div0);
+    			append_dev(div3, t0);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].m(div3, null);
+    			}
+
+    			append_dev(div3, t1);
+    			append_dev(div3, div1);
+    			append_dev(div1, t2);
+    			append_dev(div3, t3);
+    			append_dev(div3, div2);
+    			append_dev(div2, t4);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div0, "click", stop_propagation(/*click_handler*/ ctx[4]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*set_selected_atom, Object, $atoms*/ 10) {
+    				each_value = Object.keys(/*$atoms*/ ctx[1]);
+    				validate_each_argument(each_value);
+    				let i;
+
+    				for (i = 0; i < each_value.length; i += 1) {
+    					const child_ctx = get_each_context(ctx, each_value, i);
+
+    					if (each_blocks[i]) {
+    						each_blocks[i].p(child_ctx, dirty);
+    					} else {
+    						each_blocks[i] = create_each_block(child_ctx);
+    						each_blocks[i].c();
+    						each_blocks[i].m(div3, t1);
+    					}
+    				}
+
+    				for (; i < each_blocks.length; i += 1) {
+    					each_blocks[i].d(1);
+    				}
+
+    				each_blocks.length = each_value.length;
+    			}
+
+    			if (dirty & /*$creator_moves_remaining*/ 4) set_data_dev(t2, /*$creator_moves_remaining*/ ctx[2]);
+    			if (dirty & /*$selected_atom*/ 1) set_data_dev(t4, /*$selected_atom*/ ctx[0]);
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div3);
+    			destroy_each(each_blocks, detaching);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$2.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$2($$self, $$props, $$invalidate) {
+    	let $selected_atom;
+    	let $atoms;
+    	let $creator_moves_remaining;
+    	validate_store(selected_atom, 'selected_atom');
+    	component_subscribe($$self, selected_atom, $$value => $$invalidate(0, $selected_atom = $$value));
+    	validate_store(atoms, 'atoms');
+    	component_subscribe($$self, atoms, $$value => $$invalidate(1, $atoms = $$value));
+    	validate_store(creator_moves_remaining, 'creator_moves_remaining');
+    	component_subscribe($$self, creator_moves_remaining, $$value => $$invalidate(2, $creator_moves_remaining = $$value));
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('Right_element_bar', slots, []);
+
+    	function set_selected_atom(symbol) {
+    		set_store_value(selected_atom, $selected_atom = symbol, $selected_atom);
+    	}
+
+    	const writable_props = [];
+
+    	Object_1.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<Right_element_bar> was created with unknown prop '${key}'`);
+    	});
+
+    	const click_handler = _ => console.log('yo');
+    	const click_handler_1 = (atom_symbol, _) => set_selected_atom(atom_symbol);
+
+    	$$self.$capture_state = () => ({
+    		creator_moves_remaining,
+    		atoms,
+    		selected_atom,
+    		set_selected_atom,
+    		$selected_atom,
+    		$atoms,
+    		$creator_moves_remaining
+    	});
+
+    	return [
+    		$selected_atom,
+    		$atoms,
+    		$creator_moves_remaining,
+    		set_selected_atom,
+    		click_handler,
+    		click_handler_1
+    	];
+    }
+
+    class Right_element_bar extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init$1(this, options, instance$2, create_fragment$2, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Right_element_bar",
+    			options,
+    			id: create_fragment$2.name
+    		});
+    	}
+    }
+
+    /* src/components/compound_creator/compound_creator.svelte generated by Svelte v3.50.0 */
+    const file$1 = "src/components/compound_creator/compound_creator.svelte";
 
     function create_fragment$1(ctx) {
     	let div1;
+    	let rightsidebar;
+    	let t;
     	let div0;
+    	let current;
+    	rightsidebar = new Right_element_bar({ $$inline: true });
 
     	const block = {
     		c: function create() {
     			div1 = element("div");
+    			create_component(rightsidebar.$$.fragment);
+    			t = space();
     			div0 = element("div");
     			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$1, 10, 4, 207);
+    			add_location(div0, file$1, 12, 4, 286);
     			attr_dev(div1, "id", "outer");
     			attr_dev(div1, "class", "svelte-1i2m9uj");
-    			add_location(div1, file$1, 9, 0, 186);
+    			add_location(div1, file$1, 10, 0, 245);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div1, anchor);
+    			mount_component(rightsidebar, div1, null);
+    			append_dev(div1, t);
     			append_dev(div1, div0);
+    			current = true;
     		},
     		p: noop,
-    		i: noop,
-    		o: noop,
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(rightsidebar.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(rightsidebar.$$.fragment, local);
+    			current = false;
+    		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div1);
+    			destroy_component(rightsidebar);
     		}
     	};
 
@@ -47311,7 +47717,7 @@ var app = (function () {
 
     function instance$1($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots('Main', slots, []);
+    	validate_slots('Compound_creator', slots, []);
 
     	onMount(async () => {
     		new CompoundCreator();
@@ -47320,21 +47726,21 @@ var app = (function () {
     	const writable_props = [];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Main> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Compound_creator> was created with unknown prop '${key}'`);
     	});
 
-    	$$self.$capture_state = () => ({ onMount, CompoundCreator });
+    	$$self.$capture_state = () => ({ onMount, CompoundCreator, RightSideBar: Right_element_bar });
     	return [];
     }
 
-    class Main extends SvelteComponentDev {
+    class Compound_creator extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
     		init$1(this, options, instance$1, create_fragment$1, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
-    			tagName: "Main",
+    			tagName: "Compound_creator",
     			options,
     			id: create_fragment$1.name
     		});
@@ -47344,7 +47750,7 @@ var app = (function () {
     /* src/App.svelte generated by Svelte v3.50.0 */
     const file = "src/App.svelte";
 
-    // (18:1) {:else}
+    // (16:1) {:else}
     function create_else_block(ctx) {
     	let p;
 
@@ -47352,7 +47758,7 @@ var app = (function () {
     		c: function create() {
     			p = element("p");
     			p.textContent = "Loading ...";
-    			add_location(p, file, 18, 2, 628);
+    			add_location(p, file, 16, 2, 551);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
@@ -47368,38 +47774,7 @@ var app = (function () {
     		block,
     		id: create_else_block.name,
     		type: "else",
-    		source: "(18:1) {:else}",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    // (16:62) 
-    function create_if_block_3(ctx) {
-    	let p;
-
-    	const block = {
-    		c: function create() {
-    			p = element("p");
-    			p.textContent = "compound creator";
-    			add_location(p, file, 16, 2, 593);
-    		},
-    		m: function mount(target, anchor) {
-    			insert_dev(target, p, anchor);
-    		},
-    		i: noop,
-    		o: noop,
-    		d: function destroy(detaching) {
-    			if (detaching) detach_dev(p);
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_if_block_3.name,
-    		type: "if",
-    		source: "(16:62) ",
+    		source: "(16:1) {:else}",
     		ctx
     	});
 
@@ -47488,7 +47863,7 @@ var app = (function () {
     function create_if_block(ctx) {
     	let compoundcreator;
     	let current;
-    	compoundcreator = new Main({ $$inline: true });
+    	compoundcreator = new Compound_creator({ $$inline: true });
 
     	const block = {
     		c: function create() {
@@ -47528,23 +47903,14 @@ var app = (function () {
     	let current_block_type_index;
     	let if_block;
     	let current;
-
-    	const if_block_creators = [
-    		create_if_block,
-    		create_if_block_1,
-    		create_if_block_2,
-    		create_if_block_3,
-    		create_else_block
-    	];
-
+    	const if_block_creators = [create_if_block, create_if_block_1, create_if_block_2, create_else_block];
     	const if_blocks = [];
 
     	function select_block_type(ctx, dirty) {
     		if (/*$current_scene*/ ctx[0] === possible_scenes.CompoundCreator) return 0;
     		if (/*$current_scene*/ ctx[0] === possible_scenes.Timeline) return 1;
     		if (/*$current_scene*/ ctx[0] === possible_scenes.Battle) return 2;
-    		if (/*$current_scene*/ ctx[0] === possible_scenes.CompoundCreator) return 3;
-    		return 4;
+    		return 3;
     	}
 
     	current_block_type_index = select_block_type(ctx);
@@ -47554,7 +47920,7 @@ var app = (function () {
     		c: function create() {
     			main = element("main");
     			if_block.c();
-    			add_location(main, file, 8, 0, 306);
+    			add_location(main, file, 8, 0, 318);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -47630,7 +47996,7 @@ var app = (function () {
     		current_scene,
     		Timeline: Scientist_timeline,
     		Battle,
-    		CompoundCreator: Main,
+    		CompoundCreator: Compound_creator,
     		$current_scene
     	});
 
