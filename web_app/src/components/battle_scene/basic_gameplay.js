@@ -377,7 +377,7 @@ function on_mouse_click(event) {
     let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
     if (intersects_with_click.length) {
         // audio.play();
-        intersects_with_click.forEach(intersect => intersect.object.onclick(intersect))
+        intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
     }
 }
 
