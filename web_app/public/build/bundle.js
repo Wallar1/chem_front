@@ -42635,11 +42635,10 @@ var app = (function () {
         'Battle': Symbol('battle'),
         'CompoundCreator': Symbol('compound creator')
     });
-    const current_scene = writable(possible_scenes.CompoundCreator);
+    const current_scene = writable(possible_scenes.Battle);
 
     const current_scientist = writable(scientists.RobertBoyle);
 
-    let watched_keys = ['q', 'w', 'e', 'r', ' '];
     const key_to_compound = writable({
         'q': 'H2',
         'w': 'CH4',
@@ -45001,19 +45000,21 @@ var app = (function () {
 
     var global_updates_queue = [];
     var global_clock = new Clock();
+    // Earth settings
+    var earth_radius = 600;
+    var speed = .2;
+    var time_for_full_rotation = 30/speed;
+    var earth_initial_position = new Vector3(0,0,0);
     var gravity = new Vector3(0, -.5, 0);
     var frame_rate = 60;
     var world_units_scale = 1/frame_rate;  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
     var scene$1 = new Scene();
-    var camera$1 = create_camera();
-    var mouse_ray$1 = new Raycaster();
-    var mouse$1 = new Vector2();
+    var camera$1, camera_parent;
+    create_camera();
 
-    // Earth settings
-    var earth_radius = 60;
-    var speed = 1;
-    var time_for_full_rotation = 30/speed;
-    var earth_initial_position = new Vector3(0,0,0);
+    var mouse_ray$1 = new Raycaster();
+    console.log(mouse_ray$1);
+    var mouse$1 = new Vector2();
     var earth = create_earth();
 
     var collision_elements = [];  // we just have to keep track of the enemies and earth, and when the ball moves,
@@ -45038,19 +45039,23 @@ var app = (function () {
             scene$1.add(this.ambient_light);
 
             scene$1.background = create_background();
-            scene$1.add(earth);
+            // scene.add(earth);
         
             mouse_ray$1.setFromCamera( mouse$1, camera$1 );
-            window.addEventListener('resize', () => this.resize_window(), false);
-            window.addEventListener('mousemove', (event) => on_mouse_move$1(event), false);
-            window.addEventListener('click', (event) => on_mouse_click$1(), false);
 
             this.renderer.render(scene$1, camera$1);
-            camera$1.lookAt(new Vector3(0, 30, -100));
+            // camera.lookAt(new THREE.Vector3(0, 30, -100));
             // spawn_enemies()
             // spawn_mines()
             spawn_objects();
-            this.animate();
+        }
+
+        add_event_listeners(){
+            window.addEventListener('resize', () => this.resize_window(), false);
+            window.addEventListener('mousemove', (event) => on_mouse_move$1(event), false);
+            window.addEventListener('click', (event) => on_mouse_click$1(), false);
+            window.addEventListener('keydown', (e) => handle_keydown(e));
+            document.addEventListener('keyup', (e) => handle_keyup(e));
         }
 
         animate(){
@@ -45105,9 +45110,11 @@ var app = (function () {
         const aspect = 1920 / 1080;
         const near = 1.0;
         const far = 1000.0;
-        const camera = new PerspectiveCamera(fov, aspect, near, far);
-        camera.position.set(0, 55, 60);
-        return camera
+        camera$1 = new PerspectiveCamera(fov, aspect, near, far);
+        camera_parent = new Object3D();
+        camera_parent.add(camera$1);
+        camera_parent.position.set(0, 0, earth_radius + 50);
+        // camera_parent.rotateX(Math.PI/2);
     }
 
     function create_directional_light(){
@@ -45144,14 +45151,14 @@ var app = (function () {
         // ONLY COMMENTING THIS NEXT LINE OUT BECAUSE I NEED TO ADJUST THE PROJECTILE ANGLE
         // collision_elements.push(collider)
 
-        function rotate_earth(state) {
-            let new_x_rotation = (global_clock.elapsedTime % time_for_full_rotation) * 2 * Math.PI / time_for_full_rotation;
-            let new_earth_rotation = new Vector3(new_x_rotation, earth.rotation.y, earth.rotation.z);
-            earth.rotation.setFromVector3(new_earth_rotation);
-            return {finished: false}
-        }
-        let updater = new Updater(rotate_earth, {});
-        global_updates_queue.push(updater);
+        // function rotate_earth(state) {
+        //     let new_x_rotation = (global_clock.elapsedTime % time_for_full_rotation) * 2 * Math.PI / time_for_full_rotation;
+        //     let new_earth_rotation = new THREE.Vector3(new_x_rotation, earth.rotation.y, earth.rotation.z)
+        //     earth.rotation.setFromVector3(new_earth_rotation)
+        //     return {finished: false}
+        // }
+        // let updater = new Updater(rotate_earth, {})
+        // global_updates_queue.push(updater)
 
         return earth;
     }
@@ -45305,9 +45312,50 @@ var app = (function () {
     function on_mouse_move$1(event){
         // calculate mouse position in normalized device coordinates
         // (-1 to +1) for both components
-        mouse$1.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-        mouse$1.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        // mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        // mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+
+
+        //check this at some point: https://web.dev/articles/disable-mouse-acceleration
+
+        // the sensitivity is set so that the screen width/height is 180 degrees
+        var movementX = event.movementX || event.mozMovementX || 0;
+        var movementY = event.movementY || event.mozMovementY || 0;
+        let ratio = window.innerWidth / window.innerHeight;
+        
+        let x_radians = -movementX * Math.PI * ratio / window.innerWidth;
+        let y_radians = movementY * Math.PI * ratio / window.innerHeight;
+
+        
+        let current_direction_vector = camera$1.getWorldDirection(new Vector3()).normalize();
+        // Should up just be the parent position - the earth position?
+        let up = new Vector3(0, 1, 0).applyQuaternion(camera_parent.quaternion).normalize();
+        let right = up.clone().cross(current_direction_vector).normalize();
+        
+        // Limit the tilt of the camera. When the up and current_direction_vector are parallel,
+        // it makes the cross product weird, so we avoid that by limiting how far the camera can tilt
+        let tiltLimit = Math.PI / 12; // 15 degrees in radians
+        let angleBetween = current_direction_vector.angleTo(up);
+        console.log(angleBetween, y_radians);
+
+        if (!((y_radians < 0 && angleBetween + y_radians < tiltLimit) || (y_radians > 0 && Math.PI - (angleBetween + y_radians) < tiltLimit))) {
+            let quaternionY = new Quaternion().setFromAxisAngle(right, y_radians);
+            camera$1.quaternion.premultiply(quaternionY);
+        }
+
+        let quaternionX = new Quaternion().setFromAxisAngle(up, x_radians);
+        camera$1.quaternion.premultiply(quaternionX);
+        
+
+        camera$1.updateMatrixWorld(true);
+
+        // console.log(x_radians, y_radians)
         mouse_ray$1.setFromCamera( mouse$1, camera$1 );
+        // var distance = 100; // You can adjust this distance
+        // var direction = mouse_ray.ray.direction.multiplyScalar(distance);
+        // var targetPosition = new THREE.Vector3().copy(camera.parent.position).add(direction);
+        // camera.lookAt(targetPosition);
     }
     function unique(arr, key_func) {
         const ret_arr = [];
@@ -45341,13 +45389,106 @@ var app = (function () {
         }
     }
 
-    document.addEventListener('keydown', (e) => handle_keydown(e));
+    function movement_curve(x) {
+        // TODO: optimize this
+        let ret = Math.max(0, 3 * Math.log10(x) + 3);
+        return ret;
+    }
+
+    function get_gravity_vector_for_camera() {
+        return earth.position.clone().sub(camera$1.position).normalize().multiplyScalar(gravity)
+    }
+
+
+    let movement_key_pressed_time = 0;
+    let current_direction_vector = camera$1.getWorldDirection(new Vector3());
+    const drag = -1; // always against the current direction
+
+    const up = new Vector3(0, 1, 0);
+    const right = new Vector3(1, 0, 0);
+    const down = new Vector3(0, -1, 0);
+    const left = new Vector3(-1, 0, 0);
+
+    const pressed_keys = {
+        'ArrowUp': {
+            'pressed': false,
+            'direction': up,
+        },
+        'ArrowDown': {
+            'pressed': false,
+            'direction': down,
+        },
+        'ArrowLeft': {
+            'pressed': false,
+            'direction': left,
+        },
+        'ArrowRight': {
+            'pressed': false,
+            'direction': right,
+        },
+    };
+
+
+
+
+
+    function get_force_vector_relative_to_camera_direction(key) {
+        normal_vec = pressed_keys[key]['direction'];
+        let current_direction_vector = camera$1.getWorldDirection(new Vector3());
+        // Note: cross sets the vector to the result and returns itself, dot just returns the magnitude of the similarity
+        // this gives you a normal vector to the direction of the bond and the vertical
+        // which is used as the axis to rotate around.
+        let axis_of_rotation = normal_vec.clone().cross(current_direction_vector).normalize();
+        // this gives you the radians between the distance vector (current_direction_vector) and the normal vec axis
+        // it works because normalizing the vector makes its magnitude 1, and the normal vec has a magnitude of 1, so mag x mag x cos(angle) = 1 x 1 x cos(angle)
+        // and then we take the acos, which gives us just the angle (in radians)
+        const radians = Math.acos(normal_vec.dot(current_direction_vector.normalize()));
+        return normal_vec.clone().applyAxisAngle(axis_of_rotation, radians);
+    }
+
+    function move_camera() {
+        // the movement is stored in the current_direction_vector, and is updated every frame
+        let movement_force_scalar = movement_curve(movement_key_pressed_time) - drag;
+        let movement_vector = current_direction_vector.clone().multiplyScalar(movement_force_scalar);
+        let gravity_vector = get_gravity_vector_for_camera();
+        // console.log(movement_force_scalar, movement_vector, gravity_vector)
+        movement_vector.add(gravity_vector);
+        for (let key in pressed_keys) {
+            if (pressed_keys[key]['pressed']) {
+                movement_vector.add(get_force_vector_relative_to_camera_direction(key));
+            }
+        }
+        // camera.position.add(combined_change)
+        // current_direction_vector = camera.getWorldDirection(new THREE.Vector3());
+        // console.log(camera.position)
+        return {finished: false}
+    }
+
+    let updater = new Updater(move_camera, {});
+    global_updates_queue.push(updater);
 
     function handle_keydown(e) {
-        if (watched_keys.includes(e.key)) {
-            let compound = get_store_value(key_to_compound)[e.key];
+        const movement_keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        let keys_to_compound = get_store_value(key_to_compound);
+        if (Object.keys(keys_to_compound).includes(e.key)) {
+            let compound = keys_to_compound[e.key];
             try_to_fire_player_weapon(compound);
+        } else if (movement_keys.includes(e.key)) {
+            pressed_keys[e.key]['pressed'] = true;
+            // if (movement_key_pressed_time <= max_movement_speed - 1) {
+            //     movement_key_pressed_time += 1;
+            // }
+        } 
+    }
+
+    function handle_keyup(e) {
+        const movement_keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+        if (movement_keys.includes(e.key)) {
+            pressed_keys[e.key]['pressed'] = false;
         }
+        // if (movement_keys.includes(e.key) && movement_key_pressed_time >= 1) {
+        //     movement_key_pressed_time -= drag;
+        // }
     }
 
     function check_if_weapon_can_fire_and_get_new_counts(compound) {
@@ -46009,42 +46150,75 @@ var app = (function () {
     }
 
     /* src/components/battle_scene/battle.svelte generated by Svelte v3.50.0 */
+
+    const { console: console_1$1 } = globals;
     const file$3 = "src/components/battle_scene/battle.svelte";
 
     function create_fragment$3(ctx) {
+    	let div4;
     	let div1;
-    	let rightsidebar;
-    	let t0;
-    	let bottomcompoundbar;
-    	let t1;
     	let div0;
+    	let t1;
+    	let rightsidebar;
+    	let t2;
+    	let bottomcompoundbar;
+    	let t3;
+    	let div2;
+    	let t4;
+    	let div3;
     	let current;
+    	let mounted;
+    	let dispose;
     	rightsidebar = new Right_element_bar$1({ $$inline: true });
     	bottomcompoundbar = new Bottom_compound_bar({ $$inline: true });
 
     	const block = {
     		c: function create() {
+    			div4 = element("div");
     			div1 = element("div");
-    			create_component(rightsidebar.$$.fragment);
-    			t0 = space();
-    			create_component(bottomcompoundbar.$$.fragment);
-    			t1 = space();
     			div0 = element("div");
-    			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$3, 13, 4, 353);
-    			add_location(div1, file$3, 10, 0, 298);
+    			div0.textContent = "Start";
+    			t1 = space();
+    			create_component(rightsidebar.$$.fragment);
+    			t2 = space();
+    			create_component(bottomcompoundbar.$$.fragment);
+    			t3 = space();
+    			div2 = element("div");
+    			t4 = space();
+    			div3 = element("div");
+    			attr_dev(div0, "class", "button svelte-1053vkb");
+    			add_location(div0, file$3, 24, 8, 813);
+    			attr_dev(div1, "id", "overlay-to-start");
+    			attr_dev(div1, "class", "svelte-1053vkb");
+    			add_location(div1, file$3, 23, 4, 777);
+    			attr_dev(div2, "id", "cursor");
+    			attr_dev(div2, "class", "svelte-1053vkb");
+    			add_location(div2, file$3, 28, 4, 945);
+    			attr_dev(div3, "id", "canvas-container");
+    			add_location(div3, file$3, 29, 4, 973);
+    			add_location(div4, file$3, 22, 0, 767);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div1, anchor);
-    			mount_component(rightsidebar, div1, null);
-    			append_dev(div1, t0);
-    			mount_component(bottomcompoundbar, div1, null);
-    			append_dev(div1, t1);
+    			insert_dev(target, div4, anchor);
+    			append_dev(div4, div1);
     			append_dev(div1, div0);
+    			append_dev(div4, t1);
+    			mount_component(rightsidebar, div4, null);
+    			append_dev(div4, t2);
+    			mount_component(bottomcompoundbar, div4, null);
+    			append_dev(div4, t3);
+    			append_dev(div4, div2);
+    			append_dev(div4, t4);
+    			append_dev(div4, div3);
     			current = true;
+
+    			if (!mounted) {
+    				dispose = listen_dev(div0, "click", stop_propagation(/*handle_click*/ ctx[0]), false, false, true);
+    				mounted = true;
+    			}
     		},
     		p: noop,
     		i: function intro(local) {
@@ -46059,9 +46233,11 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div1);
+    			if (detaching) detach_dev(div4);
     			destroy_component(rightsidebar);
     			destroy_component(bottomcompoundbar);
+    			mounted = false;
+    			dispose();
     		}
     	};
 
@@ -46079,25 +46255,46 @@ var app = (function () {
     function instance$3($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Battle', slots, []);
+    	var battle_scene;
 
     	onMount(async () => {
-    		new BattleScene();
+    		battle_scene = new BattleScene();
     	});
+
+    	function handle_click() {
+    		let canvas = document.getElementById('canvas-container').firstChild;
+    		console.log(canvas);
+    		canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+    		canvas.requestPointerLock();
+    		battle_scene.add_event_listeners();
+    		battle_scene.animate();
+    		document.getElementById('overlay-to-start').style.display = 'none';
+    	}
 
     	const writable_props = [];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Battle> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1$1.warn(`<Battle> was created with unknown prop '${key}'`);
     	});
 
     	$$self.$capture_state = () => ({
     		onMount,
     		BattleScene,
     		BottomCompoundBar: Bottom_compound_bar,
-    		RightSideBar: Right_element_bar$1
+    		RightSideBar: Right_element_bar$1,
+    		battle_scene,
+    		handle_click
     	});
 
-    	return [];
+    	$$self.$inject_state = $$props => {
+    		if ('battle_scene' in $$props) battle_scene = $$props.battle_scene;
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	return [handle_click];
     }
 
     class Battle extends SvelteComponentDev {
