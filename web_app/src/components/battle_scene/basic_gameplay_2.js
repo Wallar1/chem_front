@@ -159,7 +159,7 @@ function create_camera(){
     earth.add(camera_parent);
     camera_parent.position.set(0, 0, 0);
     camera_parent.add(camera);
-    camera_parent.position.set(0, 0, earth_radius + 50);
+    camera.position.set(0, 0, earth_radius + 50);
     camera.rotateX(Math.PI/2);
 }
 
@@ -185,9 +185,10 @@ function create_directional_light(){
 function create_earth(){
     const earth = new THREE.Mesh(
         new THREE.SphereGeometry( earth_radius, 20, 20 ),
-        new THREE.MeshStandardMaterial({
-            color: 0x086100,
-        })
+        // new THREE.MeshStandardMaterial({
+        //     color: 0x086100,
+        // })
+        new THREE.MeshNormalMaterial()
     );
     earth.position.copy(earth_initial_position)
     earth.castShadow = false;
@@ -370,19 +371,21 @@ function on_mouse_move(event){
     var movementY = event.movementY || event.mozMovementY || 0;
     let ratio = window.innerWidth / window.innerHeight;
     
-    let x_radians = -movementX * Math.PI * ratio / window.innerWidth;
-    let y_radians = -movementY * Math.PI * ratio / window.innerHeight;
+    let x_radians = movementX * Math.PI * ratio / window.innerWidth;
+    let y_radians = movementY * Math.PI * ratio / window.innerHeight;
 
     
-    let current_direction_vector = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    // let current_direction_vector = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    let current_direction_vector = camera_parent.worldToLocal(camera.getWorldDirection(new THREE.Vector3()).normalize())
 
-    let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
+    let camera_position = camera_parent.worldToLocal(camera.getWorldPosition(new THREE.Vector3()))
+
     // // TODO: we can probably just hardcode the earth position, since it doesnt move
-    let earth_world_position = earth.getWorldPosition(new THREE.Vector3())
-    let up = new THREE.Vector3().subVectors(camera_world_position, earth_world_position).normalize()
-    // let right = up.clone().cross(current_direction_vector).normalize();
+    let earth_position = camera_parent.worldToLocal(earth.getWorldPosition(new THREE.Vector3()))
+    // let up = new THREE.Vector3().subVectors(camera_world_position, earth_world_position).normalize()
+    let up = new THREE.Vector3().subVectors(earth_position, camera_position).normalize()
     let right = current_direction_vector.clone().cross(up).normalize();
-    // console.log(up, right, current_direction_vector)
+    console.log(earth_position, camera.position, up, right, current_direction_vector)
     
     // Limit the tilt of the camera. When the up and current_direction_vector are parallel,
     // it makes the cross product weird, so we avoid that by limiting how far the camera can tilt
@@ -392,11 +395,13 @@ function on_mouse_move(event){
     if (!((y_radians < 0 && Math.PI + y_radians - angle_between + y_radians < tilt_limit) || 
             (y_radians > 0 && angle_between - y_radians < tilt_limit))) {
         let quaternionY = new THREE.Quaternion().setFromAxisAngle(right, y_radians);
-        camera.quaternion.premultiply(quaternionY);
+        camera.quaternion.premultiply(quaternionY).normalize();
     }
 
+    // let localUp = camera.worldToLocal(up.clone());
     let quaternionX = new THREE.Quaternion().setFromAxisAngle(up, x_radians);
-    camera.quaternion.premultiply(quaternionX);
+    camera.quaternion.premultiply(quaternionX).normalize();
+    // console.log(quaternionX, x_radians)
 
     camera.updateMatrixWorld(true)
 
@@ -482,9 +487,18 @@ const pressed_keys = {
 
 
 function test() {
-    let current_direction_vector = camera.getWorldDirection(new THREE.Vector3())
-    let pointing_up = earth.position.clone().negate().sub(camera.position).normalize()
-    
+    let current_direction_vector = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
+    // // TODO: we can probably just hardcode the earth position, since it doesnt move
+    let earth_world_position = earth.getWorldPosition(new THREE.Vector3())
+    let up = new THREE.Vector3().subVectors(camera_world_position, earth_world_position).normalize()
+    let forward = current_direction_vector.clone().projectOnPlane(up).normalize();
+    let right = forward.clone().cross(up).normalize();
+    const movement_radians = Math.PI / 2
+    // console.log(right, camera_parent.position, camera.position)
+    let quaternion = new THREE.Quaternion().setFromAxisAngle(right, movement_radians);
+    camera_parent.quaternion.premultiply(quaternion);
+    camera_parent.updateMatrixWorld(true)
 }
 
 
@@ -523,8 +537,8 @@ function move_camera() {
     return {finished: false}
 }
 
-let updater = new Updater(move_camera, {})
-global_updates_queue.push(updater)
+// let updater = new Updater(move_camera, {})
+// global_updates_queue.push(updater)
 
 function handle_keydown(e) {
     const movement_keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
@@ -534,6 +548,7 @@ function handle_keydown(e) {
         try_to_fire_player_weapon(compound)
     } else if (movement_keys.includes(e.key)) {
         pressed_keys[e.key]['pressed'] += 1;
+        test()
         // if (movement_key_pressed_time <= max_movement_speed - 1) {
         //     movement_key_pressed_time += 1;
         // }
