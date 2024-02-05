@@ -44992,8 +44992,8 @@ var app = (function () {
             this.state = state;
         }
 
-        update(){
-            this.state = this.step_function(this.state);
+        update(time_delta){
+            this.state = this.step_function(this.state, time_delta);
         }
     }
 
@@ -45005,6 +45005,8 @@ var app = (function () {
     var speed = .2;
     var time_for_full_rotation = 30/speed;
     var earth_initial_position = new Vector3(0,0,0);
+
+    var time_delta = 0;
     var gravity = new Vector3(0, -.5, 0);
     var frame_rate = 60;
     var world_units_scale = 1/frame_rate;  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
@@ -45063,15 +45065,15 @@ var app = (function () {
             requestAnimationFrame(()=>{
                 this.animate();
                 stats.begin();
-                global_clock.getDelta();
+                time_delta = global_clock.getDelta();
                 this.renderer.render(scene$1, camera$1);
                 let next_updates = [];
-                // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
-                let i = 0;
-                let updater;
-                while (i < global_updates_queue.length) {
-                    updater = global_updates_queue[i];
-                    updater.update();
+                // // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
+                // let i = 0;
+                // while (i < global_updates_queue.length) {
+                for (let i=0; i<global_updates_queue.length; i++) {
+                    let updater = global_updates_queue[i];
+                    updater.update(time_delta);
                     if (!updater.state.finished) { 
                         next_updates.push(updater);
                     } else {
@@ -45314,6 +45316,15 @@ var app = (function () {
         return texture;
     }
 
+    function get_up_direction() {
+        let camera_position = camera_parent.worldToLocal(camera$1.getWorldPosition(new Vector3()));
+
+        // // TODO: we can probably just hardcode the earth position, since it doesnt move
+        let earth_position = camera_parent.worldToLocal(earth.getWorldPosition(new Vector3()));
+
+        return new Vector3().subVectors(earth_position, camera_position).normalize()
+    }
+
     function on_mouse_move$1(event){
         // calculate mouse position in normalized device coordinates
         // (-1 to +1) for both components
@@ -45332,18 +45343,16 @@ var app = (function () {
         let x_radians = movementX * Math.PI * ratio / window.innerWidth;
         let y_radians = movementY * Math.PI * ratio / window.innerHeight;
 
-        
+        /*
+        Important note: an object's rotation/quaternion is relative to its parent. It is a local rotation.
+        So here I get the vectors from the point of view of the camera parent.
+        */
         // let current_direction_vector = camera.getWorldDirection(new THREE.Vector3()).normalize();
         let current_direction_vector = camera_parent.worldToLocal(camera$1.getWorldDirection(new Vector3()).normalize());
 
-        let camera_position = camera_parent.worldToLocal(camera$1.getWorldPosition(new Vector3()));
-
-        // // TODO: we can probably just hardcode the earth position, since it doesnt move
-        let earth_position = camera_parent.worldToLocal(earth.getWorldPosition(new Vector3()));
-        // let up = new THREE.Vector3().subVectors(camera_world_position, earth_world_position).normalize()
-        let up = new Vector3().subVectors(earth_position, camera_position).normalize();
+        let up = get_up_direction();
         let right = current_direction_vector.clone().cross(up).normalize();
-        console.log(earth_position, camera$1.position, up, right, current_direction_vector);
+        // console.log(earth_position, camera.position, up, right, current_direction_vector)
         
         // Limit the tilt of the camera. When the up and current_direction_vector are parallel,
         // it makes the cross product weird, so we avoid that by limiting how far the camera can tilt
@@ -45402,23 +45411,32 @@ var app = (function () {
         }
     }
 
+    function movement_curve(x) {
+        // The goal of this function is to make the movement speed increase logarithmically.
+        // Initially you move quickly and then it plateaus
+        // TODO: optimize this
+        let ret = Math.max(0, 3 * Math.log10(x) + 3);
+        return ret;
+    }
 
 
-    camera$1.getWorldDirection(new Vector3());
 
-    const up = new Vector3(0, 1, 0);
+
+    new Vector3(0, 0, 0);
+
+    const forward = new Vector3(0, 0, -1);
     const right = new Vector3(1, 0, 0);
-    const down = new Vector3(0, -1, 0);
+    const back = new Vector3(0, 0, 1);
     const left = new Vector3(-1, 0, 0);
 
     const pressed_keys = {
         'ArrowUp': {
             'pressed': 0,
-            'direction': up,
+            'direction': forward,
         },
         'ArrowDown': {
             'pressed': 0,
-            'direction': down,
+            'direction': back,
         },
         'ArrowLeft': {
             'pressed': 0,
@@ -45430,27 +45448,70 @@ var app = (function () {
         },
     };
 
+    function move_camera(state, time_delta) {
+        let movement_vector_rel_camera = new Vector3(0, 0, 0);
+        // let gravity_vector = get_up_direction().multiplyScalar(gravity)
+        // movement_vector.add(gravity_vector)
+        for (let key in pressed_keys) {
+            if (pressed_keys[key]['pressed']) {
+                let movement_force_scalar = movement_curve(pressed_keys[key]['pressed']);
+                let added_direction = pressed_keys[key]['direction'].clone().multiplyScalar(movement_force_scalar);
+                // let added_direction = camera_direction_to_earth_direction(pressed_keys[key]['direction'], movement_force_scalar)
+                movement_vector_rel_camera.add(added_direction);
+            }
+            // } else {
+            //     movement_vector.add(pressed_keys[key]['direction'].clone().multiplyScalar(drag))
+            // }
+        }
+        // let camera_position = camera_parent.worldToLocal(camera.getWorldPosition(new THREE.Vector3()))
+        
+        let up_rel_parent = new Vector3().subVectors(earth.getWorldPosition(new Vector3()), camera$1.getWorldPosition(new Vector3())).normalize();
+        let movement_rel_parent = new Vector3().subVectors(camera$1.localToWorld(movement_vector_rel_camera.clone()), camera$1.getWorldPosition(new Vector3())).normalize();
+        // movement_vector_rel_camera.applyQuaternion(camera.quaternion)
+        // movement_vector_rel_camera.add(camera.position)
 
+        // let up_rel_parent = get_up_direction()
+        let rotation_axis = movement_rel_parent.clone().cross(up_rel_parent).normalize();
+        // rotation_axis = camera_parent.worldToLocal(camera.localToWorld(rotation_axis)) - camera_parent.position
+        // let right_rel_camera = right.clone().applyQuaternion(camera.quaternion).normalize();
+        let movement_speed = Math.min(movement_vector_rel_camera.length(), 50);
+        if (movement_speed > 0) {
+            let drag = movement_vector_rel_camera.clone().negate().normalize().multiplyScalar(Math.sqrt(movement_speed));
+            movement_vector_rel_camera.add(drag);
+        }
 
-    function test() {
-        let current_direction_vector = camera$1.getWorldDirection(new Vector3()).normalize();
-        let camera_world_position = camera$1.getWorldPosition(new Vector3());
-        // // TODO: we can probably just hardcode the earth position, since it doesnt move
-        let earth_world_position = earth.getWorldPosition(new Vector3());
-        let up = new Vector3().subVectors(camera_world_position, earth_world_position).normalize();
-        let forward = current_direction_vector.clone().projectOnPlane(up).normalize();
-        let right = forward.clone().cross(up).normalize();
-        const movement_radians = Math.PI / 2;
-        // console.log(right, camera_parent.position, camera.position)
-        let quaternion = new Quaternion().setFromAxisAngle(right, movement_radians);
-        camera_parent.quaternion.premultiply(quaternion);
-        camera_parent.updateMatrixWorld(true);
+        // TODO: use slerp somehow
+        let radians = Math.PI * movement_speed * time_delta / 18;
+        if (radians > 0) {
+            let quaternion = new Quaternion().setFromAxisAngle(rotation_axis, radians);
+            camera_parent.quaternion.premultiply(quaternion);
+            camera_parent.updateMatrixWorld(true);
+        }
+        return {finished: false}
     }
 
-    // let updater = new Updater(move_camera, {})
-    // global_updates_queue.push(updater)
+    let move_camera_updater = new Updater(move_camera, {});
+    global_updates_queue.push(move_camera_updater);
+
+    // function test() {
+    //     console.log('test')
+    //     let current_direction_vector = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    //     let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
+    //     // // TODO: we can probably just hardcode the earth position, since it doesnt move
+    //     let earth_world_position = earth.getWorldPosition(new THREE.Vector3())
+    //     let up = new THREE.Vector3().subVectors(camera_world_position, earth_world_position).normalize()
+    //     let forward = current_direction_vector.clone().projectOnPlane(up).normalize();
+    //     let right = forward.clone().cross(up).normalize();
+    //     const movement_radians = Math.PI / 2
+    //     // console.log(right, camera_parent.position, camera.position)
+    //     let quaternion = new THREE.Quaternion().setFromAxisAngle(right, movement_radians);
+    //     camera_parent.quaternion.premultiply(quaternion);
+    //     camera_parent.updateMatrixWorld(true)
+    // }
+
 
     function handle_keydown(e) {
+        // TODO: change the movement keys to wasd, and the shooting keys to 12345
         const movement_keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
         let keys_to_compound = get_store_value(key_to_compound);
         if (Object.keys(keys_to_compound).includes(e.key)) {
@@ -45458,7 +45519,7 @@ var app = (function () {
             try_to_fire_player_weapon(compound);
         } else if (movement_keys.includes(e.key)) {
             pressed_keys[e.key]['pressed'] += 1;
-            test();
+            // test()
             // if (movement_key_pressed_time <= max_movement_speed - 1) {
             //     movement_key_pressed_time += 1;
             // }
