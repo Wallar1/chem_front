@@ -92,28 +92,37 @@ class Projectile extends GameObj {
 
 
 const health_bar_material = new THREE.MeshToonMaterial( {color: 0x00ff00} );
+let enemy_geometry = new THREE.BoxGeometry( 100, 100, 100 );
+let enemy_material = new THREE.MeshStandardMaterial({color: 0xeb4034,});
 
 class Enemy extends GameObj {
-    constructor({geometry, material}) {
+    constructor() {
         super();
         this.should_delete = false;
-        this.mesh = new THREE.Mesh(geometry, material);
-        let r = Math.ceil(Math.max(geometry.parameters.height, geometry.parameters.width) / 2);
+        this.mesh = new THREE.Mesh(enemy_geometry, enemy_material);
+        let r = Math.ceil(Math.max(enemy_geometry.parameters.height, enemy_geometry.parameters.width) / 2);
         this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
 
         this.full_health = 100;
         this.health = 100;
 
-        let health_bar_geometry = new THREE.CylinderGeometry( 1, 1, 10, 10 );
+        // we cant have a global health bar geometry because we need to scale it
+        let health_bar_geometry = new THREE.CylinderGeometry( 10, 10, 100, 10 );
         this.health_bar = new THREE.Mesh( health_bar_geometry, health_bar_material );
         this.mesh.add(this.health_bar)
         this.health_bar.rotateZ(Math.PI/2)
-        this.health_bar.position.z = -8;
+        this.health_bar.position.z = -55;
     }
 
     add_to(parent) {
         this.parent = parent;
         parent.add(this.mesh)
+    }
+
+    initial_rotation() {
+        // Otherwise the health bar is upside down
+        this.rotateX(Math.PI);
+        // this.forward = new THREE.Vector3(-1, 0, 0);
     }
 
     take_damage(dmg) {
@@ -134,7 +143,7 @@ class Enemy extends GameObj {
 function create_enemy(arg_dict) {
     let enemy = new Enemy(arg_dict)
     let proxy = new Proxy(enemy, proxy_handler('mesh'));
-    proxy.position.copy(arg_dict['position'])
+    // proxy.position.copy(arg_dict['position'])
 
     return proxy
 }
@@ -148,7 +157,7 @@ const element_to_material = {
     'O': new THREE.MeshStandardMaterial({color: 0xffffff,}),
     'Au': new THREE.MeshStandardMaterial({color: 0xebd834,}),
 }
-const mine_geometry = new THREE.ConeGeometry( 7, 7, 32 );
+const mine_geometry = new THREE.ConeGeometry( 50, 100, 32 );
 
 function mine_or_cloud_onclick(element) {
     return () => {
@@ -164,7 +173,7 @@ function mine_or_cloud_onclick(element) {
 }
 
 class Mine extends GameObj {
-    constructor({position, onclick}) { 
+    constructor() { 
         super();
         this.element = get_random_solid_element();;
         this.should_delete = false;
@@ -178,6 +187,11 @@ class Mine extends GameObj {
     add_to(parent) {
         this.parent = parent;
         parent.add(this.mesh)
+    }
+
+    initial_rotation() {
+        // for some reason cones start sideways, so this flips them on their base
+        this.rotateX(Math.PI/2);
     }
 
     // collide(collided_obj) {
@@ -196,17 +210,17 @@ class Mine extends GameObj {
 function create_mine(arg_dict) {
     let mine = new Mine(arg_dict)
     let proxy = new Proxy(mine, proxy_handler('mesh'));
-    proxy.position.copy(arg_dict['position'])
+    // proxy.position.copy(arg_dict['position'])
     return proxy
 }
 
 
 
 const cloud_material = new THREE.MeshStandardMaterial({color: 0xffffff,});
-const cloud_geometry = new THREE.SphereGeometry( 5, 10, 10 );
+const cloud_geometry = new THREE.SphereGeometry( 50, 20, 20 );
 
 class Cloud extends GameObj {
-    constructor({position, onclick}) { 
+    constructor() { 
         super();
         this.element = get_random_gas_element();;
         this.should_delete = false;
@@ -232,13 +246,17 @@ class Cloud extends GameObj {
     //     }
     //     current_element_counts.set(curr_el_cnts)
     // }
+
+    initial_rotation() {
+        return;
+    }
 }
 
 
 function create_cloud(arg_dict) {
     let mine = new Cloud(arg_dict)
     let proxy = new Proxy(mine, proxy_handler('mesh'));
-    proxy.position.copy(arg_dict['position'])
+    // proxy.position.copy(arg_dict['position'])
     return proxy
 }
 

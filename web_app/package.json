@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "scripts": {
     "build": "rollup -c",
+    "comment on dev": "remember that npm run dev actually calls serve inside rollup.config, which spawns npm start --dev",
     "dev": "rollup -c -w",
-    "start": "sirv public"
+    "start": "sirv public --port 8080"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^16.0.0",
