@@ -49,7 +49,8 @@ class GameObj {
 }
 
 
-var size = new THREE.Vector3(10, 10, 10)
+var size = new THREE.Vector3(50, 50, 50)
+var box = new THREE.Box3(size.negate(), size)
 class Projectile extends GameObj {
     constructor({geometry, material, initial_pos, velocity, onclick}) {
         super();
@@ -57,35 +58,45 @@ class Projectile extends GameObj {
         this.velocity = velocity
         this.mesh.onclick = onclick
         this.radius = geometry.parameters.radius;
-        this.collider = new THREE.Sphere(initial_pos, this.radius);
+        // this.collider = new THREE.Sphere(initial_pos, this.radius);
         this.health_impact = 20;
     }
 
     check_collisions(collision_elements) {
-        let world_pos = new THREE.Vector3();
-        let pos_in_world = new THREE.Vector3();
         let collided_objs = []
-        this.collider.set(this.mesh.position, this.radius)
         collision_elements.forEach(obj => {
-            if (obj.collider instanceof THREE.Box3) {
-                obj.getWorldPosition(pos_in_world);
-                obj.collider.setFromCenterAndSize(pos_in_world, size)
-                if (this.collider.intersectsBox(obj.collider)) {
-                    collided_objs = [obj];
-                    return  // this just returns out of the foreach
-                }
-            } 
-            // else if (obj.collision_sphere) {
-            //     obj.mesh.getWorldPosition(world_pos);
-            //     obj.collision_sphere.set(world_pos, obj.radius)
-            //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
-            //         collided_objs = [obj];
-            //         return  // this just returns out of the foreach
-            //     }
-            // } else {
-            //     console.log('did we set another type of collider shape?')
-            // }
+            let length = this.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(obj.mesh.getWorldPosition(new THREE.Vector3()))
+            // console.log(length, this.radius + 50)
+            if (length < this.radius + 50) { // 50 is the radius of the enemy
+                console.log('collision')
+                collided_objs.push(obj);
+            }
         })
+        // let world_pos = new THREE.Vector3();
+        // let pos_in_world = new THREE.Vector3();
+        // let collided_objs = []
+        // this.collider.set(this.mesh.position, this.radius)
+        // collision_elements.forEach(obj => {
+        //     // obj.getWorldPosition(pos_in_world);
+        //     // obj.collider.setFromCenterAndSize(pos_in_world, size)
+        //     console.log(obj.mesh)
+        //     box.setFromObject(obj.mesh)
+        //     console.log(box.clone())
+        //     if (this.collider.intersectsBox(box)) {
+        //         collided_objs = [obj];
+        //         return  // this just returns out of the foreach
+        //     }
+        //     // else if (obj.collision_sphere) {
+        //     //     obj.mesh.getWorldPosition(world_pos);
+        //     //     obj.collision_sphere.set(world_pos, obj.radius)
+        //     //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
+        //     //         collided_objs = [obj];
+        //     //         return  // this just returns out of the foreach
+        //     //     }
+        //     // } else {
+        //     //     console.log('did we set another type of collider shape?')
+        //     // }
+        // })
         return collided_objs
     }
 }
@@ -101,7 +112,7 @@ class Enemy extends GameObj {
         this.should_delete = false;
         this.mesh = new THREE.Mesh(enemy_geometry, enemy_material);
         let r = Math.ceil(Math.max(enemy_geometry.parameters.height, enemy_geometry.parameters.width) / 2);
-        this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
+        // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
 
         this.full_health = 100;
         this.health = 100;
@@ -127,11 +138,11 @@ class Enemy extends GameObj {
 
     take_damage(dmg) {
         this.health -= dmg
-        if (this.health <= 30) {
+        if (this.health <= 0) {
             this.should_delete = true;
             return
         }
-        this.health_bar.geometry.scale(1, this.health/this.full_health, 1)
+        this.health_bar.scale.set(1, this.health/this.full_health, 1)
     }
 
     collide(collided_obj) {

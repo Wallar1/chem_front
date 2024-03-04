@@ -291,6 +291,9 @@ function add_enemy_movement_updater(enemy) {
         We get the direction to the player and then project it onto the plane, and then move one step in that direction
         */
         let {enemy} = state
+        if (enemy.should_delete) {
+            return {finished: true, to_delete: [enemy]}
+        }
 
         let camera_world_pos = camera.getWorldPosition(new THREE.Vector3())
         let enemy_world_pos = enemy.getWorldPosition(new THREE.Vector3())
@@ -350,6 +353,7 @@ function initialize_in_random_position(type_of_obj) {
     obj.initial_rotation();
     if (type_of_obj['create_function'] === create_enemy) {
         add_enemy_movement_updater(obj)
+        collision_elements.push(obj)
     }
     parent.updateMatrixWorld(true)
 }
@@ -669,7 +673,7 @@ function blast_projectile({projectile, total_time, initial_time, direction}, tim
     collisions.forEach(collided_obj => collided_obj.collide(projectile));
 
     let finished = false;
-    if (total_time > 10 || collisions.length) {
+    if (total_time > 3 || collisions.length) {
         finished = true
         return {finished, to_delete: [projectile]}
     }
