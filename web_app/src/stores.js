@@ -14,11 +14,11 @@ export const current_scene = writable(possible_scenes.Battle);
 export const current_scientist = writable(scientists.RobertBoyle);
 
 export const key_to_compound = writable({
-    'q': 'H2',
-    'w': 'CH4',
-    'e': 'NH3',
-    'r': 'CN',
-    ' ': 'H2O' // spacebar
+    '1': 'H2',
+    '2': 'CH4',
+    '3': 'NH3',
+    '4': 'CN',
+    '5': 'H2O'
 })
 
 let counts = {
