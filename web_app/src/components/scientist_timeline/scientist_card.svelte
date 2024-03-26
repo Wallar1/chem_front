@@ -1,11 +1,16 @@
 <script>
-    import {current_scene, possible_scenes, current_scientist} from '../../stores.js';
+    import {current_scene, possible_scenes, current_scientist, GameStates, game_state} from '../../stores.js';
 
     export let scientist;
 
-    function set_scene(scientist) {
+    function start_battle(scientist) {
         $current_scientist = scientist.name
         $current_scene = possible_scenes.Battle
+
+        game_state.update(currentState => {
+            currentState.state = GameStates.STARTING;
+            return currentState;
+        });
     }
 
     let hide_image = false;
@@ -16,7 +21,7 @@
     <div class='text'>
         <div class='story'>
             <p>{scientist.story}</p>
-            <div class='button' on:click|stopPropagation={(e) => set_scene(scientist)}>Battle!</div>
+            <div class='button' on:click|stopPropagation={(e) => start_battle(scientist)}>Battle!</div>
         </div>
         <p>{scientist.name}</p>
         <p>{scientist.year}</p>

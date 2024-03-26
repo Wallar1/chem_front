@@ -3,9 +3,9 @@ import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
-import {create_enemy, create_mine, create_cloud} from '../../objects.js';
+import {create_enemy, create_mine, create_cloud, Axe} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
-import { key_to_compound, current_element_counts } from '../../stores.js';
+import { key_to_compound, current_element_counts, game_state, GameStates } from '../../stores.js';
 import { parse_formula_to_dict, get_random_element } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
@@ -38,45 +38,60 @@ class Updater {
 }
 
 
+const earth_radius = 3000;
+const camera_offset = 50;
+// const speed = .2;
+// const frame_rate = 60;
+// const world_units_scale = 1/frame_rate  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
 
-// TODO: this should be part of the global state, and then we can break out the movement code into another file
-var global_updates_queue = [];
-var global_clock = new THREE.Clock();
-// Earth settings
-var earth_radius = 3000;
-var camera_offset = 50;
-var speed = .2;
-var time_for_full_rotation = 30/speed;
-var earth_initial_position = new THREE.Vector3(0,0,0)
-
-var time_delta = 0
-var gravity = new THREE.Vector3(0, -.5, 0);
-var frame_rate = 60;
-var world_units_scale = 1/frame_rate  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
-var scene = new THREE.Scene()
-var earth = create_earth();
-var camera, camera_parent;  // camera_parent is used to rotate the camera around the earth
-create_camera();
-
-var mouse_ray = new THREE.Raycaster();
-var mouse = new THREE.Vector2();
-
-
-var collision_elements = [];  // we just have to keep track of the enemies and earth, and when the ball moves,
-                            // it checks for any collisions with these elements
+var global_updates_queue, 
+    global_clock,
+    time_delta,
+    earth_initial_position,
+    scene,
+    renderer,
+    earth,
+    camera,
+    camera_parent,
+    axe,
+    gun,
+    mouse_ray,
+    mouse,
+    enemies,
+    clouds,
+    mines,
+    stats;
 
 
-var stats = new Stats();
-stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
-document.body.appendChild( stats.dom );
+function initialize_vars(){
+    // TODO: this should be part of the global state, and then we can break out the movement code into another file
+    global_updates_queue = [];
+    global_clock = new THREE.Clock();
+    earth_initial_position = new THREE.Vector3(0,0,0);
+    earth = create_earth();
+    create_camera();
+    inialize_axe();
+    create_gun();
+    mouse_ray = new THREE.Raycaster();
+    mouse = new THREE.Vector2();
+    enemies = [];
+    clouds = [];
+    mines = [];
+    stats = new Stats();
+    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild( stats.dom );
+}
 
 export class BattleScene {
     constructor() {
-        this.renderer = create_renderer();
+        initialize_vars();
+        renderer = create_renderer();
         const canvas_container = document.getElementById('canvas-container')
-        canvas_container.appendChild(this.renderer.domElement);
+        canvas_container.appendChild(renderer.domElement);
 
-        // this.orbit_controls = new OrbitControls( camera, this.renderer.domElement );
+        scene = new THREE.Scene()
+
+        // this.orbit_controls = new OrbitControls( camera, renderer.domElement );
 
         this.directional_light = create_directional_light();
         scene.add(this.directional_light);
@@ -88,25 +103,39 @@ export class BattleScene {
     
         mouse_ray.setFromCamera( mouse, camera );
 
-        this.renderer.render(scene, camera);
+        renderer.render(scene, camera);
+
+        let move_camera_updater = new Updater(move_camera, {})
+        global_updates_queue.push(move_camera_updater)
 
         spawn_objects()
     }
 
     add_event_listeners(){
-        window.addEventListener('resize', () => this.resize_window(), false);
-        window.addEventListener('mousemove', (event) => on_mouse_move(event), false)
-        window.addEventListener('click', (event) => on_mouse_click(event), false)
-        window.addEventListener('keydown', (e) => handle_keydown(e))
-        document.addEventListener('keyup', (e) => handle_keyup(e))
+        window.addEventListener('resize', resize_window, false);
+        window.addEventListener('mousemove', on_mouse_move, false)
+        window.addEventListener('click', on_mouse_click, false)
+        window.addEventListener('keydown', handle_keydown)
+        document.addEventListener('keyup', handle_keyup)
+    }
+
+    remove_event_listeners(){
+        window.removeEventListener('resize', resize_window, false);
+        window.removeEventListener('mousemove', on_mouse_move, false)
+        window.removeEventListener('click', on_mouse_click, false)
+        window.removeEventListener('keydown', handle_keydown)
+        document.removeEventListener('keyup', handle_keyup)
     }
 
     animate(){
         requestAnimationFrame(()=>{
+            if (get(game_state)['state'] === GameStates.GAMEOVER) {
+                return;
+            }
             this.animate()
             stats.begin();
             time_delta = global_clock.getDelta();
-            this.renderer.render(scene, camera);
+            renderer.render(scene, camera);
             let next_updates = []
             // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
             for (let i=0; i<global_updates_queue.length; i++) {
@@ -124,11 +153,46 @@ export class BattleScene {
             global_updates_queue = next_updates
         });
     }
+}
 
-    resize_window() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+// Dispose of the current scene, renderer, and any associated resources
+function dispose_scene() {
+    if (scene) {
+        // Traverse the scene to dispose geometries, materials, and textures
+        scene.traverse(object => {
+            if (object.isMesh) {
+                if (object.geometry) {
+                    object.geometry.dispose();
+                }
+                if (object.material) {
+                    if (object.material.isMaterial) {
+                        cleanMaterial(object.material);
+                    } else {
+                        // An array of materials
+                        for (const material of object.material) cleanMaterial(material);
+                    }
+                }
+            }
+        });
+    }
+
+    // Function to clean materials
+    function cleanMaterial(material) {
+        console.log('disposing material')
+        material.dispose();
+        // Dispose textures
+        for (const key of Object.keys(material)) {
+            const value = material[key];
+            if (value && typeof value === 'object' && 'minFilter' in value) {
+                value.dispose();
+            }
+        }
+    }
+
+    // Remove the renderer's DOM element and dispose the renderer
+    if (renderer) {
+        renderer.domElement.remove();
+        renderer.dispose();
     }
 }
 
@@ -160,6 +224,26 @@ function create_camera(){
     camera.rotateX(Math.PI/2);
 }
 
+function inialize_axe(){
+    axe = new Axe();
+    axe.mesh.position.set(0, 50, -50)
+    axe.mesh.rotateX(-Math.PI/4)
+    camera.add(axe)
+    axe.position.set(20, 0, 0)
+}
+
+function create_gun(){
+    const gun_geometry = new THREE.CylinderGeometry( 1, 1, 5, 10 );
+    const gun_material = new THREE.MeshToonMaterial( {color: 0x737373} );
+    const gun_mesh = new THREE.Mesh( gun_geometry, gun_material );
+    gun = new THREE.Object3D();
+    gun.add(gun_mesh)
+    camera.add(gun)
+    gun.position.set(-10, 0, -5)
+    gun.rotateX(Math.PI/2)
+    gun_mesh.position.set(5, 0, 0)
+}
+
 function create_directional_light(){
     const light = new THREE.DirectionalLight(0xFFFFFF, 1.0);
     light.position.set(-100, 100, 100);
@@ -181,7 +265,7 @@ function create_directional_light(){
 
 function create_earth(){
     const earth = new THREE.Mesh(
-        new THREE.SphereGeometry( earth_radius, 20, 20 ),
+        new THREE.SphereGeometry( earth_radius, 200, 200 ),
         // new THREE.MeshStandardMaterial({
         //     color: 0x086100,
         // })
@@ -206,12 +290,12 @@ const object_type_details = {
     },
     'cloud': {
         'probability': 2,
-        'extra_z_distance': 10,
+        'extra_z_distance': 200,
         'create_function': create_cloud,
     },
     'enemy': {
-        'probability': 4,
-        'extra_z_distance': 50,
+        'probability': get(game_state)['level'],
+        'extra_z_distance': 40,
         'create_function': create_enemy,
     }
 }
@@ -228,60 +312,14 @@ function get_random_type() {
 
 
 function spawn_objects() {
-    for (let i=0; i<150; i++) {
+    for (let i=0; i<100; i++) {
         initialize_in_random_position(get_random_type())
-        // initialize_in_random_position(object_type_details['enemy'])
+        // initialize_in_random_position(object_type_details['cloud'])
     }
+    // initialize_in_random_position(object_type_details['cloud'])
+    // initialize_in_random_position(object_type_details['mine'])
+    // initialize_in_random_position(object_type_details['enemy'])
 }
-
-// function add_enemy_movement_updater(enemy) {
-//     function move_enemy(state, time_delta) {
-//         /*
-//         The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
-//         We get the direction to the player and then project it onto the plane, and then move one step in that direction
-//         */
-//         let {enemy} = state
-
-//         // rotate the enemy parent to move the enemy close to the camera
-//         let camera_world_pos = camera.getWorldPosition(new THREE.Vector3())
-//         let camera_position_rel_enemy_parent = enemy.parent.worldToLocal(camera_world_pos)  // redundant? The parent is at the world position
-//         let direction_to_camera = new THREE.Vector3().subVectors(camera_position_rel_enemy_parent, enemy.position).normalize()
-//         let up = enemy.parent.worldToLocal(enemy.getWorldPosition(new THREE.Vector3()))
-//         direction_to_camera.projectOnPlane(up.normalize()).normalize()
-//         let axis_of_rotation = new THREE.Vector3().crossVectors(up, direction_to_camera).normalize()
-//         let radians = Math.PI * time_delta/ 100;
-//         let quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians)
-//         enemy.parent.quaternion.premultiply(quaternion);
-//         enemy.parent.updateMatrixWorld(true)
-
-//         // rotate the enemy to face the camera
-//         /*
-//         The forward direction should be the z axis, and it should lie on a plane to the earth.
-//         we need to get the camera position, project it onto that plane, and then rotate the enemy to look at that point
-//         by getting the dot product to give us the radians to rotate and then rotating around the up axis
-//         we have up and direction_to_camera
-//         */
-//         // Forward direction relative to the enemy (not their local space, but literally from the enemy)
-//         const enemy_forward = new THREE.Vector3(0, 0, -1);
-//         // Apply the object's rotation to the forward vector
-//         const enemy_forward_rel_parent = enemy_forward.applyQuaternion(enemy.quaternion);
-//         // Get the angle between the forward vector and the direction to the camera
-//         up = enemy.position.clone().normalize()
-//         direction_to_camera = new THREE.Vector3().subVectors(camera_position_rel_enemy_parent, enemy.position).normalize()
-//         up = enemy.parent.worldToLocal(enemy.getWorldPosition(new THREE.Vector3()))
-//         direction_to_camera.projectOnPlane(up.normalize()).normalize()
-//         const angle = enemy_forward_rel_parent.angleTo(direction_to_camera);
-//         // console.log(angle, Math.acos(enemy_forward_rel_parent.dot(direction_to_camera)))
-//         if (angle > 0.01 ) {
-//             let quaternion2 = new THREE.Quaternion().setFromAxisAngle(up, .01)
-//             enemy.quaternion.premultiply(quaternion2);
-//             enemy.updateMatrixWorld(true);
-//         }
-//         return state
-//     }
-//     let updater = new Updater(move_enemy, {enemy})
-//     global_updates_queue.push(updater)
-// }
 
 
 function add_enemy_movement_updater(enemy) {
@@ -302,7 +340,8 @@ function add_enemy_movement_updater(enemy) {
         let dir_to_camera_world = new THREE.Vector3().subVectors(camera_world_pos, enemy_world_pos)
         let dir_to_camera_local_parent = enemy.parent.worldToLocal(dir_to_camera_world.clone()).normalize()
         let axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, dir_to_camera_local_parent).normalize()
-        let radians = Math.PI * time_delta/ 100;
+        let movement_multiplier = 1;
+        let radians = movement_multiplier * Math.PI * time_delta/ 100;
         let quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians)
         enemy.parent.quaternion.multiply(quaternion);
         enemy.parent.updateMatrixWorld(true)
@@ -331,6 +370,11 @@ function add_enemy_movement_updater(enemy) {
             enemy.rotateZ(Math.sign(cross.z) * .02)
             enemy.updateMatrixWorld(true);
         }
+        let collisions = enemy.check_collisions([camera]);
+        if (collisions.length) {
+            game_over();
+        }
+
         return state
     }
     let updater = new Updater(move_enemy, {enemy})
@@ -353,47 +397,15 @@ function initialize_in_random_position(type_of_obj) {
     obj.initial_rotation();
     if (type_of_obj['create_function'] === create_enemy) {
         add_enemy_movement_updater(obj)
-        collision_elements.push(obj)
+        enemies.push(obj)
+    } else if (type_of_obj['create_function'] === create_mine) {
+        mines.push(obj)
+    } else if (type_of_obj['create_function'] === create_cloud) {
+        clouds.push(obj)
     }
     parent.updateMatrixWorld(true)
 }
 
-
-// function add_mine_to_earth(){
-//     let mine = create_mine({})
-//     // we add the mine first to get it into earth's relative units
-//     mine.add_to(earth)
-
-//     collision_elements.push(mine)
-
-//     return mine
-// }
-
-// function add_cloud_to_earth() {
-//     // const onclick = (target) => {
-//     //     // this is just a POC. It doesnt work because all of the projectiles use the same material
-//     //     // target.object.material.color.set('#eb4034')
-//     //     console.log('clicked cloud')
-//     // }
-//     let cloud = create_cloud({})
-//     // we add the enemy first to get it into earth's relative units
-//     cloud.add_to(earth)
-
-
-//     return cloud
-// }
-
-
-
-// function add_enemy_to_earth(){
-//     let enemy = create_enemy({'geometry': enemy_geometry, 'material': enemy_material})
-//     // give it a parent to make the rotations easier
-//     initialize_in_random_position(enemy)
-
-//     collision_elements.push(enemy)
-
-//     return enemy
-// }
 
 function create_background(){
     const loader = new THREE.CubeTextureLoader();
@@ -417,6 +429,12 @@ function get_up_direction() {
     let earth_position = camera_parent.worldToLocal(earth.getWorldPosition(new THREE.Vector3()))
 
     return new THREE.Vector3().subVectors(earth_position, camera_position).normalize()
+}
+
+function resize_window() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function on_mouse_move(event){
@@ -477,22 +495,71 @@ function unique(arr, key_func) {
     return ret_arr;
 }
 var audio = new Audio('sound.mov');
+var axe_is_swinging = false;
 function on_mouse_click(event) {
     // this next line helps debug. Previously we were getting different positions because the renderer was expecting
     // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
     // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
-    let children = []
-    for (let c=0; c<scene.children.length; c++) {
-        children.push(scene.children[c])
+    
+    
+    // let children = []
+    // for (let c=0; c<scene.children.length; c++) {
+    //     children.push(scene.children[c])
+    // }
+    // for (let e=0; e<earth.children.length; e++) {
+    //     children.push(earth.children[e])
+    // }
+    // let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
+    // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
+    // if (intersects_with_click.length) {
+    //     // audio.play();
+    //     intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
+    // }
+    function swing_axe(state, time_delta) {
+        let {total_radians, finished, direction, has_collided} = state
+        axe_is_swinging = true;
+        let change_direction = false;
+
+        const speed_multiplier = 3;
+        let radians = speed_multiplier * Math.PI * time_delta;
+
+        if (total_radians + radians >= Math.PI) {
+            finished = true;
+            radians = Math.PI - total_radians;
+            total_radians = Math.PI;
+        } else if (total_radians < Math.PI/2 && total_radians + radians >= Math.PI/2) {
+            radians = Math.PI/2 - total_radians;
+            change_direction = true;
+            total_radians = Math.PI/2;
+        } else {
+            total_radians += radians;
+        }
+        let axis = new THREE.Vector3(1, 0, 0)
+
+        let quaternion = new THREE.Quaternion().setFromAxisAngle(axis, radians * direction)
+        axe.quaternion.premultiply(quaternion)
+        axe.updateMatrixWorld(true)
+
+        if (!has_collided) {
+            let collisions = axe.check_collisions(mines);
+            for (let i=0; i<collisions.length; i++) {
+                
+                collisions[i].collide(axe);
+                has_collided = true;
+            }
+        }
+
+        if (finished) {
+            axe_is_swinging = false;
+        }
+        if (change_direction) {
+            direction = 1;
+        }
+        return {total_radians, finished, direction, has_collided}
     }
-    for (let e=0; e<earth.children.length; e++) {
-        children.push(earth.children[e])
-    }
-    let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
-    let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-    if (intersects_with_click.length) {
-        // audio.play();
-        intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
+    if (!axe_is_swinging) {
+        let swing_axe_updater = new Updater(swing_axe, {finished: false, total_radians: 0, direction: -1, has_collided: false})
+        global_updates_queue.push(swing_axe_updater)
     }
 }
 
@@ -516,6 +583,7 @@ const back = new THREE.Vector3(0, 0, 1);
 const left = new THREE.Vector3(-1, 0, 0);
 
 const movement_keys = ['w', 's', 'a', 'd']
+const space = ' '
 const pressed_keys = {
     'w': {
         'pressed': 0,
@@ -572,10 +640,6 @@ function move_camera(state, time_delta) {
     return {finished: false}
 }
 
-let move_camera_updater = new Updater(move_camera, {})
-global_updates_queue.push(move_camera_updater)
-
-
 function jump_curve(x) {
     // A jump will last pi/3 seconds
     return Math.sin(3*x)
@@ -583,20 +647,34 @@ function jump_curve(x) {
 
 function jump(state, time_delta) {
     function jump_helper(func_state, func_time_delta){
-        camera.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - func_state.initial_time) * 150;
-        if (global_clock.elapsedTime - func_state.initial_time > Math.PI/3) {
-            func_state['finished'] = true
-            pressed_keys[' ']['pressed'] = 0;
+        let {finished, initial_time, has_collided} = func_state
+        camera.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - initial_time) * 150;
+        let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
+        const camera_box = new THREE.Box3().setFromCenterAndSize(camera_world_position, new THREE.Vector3(100, 100, 100))
+        const cloud_box = new THREE.Box3()
+        if (!has_collided) {
+            for (let i=0; i<clouds.length; i++) {
+                let cloud = clouds[i]
+                cloud_box.setFromObject(cloud.mesh)
+                if (camera_box.intersectsBox(cloud_box)) {
+                    cloud.collide()
+                    has_collided = true;
+                }
+            }
         }
-        return func_state
+
+        if (global_clock.elapsedTime - initial_time > Math.PI/3) {
+            finished = true
+            pressed_keys[space]['pressed'] = 0;
+        }
+        return {finished, initial_time, has_collided}
     }
-    let jump_updater = new Updater(jump_helper, {initial_time: global_clock.elapsedTime, finished: false})
+    let jump_updater = new Updater(jump_helper, {initial_time: global_clock.elapsedTime, finished: false, has_collided: false})
     global_updates_queue.push(jump_updater)
 }
 
 
-function handle_keydown(e) {      
-    const space = ' '
+function handle_keydown(e) {
     let keys_to_compound = get(key_to_compound)
     if (Object.keys(keys_to_compound).includes(e.key)) {
         let compound = keys_to_compound[e.key]
@@ -622,16 +700,16 @@ function check_if_weapon_can_fire_and_get_new_counts(compound) {
     let entries = Object.entries(parse_formula_to_dict(compound));
     for (let i=0; i<entries.length; i++) {
         let [element, count_needed] = entries[i];
-        // if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
-        //     return [false, {}]
-        // }
+        if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
+            return [false, {}]
+        }
         element_counts[element] = element_counts[element] - count_needed
     }
     return [true, element_counts]
 }
 
 function try_to_fire_player_weapon(compound){
-    const initial_pos = camera.getWorldPosition(new THREE.Vector3())
+    const initial_pos = gun.localToWorld(new THREE.Vector3(0, -20, 0));
 
     const onclick = (target) => {
         // this is just a POC. It doesnt work because all of the projectiles use the same material
@@ -661,21 +739,38 @@ function fire_enemy_projectile(){
     // global_updates_queue.push(updater)
 }
 
-function blast_projectile({projectile, total_time, initial_time, direction}, time_delta){
+function blast_projectile(state, time_delta){
+    let {projectile, total_time, initial_time, direction} = state
+    if (!projectile) {
+        console.log(state)
+    }
     if (!total_time) total_time = 1;
     let mesh = projectile.mesh
 
     total_time = global_clock.elapsedTime - initial_time;
-    let added = direction.clone().normalize().multiplyScalar(time_delta * 100 * Math.pow(total_time, 5) + 20)
-    mesh.position.add(added)
 
-    let collisions = projectile.check_collisions(collision_elements);
+    let world_vec_to_earth = new THREE.Vector3().subVectors(earth.getWorldPosition(new THREE.Vector3()), mesh.getWorldPosition(new THREE.Vector3()))
+    let below_earth = world_vec_to_earth.length() < earth_radius - 50;
+    if (below_earth || total_time > 2) {
+        return {finished: true, to_delete: [projectile]}
+    }
+    const gravity = mesh.parent.worldToLocal(world_vec_to_earth.normalize()).multiplyScalar(time_delta * 7)
+    direction = direction.normalize().multiplyScalar(time_delta * 100 * Math.pow(total_time, 5) + 20).add(gravity)
+    mesh.position.add(direction)
+
+    let collisions = projectile.check_collisions(enemies);
     collisions.forEach(collided_obj => collided_obj.collide(projectile));
 
-    let finished = false;
-    if (total_time > 3 || collisions.length) {
-        finished = true
-        return {finished, to_delete: [projectile]}
+    if (collisions.length) {
+        return {finished: true, to_delete: [projectile]}
     }
-    return {projectile, total_time, finished, initial_time, direction}
+    return {projectile, total_time, finished: false, initial_time, direction}
+}
+
+
+function game_over(){
+    let current_game_state = get(game_state)
+    current_game_state['state'] = GameStates.GAMEOVER;
+    game_state.set(current_game_state)
+    dispose_scene();
 }

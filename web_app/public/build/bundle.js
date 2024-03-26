@@ -55,6 +55,9 @@ var app = (function () {
     function component_subscribe(component, store, callback) {
         component.$$.on_destroy.push(subscribe(store, callback));
     }
+    function null_to_empty(value) {
+        return value == null ? '' : value;
+    }
     function set_store_value(store, ret, value) {
         store.set(value);
         return ret;
@@ -80,7 +83,7 @@ var app = (function () {
     function text(data) {
         return document.createTextNode(data);
     }
-    function space() {
+    function space$1() {
         return text(' ');
     }
     function listen(node, event, handler, options) {
@@ -136,6 +139,10 @@ var app = (function () {
             update_scheduled = true;
             resolved_promise.then(flush);
         }
+    }
+    function tick() {
+        schedule_update();
+        return resolved_promise;
     }
     function add_render_callback(fn) {
         render_callbacks.push(fn);
@@ -42629,6 +42636,17 @@ var app = (function () {
         return d
     }
 
+    const GameStates = Object.freeze({
+        'STARTING': Symbol('starting'),
+        'PLAYING': Symbol('playing'),
+        'GAMEOVER': Symbol('game_over'),
+    });
+
+    const game_state = writable({
+        'state': GameStates.STARTING,
+        'level': 1,
+    });
+
     const possible_scenes = Object.freeze({
         'Loading': Symbol('loading'),
         'Timeline': Symbol('timeline'),
@@ -42735,39 +42753,39 @@ var app = (function () {
     		c: function create() {
     			div3 = element("div");
     			img = element("img");
-    			t0 = space();
+    			t0 = space$1();
     			div2 = element("div");
     			div1 = element("div");
     			p0 = element("p");
     			t1 = text(t1_value);
-    			t2 = space();
+    			t2 = space$1();
     			div0 = element("div");
     			div0.textContent = "Battle!";
-    			t4 = space();
+    			t4 = space$1();
     			p1 = element("p");
     			t5 = text(t5_value);
-    			t6 = space();
+    			t6 = space$1();
     			p2 = element("p");
     			t7 = text(t7_value);
     			if (!src_url_equal(img.src, img_src_value = /*scientist*/ ctx[0].src)) attr_dev(img, "src", img_src_value);
     			attr_dev(img, "alt", img_alt_value = /*scientist*/ ctx[0].name);
     			attr_dev(img, "class", "svelte-i7mye2");
     			toggle_class(img, "hide_image", /*hide_image*/ ctx[1]);
-    			add_location(img, file$8, 14, 4, 378);
+    			add_location(img, file$8, 19, 4, 549);
     			attr_dev(p0, "class", "svelte-i7mye2");
-    			add_location(p0, file$8, 17, 12, 507);
+    			add_location(p0, file$8, 22, 12, 678);
     			attr_dev(div0, "class", "button svelte-i7mye2");
-    			add_location(div0, file$8, 18, 12, 544);
+    			add_location(div0, file$8, 23, 12, 715);
     			attr_dev(div1, "class", "story svelte-i7mye2");
-    			add_location(div1, file$8, 16, 8, 475);
+    			add_location(div1, file$8, 21, 8, 646);
     			attr_dev(p1, "class", "svelte-i7mye2");
-    			add_location(p1, file$8, 20, 8, 656);
+    			add_location(p1, file$8, 25, 8, 830);
     			attr_dev(p2, "class", "svelte-i7mye2");
-    			add_location(p2, file$8, 21, 8, 688);
+    			add_location(p2, file$8, 26, 8, 862);
     			attr_dev(div2, "class", "text svelte-i7mye2");
-    			add_location(div2, file$8, 15, 4, 448);
+    			add_location(div2, file$8, 20, 4, 619);
     			attr_dev(div3, "class", "card svelte-i7mye2");
-    			add_location(div3, file$8, 13, 0, 298);
+    			add_location(div3, file$8, 18, 0, 469);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -42846,9 +42864,14 @@ var app = (function () {
     	validate_slots('Scientist_card', slots, []);
     	let { scientist } = $$props;
 
-    	function set_scene(scientist) {
+    	function start_battle(scientist) {
     		set_store_value(current_scientist, $current_scientist = scientist.name, $current_scientist);
     		set_store_value(current_scene, $current_scene = possible_scenes.Battle, $current_scene);
+
+    		game_state.update(currentState => {
+    			currentState.state = GameStates.STARTING;
+    			return currentState;
+    		});
     	}
 
     	let hide_image = false;
@@ -42858,7 +42881,7 @@ var app = (function () {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_card> was created with unknown prop '${key}'`);
     	});
 
-    	const click_handler = e => set_scene(scientist);
+    	const click_handler = e => start_battle(scientist);
     	const click_handler_1 = _ => $$invalidate(1, hide_image = !hide_image);
 
     	$$self.$$set = $$props => {
@@ -42869,8 +42892,10 @@ var app = (function () {
     		current_scene,
     		possible_scenes,
     		current_scientist,
+    		GameStates,
+    		game_state,
     		scientist,
-    		set_scene,
+    		start_battle,
     		hide_image,
     		$current_scene,
     		$current_scientist
@@ -42885,7 +42910,7 @@ var app = (function () {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [scientist, hide_image, set_scene, click_handler, click_handler_1];
+    	return [scientist, hide_image, start_battle, click_handler, click_handler_1];
     }
 
     class Scientist_card extends SvelteComponentDev {
@@ -43000,7 +43025,7 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			t0 = space();
+    			t0 = space$1();
     			div1 = element("div");
     			p = element("p");
     			p.textContent = "Build Compounds In The Lab";
@@ -44348,6 +44373,29 @@ var app = (function () {
             }
         }
     }
+    /*
+    we check if the box of the obj intersects with the boxes of the possible_collision_objs.
+    The obj would be Object3D, and possible collision objs should atleast have a mesh
+    */
+    function check_collisions(obj, possible_collision_objs) {
+        const obj_box = new Box3();
+        const possible_collision_box = new Box3();
+        obj_box.setFromObject(obj);
+        let collisions = [];
+        let is_mesh = possible_collision_objs[0] instanceof Object3D;
+        for (let i = 0; i < possible_collision_objs.length; i++) {
+            let possible_collision_obj = possible_collision_objs[i];
+            if (!is_mesh) {
+                possible_collision_obj = possible_collision_obj.mesh;
+            }
+            possible_collision_box.setFromObject(possible_collision_obj);
+            if (obj_box.intersectsBox(possible_collision_box)) {
+                collisions.push(possible_collision_objs[i]);  // push the original object, not the mesh
+            }
+        }
+        return collisions;
+    }
+
 
     class GameObj {
         add(obj) {
@@ -44376,42 +44424,46 @@ var app = (function () {
         }
 
         check_collisions(collision_elements) {
-            let collided_objs = [];
-            collision_elements.forEach(obj => {
-                let length = this.mesh.getWorldPosition(new Vector3()).distanceTo(obj.mesh.getWorldPosition(new Vector3()));
-                // console.log(length, this.radius + 50)
-                if (length < this.radius + 50) { // 50 is the radius of the enemy
-                    console.log('collision');
-                    collided_objs.push(obj);
-                }
-            });
-            // let world_pos = new THREE.Vector3();
-            // let pos_in_world = new THREE.Vector3();
-            // let collided_objs = []
-            // this.collider.set(this.mesh.position, this.radius)
-            // collision_elements.forEach(obj => {
-            //     // obj.getWorldPosition(pos_in_world);
-            //     // obj.collider.setFromCenterAndSize(pos_in_world, size)
-            //     console.log(obj.mesh)
-            //     box.setFromObject(obj.mesh)
-            //     console.log(box.clone())
-            //     if (this.collider.intersectsBox(box)) {
-            //         collided_objs = [obj];
-            //         return  // this just returns out of the foreach
-            //     }
-            //     // else if (obj.collision_sphere) {
-            //     //     obj.mesh.getWorldPosition(world_pos);
-            //     //     obj.collision_sphere.set(world_pos, obj.radius)
-            //     //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
-            //     //         collided_objs = [obj];
-            //     //         return  // this just returns out of the foreach
-            //     //     }
-            //     // } else {
-            //     //     console.log('did we set another type of collider shape?')
-            //     // }
-            // })
-            return collided_objs
+            return check_collisions(this.mesh, collision_elements)
         }
+
+        // check_collisions(collision_elements) {
+        //     let collided_objs = []
+        //     collision_elements.forEach(obj => {
+        //         let length = this.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(obj.mesh.getWorldPosition(new THREE.Vector3()))
+        //         // console.log(length, this.radius + 50)
+        //         if (length < this.radius + 50) { // 50 is the radius of the enemy
+        //             console.log('collision')
+        //             collided_objs.push(obj);
+        //         }
+        //     })
+        //     // let world_pos = new THREE.Vector3();
+        //     // let pos_in_world = new THREE.Vector3();
+        //     // let collided_objs = []
+        //     // this.collider.set(this.mesh.position, this.radius)
+        //     // collision_elements.forEach(obj => {
+        //     //     // obj.getWorldPosition(pos_in_world);
+        //     //     // obj.collider.setFromCenterAndSize(pos_in_world, size)
+        //     //     console.log(obj.mesh)
+        //     //     box.setFromObject(obj.mesh)
+        //     //     console.log(box.clone())
+        //     //     if (this.collider.intersectsBox(box)) {
+        //     //         collided_objs = [obj];
+        //     //         return  // this just returns out of the foreach
+        //     //     }
+        //     //     // else if (obj.collision_sphere) {
+        //     //     //     obj.mesh.getWorldPosition(world_pos);
+        //     //     //     obj.collision_sphere.set(world_pos, obj.radius)
+        //     //     //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
+        //     //     //         collided_objs = [obj];
+        //     //     //         return  // this just returns out of the foreach
+        //     //     //     }
+        //     //     // } else {
+        //     //     //     console.log('did we set another type of collider shape?')
+        //     //     // }
+        //     // })
+        //     return collided_objs
+        // }
     }
 
 
@@ -44460,6 +44512,10 @@ var app = (function () {
 
         collide(collided_obj) {
             this.take_damage(collided_obj.damage);
+        }
+
+        check_collisions(collision_elements) {
+            return check_collisions(this.mesh, collision_elements)
         }
     }
 
@@ -44517,16 +44573,17 @@ var app = (function () {
             this.rotateX(Math.PI/2);
         }
 
-        // collide(collided_obj) {
-        //     let added_amount = Math.floor(collided_obj.damage / 10);
-        //     let curr_el_cnts = get(current_element_counts)
-        //     if (curr_el_cnts[this.element]) {
-        //         curr_el_cnts[this.element] += added_amount;
-        //     } else {
-        //         curr_el_cnts[this.element] = added_amount;
-        //     }
-        //     current_element_counts.set(curr_el_cnts)
-        // }
+        collide() {
+            // let added_amount = Math.floor(collided_obj.damage / 10);
+            const added_amount = 5;
+            let curr_el_cnts = get_store_value(current_element_counts);
+            if (curr_el_cnts[this.element]) {
+                curr_el_cnts[this.element] += added_amount;
+            } else {
+                curr_el_cnts[this.element] = added_amount;
+            }
+            current_element_counts.set(curr_el_cnts);
+        }
     }
 
 
@@ -44558,6 +44615,60 @@ var app = (function () {
             parent.add(this.mesh);
         }
 
+        collide(collided_obj) {
+            // let added_amount = Math.floor(collided_obj.damage / 10);
+            let added_amount = 10;
+            let curr_el_cnts = get_store_value(current_element_counts);
+            if (curr_el_cnts[this.element]) {
+                curr_el_cnts[this.element] += added_amount;
+            } else {
+                curr_el_cnts[this.element] = added_amount;
+            }
+            current_element_counts.set(curr_el_cnts);
+        }
+
+        initial_rotation() {
+            return;
+        }
+    }
+
+
+    function create_cloud(arg_dict) {
+        let cloud = new Cloud(arg_dict);
+        let proxy = new Proxy(cloud, proxy_handler('mesh'));
+        // proxy.position.copy(arg_dict['position'])
+        return proxy
+    }
+
+
+    const axe_geometry = new CylinderGeometry( 5, 5, 100, 10 );
+    const axe_material = new MeshToonMaterial( {color: 0x7a5930} );
+
+    class Axe extends Object3D {
+        constructor() {
+            super();
+            this.mesh = new Mesh(axe_geometry, axe_material);
+            this.add(this.mesh);
+        }
+        check_collisions(collision_elements) {
+            return check_collisions(this.mesh, collision_elements)
+        }
+
+        // check_collisions(collision_elements) {
+        //     const mine_box = new THREE.Box3();
+        //     const axe_box = new THREE.Box3();
+        //     axe_box.setFromObject(this.mesh);
+        //     let collisions = [];
+        //     for (let i = 0; i < collision_elements.length; i++) {
+        //         let obj = collision_elements[i];
+        //         mine_box.setFromObject(obj.mesh)
+        //         if (axe_box.intersectsBox(mine_box)) {
+        //             collisions.push(obj);
+        //         }
+        //     }
+        //     return collisions;
+        // }
+
         // collide(collided_obj) {
         //     let added_amount = Math.floor(collided_obj.damage / 10);
         //     let curr_el_cnts = get(current_element_counts)
@@ -44568,18 +44679,6 @@ var app = (function () {
         //     }
         //     current_element_counts.set(curr_el_cnts)
         // }
-
-        initial_rotation() {
-            return;
-        }
-    }
-
-
-    function create_cloud(arg_dict) {
-        let mine = new Cloud(arg_dict);
-        let proxy = new Proxy(mine, proxy_handler('mesh'));
-        // proxy.position.copy(arg_dict['position'])
-        return proxy
     }
 
     const formula_to_damage_dict = {
@@ -45027,41 +45126,60 @@ var app = (function () {
     }
 
 
+    const earth_radius = 3000;
+    const camera_offset = 50;
+    // const speed = .2;
+    // const frame_rate = 60;
+    // const world_units_scale = 1/frame_rate  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
 
-    // TODO: this should be part of the global state, and then we can break out the movement code into another file
-    var global_updates_queue = [];
-    var global_clock = new Clock();
-    // Earth settings
-    var earth_radius = 3000;
-    var camera_offset = 50;
-    var earth_initial_position = new Vector3(0,0,0);
-
-    var time_delta = 0;
-    new Vector3(0, -.5, 0);
-    var scene$1 = new Scene();
-    var earth = create_earth();
-    var camera$1, camera_parent;  // camera_parent is used to rotate the camera around the earth
-    create_camera();
-
-    var mouse_ray$1 = new Raycaster();
-    var mouse$1 = new Vector2();
-
-
-    var collision_elements = [];  // we just have to keep track of the enemies and earth, and when the ball moves,
-                                // it checks for any collisions with these elements
+    var global_updates_queue, 
+        global_clock,
+        time_delta,
+        earth_initial_position,
+        scene$1,
+        renderer$1,
+        earth,
+        camera$1,
+        camera_parent,
+        axe,
+        gun,
+        mouse_ray$1,
+        mouse$1,
+        enemies,
+        clouds,
+        mines,
+        stats;
 
 
-    var stats = new Stats();
-    stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
-    document.body.appendChild( stats.dom );
+    function initialize_vars(){
+        // TODO: this should be part of the global state, and then we can break out the movement code into another file
+        global_updates_queue = [];
+        global_clock = new Clock();
+        earth_initial_position = new Vector3(0,0,0);
+        earth = create_earth();
+        create_camera();
+        inialize_axe();
+        create_gun();
+        mouse_ray$1 = new Raycaster();
+        mouse$1 = new Vector2();
+        enemies = [];
+        clouds = [];
+        mines = [];
+        stats = new Stats();
+        stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
+        document.body.appendChild( stats.dom );
+    }
 
     class BattleScene {
         constructor() {
-            this.renderer = create_renderer();
+            initialize_vars();
+            renderer$1 = create_renderer();
             const canvas_container = document.getElementById('canvas-container');
-            canvas_container.appendChild(this.renderer.domElement);
+            canvas_container.appendChild(renderer$1.domElement);
 
-            // this.orbit_controls = new OrbitControls( camera, this.renderer.domElement );
+            scene$1 = new Scene();
+
+            // this.orbit_controls = new OrbitControls( camera, renderer.domElement );
 
             this.directional_light = create_directional_light();
             scene$1.add(this.directional_light);
@@ -45073,25 +45191,39 @@ var app = (function () {
         
             mouse_ray$1.setFromCamera( mouse$1, camera$1 );
 
-            this.renderer.render(scene$1, camera$1);
+            renderer$1.render(scene$1, camera$1);
+
+            let move_camera_updater = new Updater(move_camera, {});
+            global_updates_queue.push(move_camera_updater);
 
             spawn_objects();
         }
 
         add_event_listeners(){
-            window.addEventListener('resize', () => this.resize_window(), false);
-            window.addEventListener('mousemove', (event) => on_mouse_move$1(event), false);
-            window.addEventListener('click', (event) => on_mouse_click$1(), false);
-            window.addEventListener('keydown', (e) => handle_keydown(e));
-            document.addEventListener('keyup', (e) => handle_keyup(e));
+            window.addEventListener('resize', resize_window, false);
+            window.addEventListener('mousemove', on_mouse_move$1, false);
+            window.addEventListener('click', on_mouse_click$1, false);
+            window.addEventListener('keydown', handle_keydown);
+            document.addEventListener('keyup', handle_keyup);
+        }
+
+        remove_event_listeners(){
+            window.removeEventListener('resize', resize_window, false);
+            window.removeEventListener('mousemove', on_mouse_move$1, false);
+            window.removeEventListener('click', on_mouse_click$1, false);
+            window.removeEventListener('keydown', handle_keydown);
+            document.removeEventListener('keyup', handle_keyup);
         }
 
         animate(){
             requestAnimationFrame(()=>{
+                if (get_store_value(game_state)['state'] === GameStates.GAMEOVER) {
+                    return;
+                }
                 this.animate();
                 stats.begin();
                 time_delta = global_clock.getDelta();
-                this.renderer.render(scene$1, camera$1);
+                renderer$1.render(scene$1, camera$1);
                 let next_updates = [];
                 // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
                 for (let i=0; i<global_updates_queue.length; i++) {
@@ -45109,11 +45241,46 @@ var app = (function () {
                 global_updates_queue = next_updates;
             });
         }
+    }
 
-        resize_window() {
-            camera$1.aspect = window.innerWidth / window.innerHeight;
-            camera$1.updateProjectionMatrix();
-            this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // Dispose of the current scene, renderer, and any associated resources
+    function dispose_scene() {
+        if (scene$1) {
+            // Traverse the scene to dispose geometries, materials, and textures
+            scene$1.traverse(object => {
+                if (object.isMesh) {
+                    if (object.geometry) {
+                        object.geometry.dispose();
+                    }
+                    if (object.material) {
+                        if (object.material.isMaterial) {
+                            cleanMaterial(object.material);
+                        } else {
+                            // An array of materials
+                            for (const material of object.material) cleanMaterial(material);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Function to clean materials
+        function cleanMaterial(material) {
+            console.log('disposing material');
+            material.dispose();
+            // Dispose textures
+            for (const key of Object.keys(material)) {
+                const value = material[key];
+                if (value && typeof value === 'object' && 'minFilter' in value) {
+                    value.dispose();
+                }
+            }
+        }
+
+        // Remove the renderer's DOM element and dispose the renderer
+        if (renderer$1) {
+            renderer$1.domElement.remove();
+            renderer$1.dispose();
         }
     }
 
@@ -45145,6 +45312,26 @@ var app = (function () {
         camera$1.rotateX(Math.PI/2);
     }
 
+    function inialize_axe(){
+        axe = new Axe();
+        axe.mesh.position.set(0, 50, -50);
+        axe.mesh.rotateX(-Math.PI/4);
+        camera$1.add(axe);
+        axe.position.set(20, 0, 0);
+    }
+
+    function create_gun(){
+        const gun_geometry = new CylinderGeometry( 1, 1, 5, 10 );
+        const gun_material = new MeshToonMaterial( {color: 0x737373} );
+        const gun_mesh = new Mesh( gun_geometry, gun_material );
+        gun = new Object3D();
+        gun.add(gun_mesh);
+        camera$1.add(gun);
+        gun.position.set(-10, 0, -5);
+        gun.rotateX(Math.PI/2);
+        gun_mesh.position.set(5, 0, 0);
+    }
+
     function create_directional_light(){
         const light = new DirectionalLight(0xFFFFFF, 1.0);
         light.position.set(-100, 100, 100);
@@ -45166,7 +45353,7 @@ var app = (function () {
 
     function create_earth(){
         const earth = new Mesh(
-            new SphereGeometry( earth_radius, 20, 20 ),
+            new SphereGeometry( earth_radius, 200, 200 ),
             // new THREE.MeshStandardMaterial({
             //     color: 0x086100,
             // })
@@ -45191,12 +45378,12 @@ var app = (function () {
         },
         'cloud': {
             'probability': 2,
-            'extra_z_distance': 10,
+            'extra_z_distance': 200,
             'create_function': create_cloud,
         },
         'enemy': {
-            'probability': 4,
-            'extra_z_distance': 50,
+            'probability': get_store_value(game_state)['level'],
+            'extra_z_distance': 40,
             'create_function': create_enemy,
         }
     };
@@ -45213,60 +45400,14 @@ var app = (function () {
 
 
     function spawn_objects() {
-        for (let i=0; i<150; i++) {
+        for (let i=0; i<100; i++) {
             initialize_in_random_position(get_random_type());
-            // initialize_in_random_position(object_type_details['enemy'])
+            // initialize_in_random_position(object_type_details['cloud'])
         }
+        // initialize_in_random_position(object_type_details['cloud'])
+        // initialize_in_random_position(object_type_details['mine'])
+        // initialize_in_random_position(object_type_details['enemy'])
     }
-
-    // function add_enemy_movement_updater(enemy) {
-    //     function move_enemy(state, time_delta) {
-    //         /*
-    //         The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
-    //         We get the direction to the player and then project it onto the plane, and then move one step in that direction
-    //         */
-    //         let {enemy} = state
-
-    //         // rotate the enemy parent to move the enemy close to the camera
-    //         let camera_world_pos = camera.getWorldPosition(new THREE.Vector3())
-    //         let camera_position_rel_enemy_parent = enemy.parent.worldToLocal(camera_world_pos)  // redundant? The parent is at the world position
-    //         let direction_to_camera = new THREE.Vector3().subVectors(camera_position_rel_enemy_parent, enemy.position).normalize()
-    //         let up = enemy.parent.worldToLocal(enemy.getWorldPosition(new THREE.Vector3()))
-    //         direction_to_camera.projectOnPlane(up.normalize()).normalize()
-    //         let axis_of_rotation = new THREE.Vector3().crossVectors(up, direction_to_camera).normalize()
-    //         let radians = Math.PI * time_delta/ 100;
-    //         let quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians)
-    //         enemy.parent.quaternion.premultiply(quaternion);
-    //         enemy.parent.updateMatrixWorld(true)
-
-    //         // rotate the enemy to face the camera
-    //         /*
-    //         The forward direction should be the z axis, and it should lie on a plane to the earth.
-    //         we need to get the camera position, project it onto that plane, and then rotate the enemy to look at that point
-    //         by getting the dot product to give us the radians to rotate and then rotating around the up axis
-    //         we have up and direction_to_camera
-    //         */
-    //         // Forward direction relative to the enemy (not their local space, but literally from the enemy)
-    //         const enemy_forward = new THREE.Vector3(0, 0, -1);
-    //         // Apply the object's rotation to the forward vector
-    //         const enemy_forward_rel_parent = enemy_forward.applyQuaternion(enemy.quaternion);
-    //         // Get the angle between the forward vector and the direction to the camera
-    //         up = enemy.position.clone().normalize()
-    //         direction_to_camera = new THREE.Vector3().subVectors(camera_position_rel_enemy_parent, enemy.position).normalize()
-    //         up = enemy.parent.worldToLocal(enemy.getWorldPosition(new THREE.Vector3()))
-    //         direction_to_camera.projectOnPlane(up.normalize()).normalize()
-    //         const angle = enemy_forward_rel_parent.angleTo(direction_to_camera);
-    //         // console.log(angle, Math.acos(enemy_forward_rel_parent.dot(direction_to_camera)))
-    //         if (angle > 0.01 ) {
-    //             let quaternion2 = new THREE.Quaternion().setFromAxisAngle(up, .01)
-    //             enemy.quaternion.premultiply(quaternion2);
-    //             enemy.updateMatrixWorld(true);
-    //         }
-    //         return state
-    //     }
-    //     let updater = new Updater(move_enemy, {enemy})
-    //     global_updates_queue.push(updater)
-    // }
 
 
     function add_enemy_movement_updater(enemy) {
@@ -45287,7 +45428,8 @@ var app = (function () {
             let dir_to_camera_world = new Vector3().subVectors(camera_world_pos, enemy_world_pos);
             let dir_to_camera_local_parent = enemy.parent.worldToLocal(dir_to_camera_world.clone()).normalize();
             let axis_of_rotation = new Vector3().crossVectors(up_local_parent, dir_to_camera_local_parent).normalize();
-            let radians = Math.PI * time_delta/ 100;
+            let movement_multiplier = 1;
+            let radians = movement_multiplier * Math.PI * time_delta/ 100;
             let quaternion = new Quaternion().setFromAxisAngle(axis_of_rotation, radians);
             enemy.parent.quaternion.multiply(quaternion);
             enemy.parent.updateMatrixWorld(true);
@@ -45316,6 +45458,11 @@ var app = (function () {
                 enemy.rotateZ(Math.sign(cross.z) * .02);
                 enemy.updateMatrixWorld(true);
             }
+            let collisions = enemy.check_collisions([camera$1]);
+            if (collisions.length) {
+                game_over();
+            }
+
             return state
         }
         let updater = new Updater(move_enemy, {enemy});
@@ -45338,47 +45485,15 @@ var app = (function () {
         obj.initial_rotation();
         if (type_of_obj['create_function'] === create_enemy) {
             add_enemy_movement_updater(obj);
-            collision_elements.push(obj);
+            enemies.push(obj);
+        } else if (type_of_obj['create_function'] === create_mine) {
+            mines.push(obj);
+        } else if (type_of_obj['create_function'] === create_cloud) {
+            clouds.push(obj);
         }
         parent.updateMatrixWorld(true);
     }
 
-
-    // function add_mine_to_earth(){
-    //     let mine = create_mine({})
-    //     // we add the mine first to get it into earth's relative units
-    //     mine.add_to(earth)
-
-    //     collision_elements.push(mine)
-
-    //     return mine
-    // }
-
-    // function add_cloud_to_earth() {
-    //     // const onclick = (target) => {
-    //     //     // this is just a POC. It doesnt work because all of the projectiles use the same material
-    //     //     // target.object.material.color.set('#eb4034')
-    //     //     console.log('clicked cloud')
-    //     // }
-    //     let cloud = create_cloud({})
-    //     // we add the enemy first to get it into earth's relative units
-    //     cloud.add_to(earth)
-
-
-    //     return cloud
-    // }
-
-
-
-    // function add_enemy_to_earth(){
-    //     let enemy = create_enemy({'geometry': enemy_geometry, 'material': enemy_material})
-    //     // give it a parent to make the rotations easier
-    //     initialize_in_random_position(enemy)
-
-    //     collision_elements.push(enemy)
-
-    //     return enemy
-    // }
 
     function create_background(){
         const loader = new CubeTextureLoader();
@@ -45402,6 +45517,12 @@ var app = (function () {
         let earth_position = camera_parent.worldToLocal(earth.getWorldPosition(new Vector3()));
 
         return new Vector3().subVectors(earth_position, camera_position).normalize()
+    }
+
+    function resize_window() {
+        camera$1.aspect = window.innerWidth / window.innerHeight;
+        camera$1.updateProjectionMatrix();
+        renderer$1.setSize(window.innerWidth, window.innerHeight);
     }
 
     function on_mouse_move$1(event){
@@ -45449,35 +45570,72 @@ var app = (function () {
 
         mouse_ray$1.setFromCamera( mouse$1, camera$1 );
     }
-    function unique(arr, key_func) {
-        const ret_arr = [];
-        const seen = new Set();
-        arr.forEach((obj) => {
-            let key = key_func(obj);
-            if (!seen.has(key)) {
-                seen.add(key);
-                ret_arr.push(obj);
-            }
-        });
-        return ret_arr;
-    }
     new Audio('sound.mov');
+    var axe_is_swinging = false;
     function on_mouse_click$1(event) {
         // this next line helps debug. Previously we were getting different positions because the renderer was expecting
         // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
         // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
-        let children = [];
-        for (let c=0; c<scene$1.children.length; c++) {
-            children.push(scene$1.children[c]);
+        
+        
+        // let children = []
+        // for (let c=0; c<scene.children.length; c++) {
+        //     children.push(scene.children[c])
+        // }
+        // for (let e=0; e<earth.children.length; e++) {
+        //     children.push(earth.children[e])
+        // }
+        // let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
+        // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
+        // if (intersects_with_click.length) {
+        //     // audio.play();
+        //     intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
+        // }
+        function swing_axe(state, time_delta) {
+            let {total_radians, finished, direction, has_collided} = state;
+            axe_is_swinging = true;
+            let change_direction = false;
+
+            const speed_multiplier = 3;
+            let radians = speed_multiplier * Math.PI * time_delta;
+
+            if (total_radians + radians >= Math.PI) {
+                finished = true;
+                radians = Math.PI - total_radians;
+                total_radians = Math.PI;
+            } else if (total_radians < Math.PI/2 && total_radians + radians >= Math.PI/2) {
+                radians = Math.PI/2 - total_radians;
+                change_direction = true;
+                total_radians = Math.PI/2;
+            } else {
+                total_radians += radians;
+            }
+            let axis = new Vector3(1, 0, 0);
+
+            let quaternion = new Quaternion().setFromAxisAngle(axis, radians * direction);
+            axe.quaternion.premultiply(quaternion);
+            axe.updateMatrixWorld(true);
+
+            if (!has_collided) {
+                let collisions = axe.check_collisions(mines);
+                for (let i=0; i<collisions.length; i++) {
+                    
+                    collisions[i].collide(axe);
+                    has_collided = true;
+                }
+            }
+
+            if (finished) {
+                axe_is_swinging = false;
+            }
+            if (change_direction) {
+                direction = 1;
+            }
+            return {total_radians, finished, direction, has_collided}
         }
-        for (let e=0; e<earth.children.length; e++) {
-            children.push(earth.children[e]);
-        }
-        let intersects = unique(mouse_ray$1.intersectObjects( children, false ), (o) => o.object.uuid);
-        let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-        if (intersects_with_click.length) {
-            // audio.play();
-            intersects_with_click.forEach(intersect => intersect.object.onclick());  // removed interesct, i dont think it did anything
+        if (!axe_is_swinging) {
+            let swing_axe_updater = new Updater(swing_axe, {finished: false, total_radians: 0, direction: -1, has_collided: false});
+            global_updates_queue.push(swing_axe_updater);
         }
     }
 
@@ -45501,6 +45659,7 @@ var app = (function () {
     const left = new Vector3(-1, 0, 0);
 
     const movement_keys = ['w', 's', 'a', 'd'];
+    const space = ' ';
     const pressed_keys = {
         'w': {
             'pressed': 0,
@@ -45557,10 +45716,6 @@ var app = (function () {
         return {finished: false}
     }
 
-    let move_camera_updater = new Updater(move_camera, {});
-    global_updates_queue.push(move_camera_updater);
-
-
     function jump_curve(x) {
         // A jump will last pi/3 seconds
         return Math.sin(3*x)
@@ -45568,20 +45723,34 @@ var app = (function () {
 
     function jump(state, time_delta) {
         function jump_helper(func_state, func_time_delta){
-            camera$1.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - func_state.initial_time) * 150;
-            if (global_clock.elapsedTime - func_state.initial_time > Math.PI/3) {
-                func_state['finished'] = true;
-                pressed_keys[' ']['pressed'] = 0;
+            let {finished, initial_time, has_collided} = func_state;
+            camera$1.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - initial_time) * 150;
+            let camera_world_position = camera$1.getWorldPosition(new Vector3());
+            const camera_box = new Box3().setFromCenterAndSize(camera_world_position, new Vector3(100, 100, 100));
+            const cloud_box = new Box3();
+            if (!has_collided) {
+                for (let i=0; i<clouds.length; i++) {
+                    let cloud = clouds[i];
+                    cloud_box.setFromObject(cloud.mesh);
+                    if (camera_box.intersectsBox(cloud_box)) {
+                        cloud.collide();
+                        has_collided = true;
+                    }
+                }
             }
-            return func_state
+
+            if (global_clock.elapsedTime - initial_time > Math.PI/3) {
+                finished = true;
+                pressed_keys[space]['pressed'] = 0;
+            }
+            return {finished, initial_time, has_collided}
         }
-        let jump_updater = new Updater(jump_helper, {initial_time: global_clock.elapsedTime, finished: false});
+        let jump_updater = new Updater(jump_helper, {initial_time: global_clock.elapsedTime, finished: false, has_collided: false});
         global_updates_queue.push(jump_updater);
     }
 
 
-    function handle_keydown(e) {      
-        const space = ' ';
+    function handle_keydown(e) {
         let keys_to_compound = get_store_value(key_to_compound);
         if (Object.keys(keys_to_compound).includes(e.key)) {
             let compound = keys_to_compound[e.key];
@@ -45607,16 +45776,16 @@ var app = (function () {
         let entries = Object.entries(parse_formula_to_dict(compound));
         for (let i=0; i<entries.length; i++) {
             let [element, count_needed] = entries[i];
-            // if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
-            //     return [false, {}]
-            // }
+            if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
+                return [false, {}]
+            }
             element_counts[element] = element_counts[element] - count_needed;
         }
         return [true, element_counts]
     }
 
     function try_to_fire_player_weapon(compound){
-        const initial_pos = camera$1.getWorldPosition(new Vector3());
+        const initial_pos = gun.localToWorld(new Vector3(0, -20, 0));
 
         const onclick = (target) => {
             // this is just a POC. It doesnt work because all of the projectiles use the same material
@@ -45634,23 +45803,40 @@ var app = (function () {
         global_updates_queue.push(updater);
     }
 
-    function blast_projectile({projectile, total_time, initial_time, direction}, time_delta){
+    function blast_projectile(state, time_delta){
+        let {projectile, total_time, initial_time, direction} = state;
+        if (!projectile) {
+            console.log(state);
+        }
         if (!total_time) total_time = 1;
         let mesh = projectile.mesh;
 
         total_time = global_clock.elapsedTime - initial_time;
-        let added = direction.clone().normalize().multiplyScalar(time_delta * 100 * Math.pow(total_time, 5) + 20);
-        mesh.position.add(added);
 
-        let collisions = projectile.check_collisions(collision_elements);
+        let world_vec_to_earth = new Vector3().subVectors(earth.getWorldPosition(new Vector3()), mesh.getWorldPosition(new Vector3()));
+        let below_earth = world_vec_to_earth.length() < earth_radius - 50;
+        if (below_earth || total_time > 2) {
+            return {finished: true, to_delete: [projectile]}
+        }
+        const gravity = mesh.parent.worldToLocal(world_vec_to_earth.normalize()).multiplyScalar(time_delta * 7);
+        direction = direction.normalize().multiplyScalar(time_delta * 100 * Math.pow(total_time, 5) + 20).add(gravity);
+        mesh.position.add(direction);
+
+        let collisions = projectile.check_collisions(enemies);
         collisions.forEach(collided_obj => collided_obj.collide(projectile));
 
-        let finished = false;
-        if (total_time > 3 || collisions.length) {
-            finished = true;
-            return {finished, to_delete: [projectile]}
+        if (collisions.length) {
+            return {finished: true, to_delete: [projectile]}
         }
-        return {projectile, total_time, finished, initial_time, direction}
+        return {projectile, total_time, finished: false, initial_time, direction}
+    }
+
+
+    function game_over(){
+        let current_game_state = get_store_value(game_state);
+        current_game_state['state'] = GameStates.GAMEOVER;
+        game_state.set(current_game_state);
+        dispose_scene();
     }
 
     /* src/components/battle_scene/compound_card.svelte generated by Svelte v3.50.0 */
@@ -45678,6 +45864,7 @@ var app = (function () {
     	let t7;
     	let h2;
     	let t8;
+    	let div1_class_value;
 
     	const block = {
     		c: function create() {
@@ -45685,25 +45872,29 @@ var app = (function () {
     			div0 = element("div");
     			p0 = element("p");
     			t0 = text(t0_value);
-    			t1 = space();
+    			t1 = space$1();
     			p1 = element("p");
     			t2 = text("Count Available: ");
     			t3 = text(/*count_available*/ ctx[2]);
-    			t4 = space();
+    			t4 = space$1();
     			p2 = element("p");
     			t5 = text("Damage: ");
     			t6 = text(/*damage*/ ctx[1]);
-    			t7 = space();
+    			t7 = space$1();
     			h2 = element("h2");
     			t8 = text(/*el_name*/ ctx[0]);
-    			add_location(p0, file$6, 9, 8, 170);
-    			add_location(p1, file$6, 10, 8, 229);
-    			add_location(p2, file$6, 11, 8, 279);
-    			attr_dev(div0, "class", "stats svelte-1q20zkf");
-    			add_location(div0, file$6, 8, 4, 142);
-    			attr_dev(h2, "class", "el_name svelte-1q20zkf");
-    			add_location(h2, file$6, 13, 4, 318);
-    			attr_dev(div1, "class", "card svelte-1q20zkf");
+    			add_location(p0, file$6, 9, 8, 218);
+    			add_location(p1, file$6, 10, 8, 277);
+    			add_location(p2, file$6, 11, 8, 327);
+    			attr_dev(div0, "class", "stats svelte-1pdq31t");
+    			add_location(div0, file$6, 8, 4, 190);
+    			attr_dev(h2, "class", "el_name svelte-1pdq31t");
+    			add_location(h2, file$6, 13, 4, 366);
+
+    			attr_dev(div1, "class", div1_class_value = "" + (null_to_empty(/*count_available*/ ctx[2]
+    			? 'card high_opac'
+    			: 'card low_opac') + " svelte-1pdq31t"));
+
     			add_location(div1, file$6, 7, 0, 119);
     		},
     		l: function claim(nodes) {
@@ -45734,6 +45925,12 @@ var app = (function () {
     			if (dirty & /*count_available*/ 4) set_data_dev(t3, /*count_available*/ ctx[2]);
     			if (dirty & /*damage*/ 2) set_data_dev(t6, /*damage*/ ctx[1]);
     			if (dirty & /*el_name*/ 1) set_data_dev(t8, /*el_name*/ ctx[0]);
+
+    			if (dirty & /*count_available*/ 4 && div1_class_value !== (div1_class_value = "" + (null_to_empty(/*count_available*/ ctx[2]
+    			? 'card high_opac'
+    			: 'card low_opac') + " svelte-1pdq31t"))) {
+    				attr_dev(div1, "class", div1_class_value);
+    			}
     		},
     		i: noop,
     		o: noop,
@@ -46103,7 +46300,7 @@ var app = (function () {
     			t0 = text(t0_value);
     			t1 = text(": ");
     			t2 = text(t2_value);
-    			t3 = space();
+    			t3 = space$1();
     			add_location(p, file$4, 8, 12, 243);
     			attr_dev(div, "class", "el-count svelte-1wylw3y");
     			add_location(div, file$4, 7, 8, 208);
@@ -46152,7 +46349,7 @@ var app = (function () {
     		c: function create() {
     			div1 = element("div");
     			div0 = element("div");
-    			t = space();
+    			t = space$1();
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
@@ -46258,75 +46455,187 @@ var app = (function () {
     /* src/components/battle_scene/battle.svelte generated by Svelte v3.50.0 */
 
     const { console: console_1$1 } = globals;
+
     const file$3 = "src/components/battle_scene/battle.svelte";
 
-    function create_fragment$3(ctx) {
-    	let div4;
-    	let div1;
-    	let div0;
+    // (55:60) 
+    function create_if_block_1$1(ctx) {
+    	let h3;
     	let t1;
-    	let rightsidebar;
-    	let t2;
-    	let bottomcompoundbar;
-    	let t3;
-    	let div2;
-    	let t4;
-    	let div3;
-    	let current;
+    	let div;
     	let mounted;
     	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			h3 = element("h3");
+    			h3.textContent = "Game Over";
+    			t1 = space$1();
+    			div = element("div");
+    			div.textContent = "Back to the Lab";
+    			add_location(h3, file$3, 55, 12, 1929);
+    			attr_dev(div, "class", "button svelte-jgh4a6");
+    			add_location(div, file$3, 56, 12, 1960);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, h3, anchor);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(/*go_back_to_timeline*/ ctx[3]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(h3);
+    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_1$1.name,
+    		type: "if",
+    		source: "(55:60) ",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (53:8) {#if $game_state.state === GameStates.STARTING}
+    function create_if_block$1(ctx) {
+    	let div;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			div.textContent = "Start";
+    			attr_dev(div, "class", "button svelte-jgh4a6");
+    			add_location(div, file$3, 53, 12, 1784);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(/*handle_click*/ ctx[2]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block$1.name,
+    		type: "if",
+    		source: "(53:8) {#if $game_state.state === GameStates.STARTING}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$3(ctx) {
+    	let div3;
+    	let div0;
+    	let div0_style_value;
+    	let t0;
+    	let rightsidebar;
+    	let t1;
+    	let bottomcompoundbar;
+    	let t2;
+    	let div1;
+    	let t3;
+    	let div2;
+    	let current;
+
+    	function select_block_type(ctx, dirty) {
+    		if (/*$game_state*/ ctx[1].state === GameStates.STARTING) return create_if_block$1;
+    		if (/*$game_state*/ ctx[1].state === GameStates.GAMEOVER) return create_if_block_1$1;
+    	}
+
+    	let current_block_type = select_block_type(ctx);
+    	let if_block = current_block_type && current_block_type(ctx);
     	rightsidebar = new Right_element_bar$1({ $$inline: true });
     	bottomcompoundbar = new Bottom_compound_bar({ $$inline: true });
 
     	const block = {
     		c: function create() {
-    			div4 = element("div");
-    			div1 = element("div");
-    			div0 = element("div");
-    			div0.textContent = "Start";
-    			t1 = space();
-    			create_component(rightsidebar.$$.fragment);
-    			t2 = space();
-    			create_component(bottomcompoundbar.$$.fragment);
-    			t3 = space();
-    			div2 = element("div");
-    			t4 = space();
     			div3 = element("div");
-    			attr_dev(div0, "class", "button svelte-1053vkb");
-    			add_location(div0, file$3, 24, 8, 813);
-    			attr_dev(div1, "id", "overlay-to-start");
-    			attr_dev(div1, "class", "svelte-1053vkb");
-    			add_location(div1, file$3, 23, 4, 777);
-    			attr_dev(div2, "id", "cursor");
-    			attr_dev(div2, "class", "svelte-1053vkb");
-    			add_location(div2, file$3, 28, 4, 945);
-    			attr_dev(div3, "id", "canvas-container");
-    			add_location(div3, file$3, 29, 4, 973);
-    			add_location(div4, file$3, 22, 0, 767);
+    			div0 = element("div");
+    			if (if_block) if_block.c();
+    			t0 = space$1();
+    			create_component(rightsidebar.$$.fragment);
+    			t1 = space$1();
+    			create_component(bottomcompoundbar.$$.fragment);
+    			t2 = space$1();
+    			div1 = element("div");
+    			t3 = space$1();
+    			div2 = element("div");
+    			attr_dev(div0, "id", "overlay-to-start");
+
+    			attr_dev(div0, "style", div0_style_value = /*show_overlay*/ ctx[0]
+    			? 'display: flex;'
+    			: 'display: none;');
+
+    			attr_dev(div0, "class", "svelte-jgh4a6");
+    			add_location(div0, file$3, 51, 4, 1629);
+    			attr_dev(div1, "id", "cursor");
+    			attr_dev(div1, "class", "svelte-jgh4a6");
+    			add_location(div1, file$3, 61, 4, 2123);
+    			attr_dev(div2, "id", "canvas-container");
+    			add_location(div2, file$3, 62, 4, 2151);
+    			add_location(div3, file$3, 50, 0, 1619);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div4, anchor);
-    			append_dev(div4, div1);
-    			append_dev(div1, div0);
-    			append_dev(div4, t1);
-    			mount_component(rightsidebar, div4, null);
-    			append_dev(div4, t2);
-    			mount_component(bottomcompoundbar, div4, null);
-    			append_dev(div4, t3);
-    			append_dev(div4, div2);
-    			append_dev(div4, t4);
-    			append_dev(div4, div3);
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, div0);
+    			if (if_block) if_block.m(div0, null);
+    			append_dev(div3, t0);
+    			mount_component(rightsidebar, div3, null);
+    			append_dev(div3, t1);
+    			mount_component(bottomcompoundbar, div3, null);
+    			append_dev(div3, t2);
+    			append_dev(div3, div1);
+    			append_dev(div3, t3);
+    			append_dev(div3, div2);
     			current = true;
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
+    				if_block.p(ctx, dirty);
+    			} else {
+    				if (if_block) if_block.d(1);
+    				if_block = current_block_type && current_block_type(ctx);
 
-    			if (!mounted) {
-    				dispose = listen_dev(div0, "click", stop_propagation(/*handle_click*/ ctx[0]), false, false, true);
-    				mounted = true;
+    				if (if_block) {
+    					if_block.c();
+    					if_block.m(div0, null);
+    				}
+    			}
+
+    			if (!current || dirty & /*show_overlay*/ 1 && div0_style_value !== (div0_style_value = /*show_overlay*/ ctx[0]
+    			? 'display: flex;'
+    			: 'display: none;')) {
+    				attr_dev(div0, "style", div0_style_value);
     			}
     		},
-    		p: noop,
     		i: function intro(local) {
     			if (current) return;
     			transition_in(rightsidebar.$$.fragment, local);
@@ -46339,11 +46648,14 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div4);
+    			if (detaching) detach_dev(div3);
+
+    			if (if_block) {
+    				if_block.d();
+    			}
+
     			destroy_component(rightsidebar);
     			destroy_component(bottomcompoundbar);
-    			mounted = false;
-    			dispose();
     		}
     	};
 
@@ -46359,22 +46671,52 @@ var app = (function () {
     }
 
     function instance$3($$self, $$props, $$invalidate) {
+    	let show_overlay;
+    	let $current_scene;
+    	let $game_state;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(5, $current_scene = $$value));
+    	validate_store(game_state, 'game_state');
+    	component_subscribe($$self, game_state, $$value => $$invalidate(1, $game_state = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Battle', slots, []);
     	var battle_scene;
 
     	onMount(async () => {
-    		battle_scene = new BattleScene();
+    		new_game();
     	});
 
-    	function handle_click() {
-    		let canvas = document.getElementById('canvas-container').firstChild;
-    		console.log(canvas);
-    		canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
-    		canvas.requestPointerLock();
+    	function new_game() {
+    		$$invalidate(4, battle_scene = new BattleScene());
+    	}
+
+    	function start_game() {
+    		game_state.update(currentState => {
+    			currentState.state = GameStates.PLAYING;
+    			return currentState;
+    		});
+
     		battle_scene.add_event_listeners();
     		battle_scene.animate();
-    		document.getElementById('overlay-to-start').style.display = 'none';
+    	}
+
+    	function handle_click() {
+    		console.log('clicked');
+    		let canvas = document.getElementById('canvas-container').firstChild;
+    		canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+    		canvas.requestPointerLock({ unadjustedMovement: true });
+    		console.log($game_state.state);
+
+    		if ($game_state.state === GameStates.GAMEOVER) {
+    			new_game();
+    		}
+
+    		start_game();
+    		console.log($game_state.state);
+    	}
+
+    	function go_back_to_timeline() {
+    		set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
     	}
 
     	const writable_props = [];
@@ -46385,22 +46727,48 @@ var app = (function () {
 
     	$$self.$capture_state = () => ({
     		onMount,
+    		tick,
     		BattleScene,
     		BottomCompoundBar: Bottom_compound_bar,
     		RightSideBar: Right_element_bar$1,
+    		GameStates,
+    		game_state,
+    		current_scene,
+    		possible_scenes,
     		battle_scene,
-    		handle_click
+    		new_game,
+    		start_game,
+    		handle_click,
+    		go_back_to_timeline,
+    		show_overlay,
+    		$current_scene,
+    		$game_state
     	});
 
     	$$self.$inject_state = $$props => {
-    		if ('battle_scene' in $$props) battle_scene = $$props.battle_scene;
+    		if ('battle_scene' in $$props) $$invalidate(4, battle_scene = $$props.battle_scene);
+    		if ('show_overlay' in $$props) $$invalidate(0, show_overlay = $$props.show_overlay);
     	};
 
     	if ($$props && "$$inject" in $$props) {
     		$$self.$inject_state($$props.$$inject);
     	}
 
-    	return [handle_click];
+    	$$self.$$.update = () => {
+    		if ($$self.$$.dirty & /*$game_state*/ 2) {
+    			$$invalidate(0, show_overlay = $game_state.state === GameStates.STARTING || $game_state.state === GameStates.GAMEOVER);
+    		}
+
+    		if ($$self.$$.dirty & /*show_overlay, $game_state, battle_scene*/ 19) {
+    			if (show_overlay) {
+    				console.log(show_overlay, $game_state.state);
+    				document.exitPointerLock();
+    				battle_scene?.remove_event_listeners();
+    			}
+    		}
+    	};
+
+    	return [show_overlay, $game_state, handle_click, go_back_to_timeline, battle_scene];
     }
 
     class Battle extends SvelteComponentDev {
@@ -47804,16 +48172,16 @@ var app = (function () {
     		c: function create() {
     			div3 = element("div");
     			div0 = element("div");
-    			t0 = space();
+    			t0 = space$1();
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
     				each_blocks[i].c();
     			}
 
-    			t1 = space();
+    			t1 = space$1();
     			div1 = element("div");
     			t2 = text(/*$creator_moves_remaining*/ ctx[2]);
-    			t3 = space();
+    			t3 = space$1();
     			div2 = element("div");
     			t4 = text(/*$selected_atom*/ ctx[0]);
     			attr_dev(div0, "id", "spacer");
@@ -47973,7 +48341,7 @@ var app = (function () {
     		c: function create() {
     			div1 = element("div");
     			create_component(rightsidebar.$$.fragment);
-    			t = space();
+    			t = space$1();
     			div0 = element("div");
     			attr_dev(div0, "id", "canvas-container");
     			add_location(div0, file$1, 12, 4, 286);
