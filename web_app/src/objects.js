@@ -35,6 +35,29 @@ function proxy_handler(pass_through_obj_name){
     }
 };
 
+/*
+we check if the box of the obj intersects with the boxes of the possible_collision_objs.
+The obj would be Object3D, and possible collision objs should atleast have a mesh
+*/
+function check_collisions(obj, possible_collision_objs) {
+    const obj_box = new THREE.Box3();
+    const possible_collision_box = new THREE.Box3();
+    obj_box.setFromObject(obj);
+    let collisions = [];
+    let is_mesh = possible_collision_objs[0] instanceof THREE.Object3D;
+    for (let i = 0; i < possible_collision_objs.length; i++) {
+        let possible_collision_obj = possible_collision_objs[i];
+        if (!is_mesh) {
+            possible_collision_obj = possible_collision_obj.mesh;
+        }
+        possible_collision_box.setFromObject(possible_collision_obj)
+        if (obj_box.intersectsBox(possible_collision_box)) {
+            collisions.push(possible_collision_objs[i]);  // push the original object, not the mesh
+        }
+    }
+    return collisions;
+}
+
 
 class GameObj {
     add(obj) {
@@ -63,42 +86,46 @@ class Projectile extends GameObj {
     }
 
     check_collisions(collision_elements) {
-        let collided_objs = []
-        collision_elements.forEach(obj => {
-            let length = this.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(obj.mesh.getWorldPosition(new THREE.Vector3()))
-            // console.log(length, this.radius + 50)
-            if (length < this.radius + 50) { // 50 is the radius of the enemy
-                console.log('collision')
-                collided_objs.push(obj);
-            }
-        })
-        // let world_pos = new THREE.Vector3();
-        // let pos_in_world = new THREE.Vector3();
-        // let collided_objs = []
-        // this.collider.set(this.mesh.position, this.radius)
-        // collision_elements.forEach(obj => {
-        //     // obj.getWorldPosition(pos_in_world);
-        //     // obj.collider.setFromCenterAndSize(pos_in_world, size)
-        //     console.log(obj.mesh)
-        //     box.setFromObject(obj.mesh)
-        //     console.log(box.clone())
-        //     if (this.collider.intersectsBox(box)) {
-        //         collided_objs = [obj];
-        //         return  // this just returns out of the foreach
-        //     }
-        //     // else if (obj.collision_sphere) {
-        //     //     obj.mesh.getWorldPosition(world_pos);
-        //     //     obj.collision_sphere.set(world_pos, obj.radius)
-        //     //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
-        //     //         collided_objs = [obj];
-        //     //         return  // this just returns out of the foreach
-        //     //     }
-        //     // } else {
-        //     //     console.log('did we set another type of collider shape?')
-        //     // }
-        // })
-        return collided_objs
+        return check_collisions(this.mesh, collision_elements)
     }
+
+    // check_collisions(collision_elements) {
+    //     let collided_objs = []
+    //     collision_elements.forEach(obj => {
+    //         let length = this.mesh.getWorldPosition(new THREE.Vector3()).distanceTo(obj.mesh.getWorldPosition(new THREE.Vector3()))
+    //         // console.log(length, this.radius + 50)
+    //         if (length < this.radius + 50) { // 50 is the radius of the enemy
+    //             console.log('collision')
+    //             collided_objs.push(obj);
+    //         }
+    //     })
+    //     // let world_pos = new THREE.Vector3();
+    //     // let pos_in_world = new THREE.Vector3();
+    //     // let collided_objs = []
+    //     // this.collider.set(this.mesh.position, this.radius)
+    //     // collision_elements.forEach(obj => {
+    //     //     // obj.getWorldPosition(pos_in_world);
+    //     //     // obj.collider.setFromCenterAndSize(pos_in_world, size)
+    //     //     console.log(obj.mesh)
+    //     //     box.setFromObject(obj.mesh)
+    //     //     console.log(box.clone())
+    //     //     if (this.collider.intersectsBox(box)) {
+    //     //         collided_objs = [obj];
+    //     //         return  // this just returns out of the foreach
+    //     //     }
+    //     //     // else if (obj.collision_sphere) {
+    //     //     //     obj.mesh.getWorldPosition(world_pos);
+    //     //     //     obj.collision_sphere.set(world_pos, obj.radius)
+    //     //     //     if (obj.collision_sphere.intersectsSphere(projectile.collision_sphere)) {
+    //     //     //         collided_objs = [obj];
+    //     //     //         return  // this just returns out of the foreach
+    //     //     //     }
+    //     //     // } else {
+    //     //     //     console.log('did we set another type of collider shape?')
+    //     //     // }
+    //     // })
+    //     return collided_objs
+    // }
 }
 
 
@@ -147,6 +174,10 @@ class Enemy extends GameObj {
 
     collide(collided_obj) {
         this.take_damage(collided_obj.damage)
+    }
+
+    check_collisions(collision_elements) {
+        return check_collisions(this.mesh, collision_elements)
     }
 }
 
@@ -205,16 +236,17 @@ class Mine extends GameObj {
         this.rotateX(Math.PI/2);
     }
 
-    // collide(collided_obj) {
-    //     let added_amount = Math.floor(collided_obj.damage / 10);
-    //     let curr_el_cnts = get(current_element_counts)
-    //     if (curr_el_cnts[this.element]) {
-    //         curr_el_cnts[this.element] += added_amount;
-    //     } else {
-    //         curr_el_cnts[this.element] = added_amount;
-    //     }
-    //     current_element_counts.set(curr_el_cnts)
-    // }
+    collide() {
+        // let added_amount = Math.floor(collided_obj.damage / 10);
+        const added_amount = 5;
+        let curr_el_cnts = get(current_element_counts)
+        if (curr_el_cnts[this.element]) {
+            curr_el_cnts[this.element] += added_amount;
+        } else {
+            curr_el_cnts[this.element] = added_amount;
+        }
+        current_element_counts.set(curr_el_cnts)
+    }
 }
 
 
@@ -247,6 +279,60 @@ class Cloud extends GameObj {
         parent.add(this.mesh)
     }
 
+    collide(collided_obj) {
+        // let added_amount = Math.floor(collided_obj.damage / 10);
+        let added_amount = 10;
+        let curr_el_cnts = get(current_element_counts)
+        if (curr_el_cnts[this.element]) {
+            curr_el_cnts[this.element] += added_amount;
+        } else {
+            curr_el_cnts[this.element] = added_amount;
+        }
+        current_element_counts.set(curr_el_cnts)
+    }
+
+    initial_rotation() {
+        return;
+    }
+}
+
+
+function create_cloud(arg_dict) {
+    let cloud = new Cloud(arg_dict)
+    let proxy = new Proxy(cloud, proxy_handler('mesh'));
+    // proxy.position.copy(arg_dict['position'])
+    return proxy
+}
+
+
+const axe_geometry = new THREE.CylinderGeometry( 5, 5, 100, 10 );
+const axe_material = new THREE.MeshToonMaterial( {color: 0x7a5930} );
+
+class Axe extends THREE.Object3D {
+    constructor() {
+        super();
+        this.mesh = new THREE.Mesh(axe_geometry, axe_material);
+        this.add(this.mesh);
+    }
+    check_collisions(collision_elements) {
+        return check_collisions(this.mesh, collision_elements)
+    }
+
+    // check_collisions(collision_elements) {
+    //     const mine_box = new THREE.Box3();
+    //     const axe_box = new THREE.Box3();
+    //     axe_box.setFromObject(this.mesh);
+    //     let collisions = [];
+    //     for (let i = 0; i < collision_elements.length; i++) {
+    //         let obj = collision_elements[i];
+    //         mine_box.setFromObject(obj.mesh)
+    //         if (axe_box.intersectsBox(mine_box)) {
+    //             collisions.push(obj);
+    //         }
+    //     }
+    //     return collisions;
+    // }
+
     // collide(collided_obj) {
     //     let added_amount = Math.floor(collided_obj.damage / 10);
     //     let curr_el_cnts = get(current_element_counts)
@@ -257,19 +343,15 @@ class Cloud extends GameObj {
     //     }
     //     current_element_counts.set(curr_el_cnts)
     // }
-
-    initial_rotation() {
-        return;
-    }
 }
 
-
-function create_cloud(arg_dict) {
-    let mine = new Cloud(arg_dict)
-    let proxy = new Proxy(mine, proxy_handler('mesh'));
-    // proxy.position.copy(arg_dict['position'])
-    return proxy
-}
+// TODO: is this good? Since axe is an object3d, maybe i dont need it to have a proxy
+// function create_axe(arg_dict) {
+//     let axe = new Axe(arg_dict)
+//     let proxy = new Proxy(axe, proxy_handler('mesh'));
+//     // proxy.position.copy(arg_dict['position'])
+//     return proxy
+// }
 
 
 class Test {
@@ -286,4 +368,4 @@ class Test {
 }
 
 
-export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler, Mine, create_mine, create_cloud};
+export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler, Mine, create_mine, create_cloud, Axe};

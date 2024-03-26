@@ -3,6 +3,18 @@ import { writable, derived } from 'svelte/store';
 import { scientists } from './components/scientist_timeline/scientists.js';
 import { parse_formula_to_dict } from './helper_functions.js';
 
+
+export const GameStates = Object.freeze({
+    'STARTING': Symbol('starting'),
+    'PLAYING': Symbol('playing'),
+    'GAMEOVER': Symbol('game_over'),
+});
+
+export const game_state = writable({
+    'state': GameStates.STARTING,
+    'level': 1,
+});
+
 export const possible_scenes = Object.freeze({
     'Loading': Symbol('loading'),
     'Timeline': Symbol('timeline'),
