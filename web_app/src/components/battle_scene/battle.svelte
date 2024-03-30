@@ -3,6 +3,8 @@
     import { BattleScene } from './basic_gameplay_2.js';
     import BottomCompoundBar from './bottom_compound_bar.svelte';
     import RightSideBar from './right_element_bar.svelte';
+    import HealthBar from './health_bar.svelte';
+    import Score from './score.svelte';
     import { GameStates, game_state, current_scene, possible_scenes } from '../../stores.js';
     
     var battle_scene;
@@ -57,6 +59,8 @@
             <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
         {/if}
     </div>
+    <HealthBar/>
+    <Score/>
     <RightSideBar/>
     <BottomCompoundBar/>
     <div id='cursor'></div>

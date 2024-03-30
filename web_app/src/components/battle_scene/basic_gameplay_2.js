@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
 import {Updater, add_to_global_updates_queue, create_enemy, create_mine, create_cloud, Axe} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
-import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue } from '../../stores.js';
+import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue, player_health } from '../../stores.js';
 import { parse_formula_to_dict, get_random_element, dispose_renderer, dispose_scene } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
@@ -313,8 +313,7 @@ function add_enemy_movement_updater(enemy) {
         }
         let collisions = enemy.check_collisions([camera]);
         if (collisions.length) {
-            console.log('hit camera')
-            game_over();
+            damage_player(10);
         }
 
         return state
@@ -650,7 +649,6 @@ function check_if_weapon_can_fire_and_get_new_counts(compound) {
 
     for (let i=0; i<Object.keys(element_counts).length; i++) {
         let element = Object.keys(element_counts)[i];
-        console.log('setting', element, element_counts[element]['count'])
         current_element_counts.set(element, element_counts[element]['count'])
     }
     return true
@@ -715,6 +713,21 @@ function blast_projectile(state, time_delta){
 }
 
 
+var invincible_until = 0;  // prevents you from taking too much damage
+function damage_player(damage = 10){
+    if (global_clock.elapsedTime < invincible_until) {
+        return;
+    }
+    invincible_until = global_clock.elapsedTime + 1;
+    let health = get(player_health);
+    health = Math.max(0, health - damage);
+    player_health.set(health)
+    if (health <= 0) {
+        game_over();
+    }
+}
+
+
 function game_over(){
     let current_game_state = get(game_state)
     current_game_state['state'] = GameStates.GAMEOVER;
@@ -722,3 +735,5 @@ function game_over(){
     dispose_scene();
     dispose_renderer();
 }
+
+// TODO: should I get rid of the Date.now() calls, and use the global clock?
