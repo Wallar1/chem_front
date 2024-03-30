@@ -3,10 +3,10 @@ import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
-import {create_enemy, create_mine, create_cloud, Axe} from '../../objects.js';
+import {Updater, add_to_global_updates_queue, create_enemy, create_mine, create_cloud, Axe} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
-import { key_to_compound, current_element_counts, game_state, GameStates } from '../../stores.js';
-import { parse_formula_to_dict, get_random_element } from '../../helper_functions.js';
+import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue } from '../../stores.js';
+import { parse_formula_to_dict, get_random_element, dispose_renderer, dispose_scene } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
 
@@ -21,31 +21,13 @@ import { Stats } from '../../../public/lib/stats.js'
 // https://attackingpixels.com/three-js-timeline-career-3D-portfolio/
 
 
-class Updater {
-    constructor(step_function, state) {
-        /*
-        The idea is that an updater will run the step function every frame until some condition is met. It runs the
-        function, which updates the state, which includes a variable 'finished'. Every time the game loop goes through
-        the updates_queue, it will make a new queue at the end that only includes updaters that arent finished.
-        */
-        this.step_function = step_function;
-        this.state = state;
-    }
-
-    update(time_delta){
-        this.state = this.step_function(this.state, time_delta);
-    }
-}
-
-
 const earth_radius = 3000;
 const camera_offset = 50;
 // const speed = .2;
 // const frame_rate = 60;
 // const world_units_scale = 1/frame_rate  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
 
-var global_updates_queue, 
-    global_clock,
+var global_clock,
     time_delta,
     earth_initial_position,
     scene,
@@ -64,8 +46,6 @@ var global_updates_queue,
 
 
 function initialize_vars(){
-    // TODO: this should be part of the global state, and then we can break out the movement code into another file
-    global_updates_queue = [];
     global_clock = new THREE.Clock();
     earth_initial_position = new THREE.Vector3(0,0,0);
     earth = create_earth();
@@ -106,7 +86,7 @@ export class BattleScene {
         renderer.render(scene, camera);
 
         let move_camera_updater = new Updater(move_camera, {})
-        global_updates_queue.push(move_camera_updater)
+        add_to_global_updates_queue(move_camera_updater)
 
         spawn_objects()
     }
@@ -130,6 +110,7 @@ export class BattleScene {
     animate(){
         requestAnimationFrame(()=>{
             if (get(game_state)['state'] === GameStates.GAMEOVER) {
+                global_updates_queue.set([])
                 return;
             }
             this.animate()
@@ -138,8 +119,9 @@ export class BattleScene {
             renderer.render(scene, camera);
             let next_updates = []
             // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
-            for (let i=0; i<global_updates_queue.length; i++) {
-                let updater = global_updates_queue[i]
+            let guq = get(global_updates_queue);
+            for (let i=0; i<guq.length; i++) {
+                let updater = guq[i]
                 updater.update(time_delta)
                 if (!updater.state.finished) { 
                     next_updates.push(updater);
@@ -150,49 +132,8 @@ export class BattleScene {
                 }
             }
             stats.end();
-            global_updates_queue = next_updates
+            global_updates_queue.set(next_updates)
         });
-    }
-}
-
-// Dispose of the current scene, renderer, and any associated resources
-function dispose_scene() {
-    if (scene) {
-        // Traverse the scene to dispose geometries, materials, and textures
-        scene.traverse(object => {
-            if (object.isMesh) {
-                if (object.geometry) {
-                    object.geometry.dispose();
-                }
-                if (object.material) {
-                    if (object.material.isMaterial) {
-                        cleanMaterial(object.material);
-                    } else {
-                        // An array of materials
-                        for (const material of object.material) cleanMaterial(material);
-                    }
-                }
-            }
-        });
-    }
-
-    // Function to clean materials
-    function cleanMaterial(material) {
-        console.log('disposing material')
-        material.dispose();
-        // Dispose textures
-        for (const key of Object.keys(material)) {
-            const value = material[key];
-            if (value && typeof value === 'object' && 'minFilter' in value) {
-                value.dispose();
-            }
-        }
-    }
-
-    // Remove the renderer's DOM element and dispose the renderer
-    if (renderer) {
-        renderer.domElement.remove();
-        renderer.dispose();
     }
 }
 
@@ -314,7 +255,7 @@ function get_random_type() {
 function spawn_objects() {
     for (let i=0; i<100; i++) {
         initialize_in_random_position(get_random_type())
-        // initialize_in_random_position(object_type_details['cloud'])
+        // initialize_in_random_position(object_type_details['mine'])
     }
     // initialize_in_random_position(object_type_details['cloud'])
     // initialize_in_random_position(object_type_details['mine'])
@@ -372,18 +313,19 @@ function add_enemy_movement_updater(enemy) {
         }
         let collisions = enemy.check_collisions([camera]);
         if (collisions.length) {
+            console.log('hit camera')
             game_over();
         }
 
         return state
     }
     let updater = new Updater(move_enemy, {enemy})
-    global_updates_queue.push(updater)
+    add_to_global_updates_queue(updater)
 }
 
 
 function initialize_in_random_position(type_of_obj) {
-    let obj = type_of_obj['create_function']()
+    let obj = type_of_obj['create_function']({camera})
     let parent = new THREE.Object3D();
     obj.add_to(parent)
     earth.add(parent)
@@ -559,7 +501,7 @@ function on_mouse_click(event) {
     }
     if (!axe_is_swinging) {
         let swing_axe_updater = new Updater(swing_axe, {finished: false, total_radians: 0, direction: -1, has_collided: false})
-        global_updates_queue.push(swing_axe_updater)
+        add_to_global_updates_queue(swing_axe_updater)
     }
 }
 
@@ -623,7 +565,7 @@ function move_camera(state, time_delta) {
 
     let len = current_direction_vector.length()
     if (len > 1) {
-        let drag = current_direction_vector.clone().normalize().multiplyScalar(len/20)
+        let drag = current_direction_vector.clone().normalize().multiplyScalar(len/5)
         current_direction_vector.sub(drag)
     } else {
         current_direction_vector.set(0, 0, 0)
@@ -670,7 +612,7 @@ function jump(state, time_delta) {
         return {finished, initial_time, has_collided}
     }
     let jump_updater = new Updater(jump_helper, {initial_time: global_clock.elapsedTime, finished: false, has_collided: false})
-    global_updates_queue.push(jump_updater)
+    add_to_global_updates_queue(jump_updater)
 }
 
 
@@ -700,12 +642,18 @@ function check_if_weapon_can_fire_and_get_new_counts(compound) {
     let entries = Object.entries(parse_formula_to_dict(compound));
     for (let i=0; i<entries.length; i++) {
         let [element, count_needed] = entries[i];
-        if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
-            return [false, {}]
+        if (element_counts[element] === undefined || element_counts[element]['count'] - count_needed < 0) {
+            return false
         }
-        element_counts[element] = element_counts[element] - count_needed
+        element_counts[element]['count'] = element_counts[element]['count'] - count_needed
     }
-    return [true, element_counts]
+
+    for (let i=0; i<Object.keys(element_counts).length; i++) {
+        let element = Object.keys(element_counts)[i];
+        console.log('setting', element, element_counts[element]['count'])
+        current_element_counts.set(element, element_counts[element]['count'])
+    }
+    return true
 }
 
 function try_to_fire_player_weapon(compound){
@@ -716,15 +664,14 @@ function try_to_fire_player_weapon(compound){
         // target.object.material.color.set('#eb4034')
     }
     let params = {'parent': scene, initial_pos, onclick}
-    let [can_fire_weapon, new_counts] = check_if_weapon_can_fire_and_get_new_counts(compound);
-    if (!can_fire_weapon) return;
+    let weapon_will_fire = check_if_weapon_can_fire_and_get_new_counts(compound);
+    if (!weapon_will_fire) return;
     let projectile = create_compound(compound, params)
-    current_element_counts.set(new_counts)
     scene.add(projectile.mesh)
     let initial_time = global_clock.elapsedTime
     let direction = camera.getWorldDirection(new THREE.Vector3())
     let updater = new Updater(blast_projectile, {projectile: projectile, initial_time, direction})
-    global_updates_queue.push(updater)
+    add_to_global_updates_queue(updater)
 }
 
 function fire_enemy_projectile(){
@@ -773,4 +720,5 @@ function game_over(){
     current_game_state['state'] = GameStates.GAMEOVER;
     game_state.set(current_game_state)
     dispose_scene();
+    dispose_renderer();
 }
