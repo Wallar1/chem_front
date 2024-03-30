@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { get } from 'svelte/store';
 
 import { get_random_solid_element, get_random_gas_element, get_font_text_mesh, dispose_material } from './helper_functions';
-import { current_element_counts, global_updates_queue } from './stores.js';
+import { current_element_counts, global_updates_queue, player_score, player_health } from './stores.js';
 
 
 function get_all_properties(obj) {
@@ -185,6 +185,8 @@ class Enemy extends GameObj {
     take_damage(dmg) {
         this.health -= dmg
         if (this.health <= 0) {
+            let score = get(player_score);
+            player_score.set(score + 1);
             this.should_delete = true;
             return
         }

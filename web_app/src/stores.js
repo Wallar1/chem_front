@@ -124,3 +124,7 @@ export const atoms = writable({
 export const selected_atom = writable('C');
 
 export const creator_moves_remaining = writable(0);
+
+export const player_health = writable(100);
+
+export const player_score = writable(0);
