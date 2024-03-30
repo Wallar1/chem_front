@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { get } from 'svelte/store';
 
-import { get_random_solid_element, get_random_gas_element, get_font_text_mesh } from './helper_functions';
-import { current_element_counts } from './stores.js';
+import { get_random_solid_element, get_random_gas_element, get_font_text_mesh, dispose_material } from './helper_functions';
+import { current_element_counts, global_updates_queue } from './stores.js';
 
 
 function get_all_properties(obj) {
@@ -59,9 +59,33 @@ function check_collisions(obj, possible_collision_objs) {
 }
 
 
+class Updater {
+    constructor(step_function, state) {
+        /*
+        The idea is that an updater will run the step function every frame until some condition is met. It runs the
+        function, which updates the state, which includes a variable 'finished'. Every time the game loop goes through
+        the updates_queue, it will make a new queue at the end that only includes updaters that arent finished.
+        */
+        this.step_function = step_function;
+        this.state = state;
+    }
+
+    update(time_delta){
+        this.state = this.step_function(this.state, time_delta);
+    }
+}
+
+function add_to_global_updates_queue(updater) {
+    let guq = get(global_updates_queue);
+    guq.push(updater);
+    global_updates_queue.set(guq);
+}
+
+
 class GameObj {
-    add(obj) {
-        this.mesh.add(obj)
+    add_to(parent) {
+        this.parent = parent;
+        parent.add(this.mesh)
     }
 
     dispose() {
@@ -152,11 +176,6 @@ class Enemy extends GameObj {
         this.health_bar.position.z = -55;
     }
 
-    add_to(parent) {
-        this.parent = parent;
-        parent.add(this.mesh)
-    }
-
     initial_rotation() {
         // Otherwise the health bar is upside down
         this.rotateX(Math.PI);
@@ -194,41 +213,39 @@ function create_enemy(arg_dict) {
 // TODO: maybe also map to a geometry and z position, so we can make the water, mine, or cloud
 const element_to_material = {
     'H': new THREE.MeshStandardMaterial({color: 0xffffff,}),
-    'C': new THREE.MeshStandardMaterial({color: 0x000000,}),
+    'C': new THREE.MeshStandardMaterial({color: 0x876a45,}),  // 000000
     'N': new THREE.MeshStandardMaterial({color: 0x00cde8,}),
     'O': new THREE.MeshStandardMaterial({color: 0xffffff,}),
     'Au': new THREE.MeshStandardMaterial({color: 0xebd834,}),
 }
 const mine_geometry = new THREE.ConeGeometry( 50, 100, 32 );
+const mine_piece_geometry = new THREE.SphereGeometry( 2, 10, 10 );
+const mine_text_position = new THREE.Vector3(-2, 60, 0)
 
 function mine_or_cloud_onclick(element) {
     return () => {
         let added_amount = 1
         let curr_el_cnts = get(current_element_counts)
         if (curr_el_cnts[element]) {
-            curr_el_cnts[element] += added_amount;
+            curr_el_cnts[element]['count'] += added_amount;
         } else {
-            curr_el_cnts[element] = added_amount;
+            curr_el_cnts[element] = {'count': added_amount};
         }
-        current_element_counts.set(curr_el_cnts)
+        current_element_counts.set(element, curr_el_cnts[element]['count'])
     }   
 }
 
 class Mine extends GameObj {
-    constructor() { 
+    constructor({camera}) { 
         super();
+        this.camera = camera;
         this.element = get_random_solid_element();;
         this.should_delete = false;
         this.mesh = new THREE.Mesh(mine_geometry, element_to_material[this.element]);
         this.mesh.onclick = mine_or_cloud_onclick(this.element)
         // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
         // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
-        get_font_text_mesh(this.element, this)
-    }
-
-    add_to(parent) {
-        this.parent = parent;
-        parent.add(this.mesh)
+        get_font_text_mesh(this.element, this.mesh, mine_text_position)
     }
 
     initial_rotation() {
@@ -239,13 +256,61 @@ class Mine extends GameObj {
     collide() {
         // let added_amount = Math.floor(collided_obj.damage / 10);
         const added_amount = 5;
-        let curr_el_cnts = get(current_element_counts)
-        if (curr_el_cnts[this.element]) {
-            curr_el_cnts[this.element] += added_amount;
-        } else {
-            curr_el_cnts[this.element] = added_amount;
+        // let mine_world_position = this.mesh.getWorldPosition(new THREE.Vector3());
+        // for (let i = 0; i < added_amount; i++) {
+        //     let piece = new CollectableMinePiece(this.camera, this.element, mine_world_position.clone());
+        //     piece.collect();
+        // }
+        let num_sparks = 5;
+        for (let j = 0; j < num_sparks; j++) {
+            this.create_collision_particle();
         }
-        current_element_counts.set(curr_el_cnts)
+        // let curr_el_cnts = get(current_element_counts)
+        // if (curr_el_cnts[this.element]) {
+        //     curr_el_cnts[this.element]['count'] += added_amount;
+        // } else {
+        //     curr_el_cnts[this.element] = {'count': added_amount};
+        // }
+        current_element_counts.update(this.element, added_amount)
+    }
+
+    create_collision_particle() {
+        // This particle will blast out in an arc
+        let particle = new MineSpark(this.element);
+        particle.add_to(this.mesh);
+        let radius = Math.random() * 10;
+        let phi = Math.random() * Math.PI / 3;
+        let theta = Math.random() * Math.PI * 2;
+        let direction = new THREE.Vector3().setFromSphericalCoords(radius, phi, theta);
+        let explode_helper = (state, time_delta) => {
+            let {total_time, finished, particle, direction} = state;
+            total_time += time_delta;
+            if (total_time > .5) {
+                return {to_delete: [particle], finished: true};
+            }
+            let gravity = new THREE.Vector3(0, -1, 0);
+            direction.add(gravity.multiplyScalar(time_delta * 10));
+
+            let new_pos = new THREE.Vector3().addVectors(particle.mesh.position, direction.clone().multiplyScalar(time_delta * 50));
+            particle.mesh.position.set(new_pos.x, new_pos.y, new_pos.z);
+            return {total_time, finished, direction, particle}
+        }
+        let updater = new Updater(explode_helper, {finished: false, total_time: 0, direction: direction, particle: particle});
+        add_to_global_updates_queue(updater);
+    }
+}
+
+class MineSpark extends GameObj{
+    constructor(element) {
+        super();
+        this.mesh = new THREE.Mesh(mine_piece_geometry, element_to_material[element]);
+    }
+
+    dispose() {
+        this.mesh.geometry.dispose();
+        dispose_material(this.mesh.material);
+        this.mesh.parent = null;
+        this.mesh = null;
     }
 }
 
@@ -257,10 +322,40 @@ function create_mine(arg_dict) {
     return proxy
 }
 
+// class CollectableMinePiece extends GameObj {
+//     constructor(camera, element, mine_world_position) {
+//         super();
+//         this.camera = camera;
+//         this.element = element;
+//         this.mesh = new THREE.Mesh(mine_piece_geometry, element_to_material[this.element]);
+//         this.add_to(this.camera)
+//         let mine_pos_local_to_camera = this.camera.worldToLocal(mine_world_position)
+//         this.mesh.position.set(mine_pos_local_to_camera.x, mine_pos_local_to_camera.y, mine_pos_local_to_camera.z);
+//     }
+
+//     collect() {
+//         // These particles will fly towards the sidebar totals
+//         let collect_helper = (state, time_delta) => {
+//             let {total_time, finished} = state;
+//             total_time += time_delta;
+//             if (total_time > 3) {
+//                 return {to_delete: [this], finished: true, total_time: total_time};
+//             }
+
+//             this.mesh.position.x += time_delta * 50;
+//             return {total_time, finished}
+//         }
+//         let updater = new Updater(collect_helper, {finished: false, total_time: 0});
+//         add_to_global_updates_queue(updater);
+//     }
+
+// }
+
 
 
 const cloud_material = new THREE.MeshStandardMaterial({color: 0xffffff,});
 const cloud_geometry = new THREE.SphereGeometry( 50, 20, 20 );
+const cloud_text_position = new THREE.Vector3(-2, -60, 0)
 
 class Cloud extends GameObj {
     constructor() { 
@@ -271,28 +366,23 @@ class Cloud extends GameObj {
         this.mesh.onclick = mine_or_cloud_onclick(this.element)
         // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
         // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
-        get_font_text_mesh(this.element, this)
-    }
-
-    add_to(parent) {
-        this.parent = parent;
-        parent.add(this.mesh)
+        get_font_text_mesh(this.element, this.mesh, cloud_text_position)
     }
 
     collide(collided_obj) {
         // let added_amount = Math.floor(collided_obj.damage / 10);
         let added_amount = 10;
-        let curr_el_cnts = get(current_element_counts)
-        if (curr_el_cnts[this.element]) {
-            curr_el_cnts[this.element] += added_amount;
-        } else {
-            curr_el_cnts[this.element] = added_amount;
-        }
-        current_element_counts.set(curr_el_cnts)
+        // let curr_el_cnts = get(current_element_counts)
+        // if (curr_el_cnts[this.element]) {
+        //     curr_el_cnts[this.element]['count'] += added_amount;
+        // } else {
+        //     curr_el_cnts[this.element] = {'count': added_amount};
+        // }
+        current_element_counts.update(this.element, added_amount)
     }
 
     initial_rotation() {
-        return;
+        this.rotateX(Math.PI/2);
     }
 }
 
@@ -368,4 +458,16 @@ class Test {
 }
 
 
-export {create_enemy, Projectile, Enemy, get_all_properties, proxy_handler, Mine, create_mine, create_cloud, Axe};
+export {
+    Updater,
+    add_to_global_updates_queue,
+    create_enemy,
+    Projectile,
+    Enemy,
+    get_all_properties,
+    proxy_handler,
+    Mine,
+    create_mine,
+    create_cloud,
+    Axe,
+};

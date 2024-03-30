@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 const loader = new THREE.FontLoader();
-export function get_font_text_mesh(characters, parent) {
+export function get_font_text_mesh(characters, parent, position) {
     loader.load( 'helvetiker_regular.typeface.json', function ( font ) {
         const matLite = new THREE.MeshBasicMaterial( {
             color: 0x006699,
@@ -13,11 +13,11 @@ export function get_font_text_mesh(characters, parent) {
         const text = new THREE.Mesh( geometry, matLite );
 
         parent.add(text)
-        text.position.y += 6  // to put it over the mine
-        text.position.x -= 2  // to center it
+        text.position.set(position.x, position.y, position.z)
+        // text.position.y += 60  // to put it over the mine
+        // text.position.x -= 2  // to center it
         // render();
         return text
-    
     } );
 }
 
@@ -97,4 +97,49 @@ export function parse_formula_to_dict(formula) {
     let num = current_num ? Number(current_num) : 1;
     add_to_dict(current_el, num)
     return d
+}
+
+
+
+export function dispose_material(material) {
+    console.log('disposing material')
+    material.dispose();
+    // Dispose textures
+    for (const key of Object.keys(material)) {
+        const value = material[key];
+        if (value && typeof value === 'object' && 'minFilter' in value) {
+            value.dispose();
+        }
+    }
+}
+
+// Dispose of the current scene, renderer, and any associated resources
+export function dispose_scene(scene) {
+    if (scene) {
+        // Traverse the scene to dispose geometries, materials, and textures
+        scene.traverse(object => {
+            if (object.isMesh) {
+                if (object.geometry) {
+                    object.geometry.dispose();
+                }
+                if (object.material) {
+                    if (object.material.isMaterial) {
+                        dispose_material(object.material);
+                    } else {
+                        // An array of materials
+                        for (const material of object.material) dispose_material(material);
+                    }
+                }
+            }
+        });
+    }
+}
+
+
+// Remove the renderer's DOM element and dispose the renderer
+export function dispose_renderer(renderer) {
+    if (renderer) {
+        renderer.domElement.remove();
+        renderer.dispose();
+    }
 }

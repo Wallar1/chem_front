@@ -1,11 +1,19 @@
 <script>
     import {current_element_counts} from '../../stores.js';
+    import { fade } from 'svelte/transition';
+
+    function should_highlight(last_updated) {
+        // if the last update was recent, the element will be highlighted
+        let now = Date.now();
+    
+        return Date.now() - last_updated < 1000;
+    }
 </script>
 
 <div id='sidebar-right'>
     <div id='spacer'></div>
-    {#each Object.entries($current_element_counts) as [el, count]}
-        <div class='el-count'>
+    {#each Object.entries($current_element_counts) as [el, {count, last_updated}] (el + count)}
+        <div in:fade={{ duration: 300 }} class='el-count' class:highlight={should_highlight(last_updated)}>
             <p>{el}: {count}</p>
         </div>
     {/each}
@@ -35,5 +43,14 @@
         border: 1px solid gray;
         border-radius: 4px;
         margin: 10px;
+    }
+
+    @keyframes highlight-background {
+        0% { background-color: yellow; }
+        100% { background-color: transparent; }
+    }
+
+    .highlight {
+        animation: highlight-background 1s ease forwards;
     }
 </style>

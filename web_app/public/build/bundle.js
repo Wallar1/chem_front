@@ -4,6 +4,7 @@ var app = (function () {
     'use strict';
 
     function noop() { }
+    const identity = x => x;
     function add_location(element, file, line, column, char) {
         element.__svelte_meta = {
             loc: { file, line, column, char }
@@ -62,8 +63,56 @@ var app = (function () {
         store.set(value);
         return ret;
     }
+
+    const is_client = typeof window !== 'undefined';
+    let now$1 = is_client
+        ? () => window.performance.now()
+        : () => Date.now();
+    let raf = is_client ? cb => requestAnimationFrame(cb) : noop;
+
+    const tasks = new Set();
+    function run_tasks(now) {
+        tasks.forEach(task => {
+            if (!task.c(now)) {
+                tasks.delete(task);
+                task.f();
+            }
+        });
+        if (tasks.size !== 0)
+            raf(run_tasks);
+    }
+    /**
+     * Creates a new task that runs on each raf frame
+     * until it returns a falsy value or is aborted
+     */
+    function loop(callback) {
+        let task;
+        if (tasks.size === 0)
+            raf(run_tasks);
+        return {
+            promise: new Promise(fulfill => {
+                tasks.add(task = { c: callback, f: fulfill });
+            }),
+            abort() {
+                tasks.delete(task);
+            }
+        };
+    }
     function append(target, node) {
         target.appendChild(node);
+    }
+    function get_root_for_style(node) {
+        if (!node)
+            return document;
+        const root = node.getRootNode ? node.getRootNode() : node.ownerDocument;
+        if (root && root.host) {
+            return root;
+        }
+        return node.ownerDocument;
+    }
+    function append_stylesheet(node, style) {
+        append(node.head || node, style);
+        return style.sheet;
     }
     function insert(target, node, anchor) {
         target.insertBefore(node, anchor || null);
@@ -113,6 +162,70 @@ var app = (function () {
         const e = document.createEvent('CustomEvent');
         e.initCustomEvent(type, bubbles, cancelable, detail);
         return e;
+    }
+
+    // we need to store the information for multiple documents because a Svelte application could also contain iframes
+    // https://github.com/sveltejs/svelte/issues/3624
+    const managed_styles = new Map();
+    let active = 0;
+    // https://github.com/darkskyapp/string-hash/blob/master/index.js
+    function hash(str) {
+        let hash = 5381;
+        let i = str.length;
+        while (i--)
+            hash = ((hash << 5) - hash) ^ str.charCodeAt(i);
+        return hash >>> 0;
+    }
+    function create_style_information(doc) {
+        const info = { style_element: element('style'), rules: {} };
+        managed_styles.set(doc, info);
+        return info;
+    }
+    function create_rule(node, a, b, duration, delay, ease, fn, uid = 0) {
+        const step = 16.666 / duration;
+        let keyframes = '{\n';
+        for (let p = 0; p <= 1; p += step) {
+            const t = a + (b - a) * ease(p);
+            keyframes += p * 100 + `%{${fn(t, 1 - t)}}\n`;
+        }
+        const rule = keyframes + `100% {${fn(b, 1 - b)}}\n}`;
+        const name = `__svelte_${hash(rule)}_${uid}`;
+        const doc = get_root_for_style(node);
+        const { style_element, rules } = managed_styles.get(doc) || create_style_information(doc);
+        if (!rules[name]) {
+            const stylesheet = append_stylesheet(doc, style_element);
+            rules[name] = true;
+            stylesheet.insertRule(`@keyframes ${name} ${rule}`, stylesheet.cssRules.length);
+        }
+        const animation = node.style.animation || '';
+        node.style.animation = `${animation ? `${animation}, ` : ''}${name} ${duration}ms linear ${delay}ms 1 both`;
+        active += 1;
+        return name;
+    }
+    function delete_rule(node, name) {
+        const previous = (node.style.animation || '').split(', ');
+        const next = previous.filter(name
+            ? anim => anim.indexOf(name) < 0 // remove specific animation
+            : anim => anim.indexOf('__svelte') === -1 // remove all Svelte animations
+        );
+        const deleted = previous.length - next.length;
+        if (deleted) {
+            node.style.animation = next.join(', ');
+            active -= deleted;
+            if (!active)
+                clear_rules();
+        }
+    }
+    function clear_rules() {
+        raf(() => {
+            if (active)
+                return;
+            managed_styles.forEach(info => {
+                const { style_element } = info;
+                detach(style_element);
+            });
+            managed_styles.clear();
+        });
     }
 
     let current_component;
@@ -213,6 +326,20 @@ var app = (function () {
             $$.after_update.forEach(add_render_callback);
         }
     }
+
+    let promise;
+    function wait() {
+        if (!promise) {
+            promise = Promise.resolve();
+            promise.then(() => {
+                promise = null;
+            });
+        }
+        return promise;
+    }
+    function dispatch(node, direction, kind) {
+        node.dispatchEvent(custom_event(`${direction ? 'intro' : 'outro'}${kind}`));
+    }
     const outroing = new Set();
     let outros;
     function group_outros() {
@@ -253,12 +380,166 @@ var app = (function () {
             callback();
         }
     }
+    const null_transition = { duration: 0 };
+    function create_in_transition(node, fn, params) {
+        let config = fn(node, params);
+        let running = false;
+        let animation_name;
+        let task;
+        let uid = 0;
+        function cleanup() {
+            if (animation_name)
+                delete_rule(node, animation_name);
+        }
+        function go() {
+            const { delay = 0, duration = 300, easing = identity, tick = noop, css } = config || null_transition;
+            if (css)
+                animation_name = create_rule(node, 0, 1, duration, delay, easing, css, uid++);
+            tick(0, 1);
+            const start_time = now$1() + delay;
+            const end_time = start_time + duration;
+            if (task)
+                task.abort();
+            running = true;
+            add_render_callback(() => dispatch(node, true, 'start'));
+            task = loop(now => {
+                if (running) {
+                    if (now >= end_time) {
+                        tick(1, 0);
+                        dispatch(node, true, 'end');
+                        cleanup();
+                        return running = false;
+                    }
+                    if (now >= start_time) {
+                        const t = easing((now - start_time) / duration);
+                        tick(t, 1 - t);
+                    }
+                }
+                return running;
+            });
+        }
+        let started = false;
+        return {
+            start() {
+                if (started)
+                    return;
+                started = true;
+                delete_rule(node);
+                if (is_function(config)) {
+                    config = config();
+                    wait().then(go);
+                }
+                else {
+                    go();
+                }
+            },
+            invalidate() {
+                started = false;
+            },
+            end() {
+                if (running) {
+                    cleanup();
+                    running = false;
+                }
+            }
+        };
+    }
 
     const globals = (typeof window !== 'undefined'
         ? window
         : typeof globalThis !== 'undefined'
             ? globalThis
             : global);
+
+    function destroy_block(block, lookup) {
+        block.d(1);
+        lookup.delete(block.key);
+    }
+    function update_keyed_each(old_blocks, dirty, get_key, dynamic, ctx, list, lookup, node, destroy, create_each_block, next, get_context) {
+        let o = old_blocks.length;
+        let n = list.length;
+        let i = o;
+        const old_indexes = {};
+        while (i--)
+            old_indexes[old_blocks[i].key] = i;
+        const new_blocks = [];
+        const new_lookup = new Map();
+        const deltas = new Map();
+        i = n;
+        while (i--) {
+            const child_ctx = get_context(ctx, list, i);
+            const key = get_key(child_ctx);
+            let block = lookup.get(key);
+            if (!block) {
+                block = create_each_block(key, child_ctx);
+                block.c();
+            }
+            else if (dynamic) {
+                block.p(child_ctx, dirty);
+            }
+            new_lookup.set(key, new_blocks[i] = block);
+            if (key in old_indexes)
+                deltas.set(key, Math.abs(i - old_indexes[key]));
+        }
+        const will_move = new Set();
+        const did_move = new Set();
+        function insert(block) {
+            transition_in(block, 1);
+            block.m(node, next);
+            lookup.set(block.key, block);
+            next = block.first;
+            n--;
+        }
+        while (o && n) {
+            const new_block = new_blocks[n - 1];
+            const old_block = old_blocks[o - 1];
+            const new_key = new_block.key;
+            const old_key = old_block.key;
+            if (new_block === old_block) {
+                // do nothing
+                next = new_block.first;
+                o--;
+                n--;
+            }
+            else if (!new_lookup.has(old_key)) {
+                // remove old block
+                destroy(old_block, lookup);
+                o--;
+            }
+            else if (!lookup.has(new_key) || will_move.has(new_key)) {
+                insert(new_block);
+            }
+            else if (did_move.has(old_key)) {
+                o--;
+            }
+            else if (deltas.get(new_key) > deltas.get(old_key)) {
+                did_move.add(new_key);
+                insert(new_block);
+            }
+            else {
+                will_move.add(old_key);
+                o--;
+            }
+        }
+        while (o--) {
+            const old_block = old_blocks[o];
+            if (!new_lookup.has(old_block.key))
+                destroy(old_block, lookup);
+        }
+        while (n)
+            insert(new_blocks[n - 1]);
+        return new_blocks;
+    }
+    function validate_each_keys(ctx, list, get_context, get_key) {
+        const keys = new Set();
+        for (let i = 0; i < list.length; i++) {
+            const key = get_key(get_context(ctx, list, i));
+            if (keys.has(key)) {
+                throw new Error('Cannot have duplicate keys in a keyed each');
+            }
+            keys.add(key);
+        }
+    }
     function create_component(block) {
         block && block.c();
     }
@@ -42539,7 +42820,7 @@ var app = (function () {
     // import * as FontLoaderJs from 'three/addons/loaders/FontLoader.js';
 
     const loader = new FontLoader();
-    function get_font_text_mesh(characters, parent) {
+    function get_font_text_mesh(characters, parent, position) {
         loader.load( 'helvetiker_regular.typeface.json', function ( font ) {
             const matLite = new MeshBasicMaterial( {
                 color: 0x006699,
@@ -42550,11 +42831,11 @@ var app = (function () {
             const text = new Mesh( geometry, matLite );
 
             parent.add(text);
-            text.position.y += 6;  // to put it over the mine
-            text.position.x -= 2;  // to center it
+            text.position.set(position.x, position.y, position.z);
+            // text.position.y += 60  // to put it over the mine
+            // text.position.x -= 2  // to center it
             // render();
             return text
-        
         } );
     }
 
@@ -42636,6 +42917,51 @@ var app = (function () {
         return d
     }
 
+
+
+    function dispose_material(material) {
+        console.log('disposing material');
+        material.dispose();
+        // Dispose textures
+        for (const key of Object.keys(material)) {
+            const value = material[key];
+            if (value && typeof value === 'object' && 'minFilter' in value) {
+                value.dispose();
+            }
+        }
+    }
+
+    // Dispose of the current scene, renderer, and any associated resources
+    function dispose_scene(scene) {
+        if (scene) {
+            // Traverse the scene to dispose geometries, materials, and textures
+            scene.traverse(object => {
+                if (object.isMesh) {
+                    if (object.geometry) {
+                        object.geometry.dispose();
+                    }
+                    if (object.material) {
+                        if (object.material.isMaterial) {
+                            dispose_material(object.material);
+                        } else {
+                            // An array of materials
+                            for (const material of object.material) dispose_material(material);
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+
+    // Remove the renderer's DOM element and dispose the renderer
+    function dispose_renderer(renderer) {
+        if (renderer) {
+            renderer.domElement.remove();
+            renderer.dispose();
+        }
+    }
+
     const GameStates = Object.freeze({
         'STARTING': Symbol('starting'),
         'PLAYING': Symbol('playing'),
@@ -42654,6 +42980,11 @@ var app = (function () {
         'CompoundCreator': Symbol('compound creator')
     });
     const current_scene = writable(possible_scenes.Battle);
+    // export const current_scene = writable(possible_scenes.CompoundCreator);
+
+
+    const global_updates_queue = writable([]);
+
 
     const current_scientist = writable(scientists.RobertBoyle);
 
@@ -42665,10 +42996,39 @@ var app = (function () {
         '5': 'H2O'
     });
 
-    let counts = {
-        'H': 20,
+    let initial_counts = {
+        'H': {
+            count: 20,
+            last_updated: Date.now(),
+        }
     };
-    const current_element_counts = writable(counts);
+    function create_current_counts_store() {
+        const { subscribe, set: originalSet, update } = writable(initial_counts);
+
+        return {
+            subscribe,
+            update: (element, added_amount) => {
+                update(counts => {
+                    if (!counts[element]) {
+                        counts[element] = { count: 0, last_updated: Date.now() };
+                    }
+                    counts[element]['count'] += added_amount;
+                    counts[element]['last_updated'] = Date.now();
+                    return counts;
+                });
+            },
+            set: (element, new_count) => {
+                const new_counts = { ...initial_counts };
+                if (!new_counts[element]) {
+                    new_counts[element] = { count: 0, last_updated: Date.now() };
+                }
+                new_counts[element]['count'] = new_count;
+                new_counts[element]['last_updated'] = Date.now();
+                originalSet(new_counts);
+            },
+        };
+    }
+    const current_element_counts = create_current_counts_store();
 
 
     /*
@@ -42688,7 +43048,7 @@ var app = (function () {
                     if ($current_element_counts[element] === undefined) {
                         current_max_count = 0;
                     } else {
-                        let max_possible = Math.floor($current_element_counts[element] / count_needed);
+                        let max_possible = Math.floor($current_element_counts[element]['count'] / count_needed);
                         current_max_count = Math.min(max_possible, current_max_count);
                     }
                 }
@@ -44397,9 +44757,33 @@ var app = (function () {
     }
 
 
+    class Updater {
+        constructor(step_function, state) {
+            /*
+            The idea is that an updater will run the step function every frame until some condition is met. It runs the
+            function, which updates the state, which includes a variable 'finished'. Every time the game loop goes through
+            the updates_queue, it will make a new queue at the end that only includes updaters that arent finished.
+            */
+            this.step_function = step_function;
+            this.state = state;
+        }
+
+        update(time_delta){
+            this.state = this.step_function(this.state, time_delta);
+        }
+    }
+
+    function add_to_global_updates_queue(updater) {
+        let guq = get_store_value(global_updates_queue);
+        guq.push(updater);
+        global_updates_queue.set(guq);
+    }
+
+
     class GameObj {
-        add(obj) {
-            this.mesh.add(obj);
+        add_to(parent) {
+            this.parent = parent;
+            parent.add(this.mesh);
         }
 
         dispose() {
@@ -44490,11 +44874,6 @@ var app = (function () {
             this.health_bar.position.z = -55;
         }
 
-        add_to(parent) {
-            this.parent = parent;
-            parent.add(this.mesh);
-        }
-
         initial_rotation() {
             // Otherwise the health bar is upside down
             this.rotateX(Math.PI);
@@ -44532,40 +44911,38 @@ var app = (function () {
     // TODO: maybe also map to a geometry and z position, so we can make the water, mine, or cloud
     const element_to_material = {
         'H': new MeshStandardMaterial({color: 0xffffff,}),
-        'C': new MeshStandardMaterial({color: 0x000000,}),
+        'C': new MeshStandardMaterial({color: 0x876a45,}),  // 000000
         'N': new MeshStandardMaterial({color: 0x00cde8,}),
         'O': new MeshStandardMaterial({color: 0xffffff,}),
         'Au': new MeshStandardMaterial({color: 0xebd834,}),
     };
     const mine_geometry = new ConeGeometry( 50, 100, 32 );
+    const mine_piece_geometry = new SphereGeometry( 2, 10, 10 );
+    const mine_text_position = new Vector3(-2, 60, 0);
 
     function mine_or_cloud_onclick(element) {
         return () => {
             let added_amount = 1;
             let curr_el_cnts = get_store_value(current_element_counts);
             if (curr_el_cnts[element]) {
-                curr_el_cnts[element] += added_amount;
+                curr_el_cnts[element]['count'] += added_amount;
             } else {
-                curr_el_cnts[element] = added_amount;
+                curr_el_cnts[element] = {'count': added_amount};
             }
-            current_element_counts.set(curr_el_cnts);
+            current_element_counts.set(element, curr_el_cnts[element]['count']);
         }   
     }
 
     class Mine extends GameObj {
-        constructor() { 
+        constructor({camera}) { 
             super();
+            this.camera = camera;
             this.element = get_random_solid_element();        this.should_delete = false;
             this.mesh = new Mesh(mine_geometry, element_to_material[this.element]);
             this.mesh.onclick = mine_or_cloud_onclick(this.element);
             // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
             // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
-            get_font_text_mesh(this.element, this);
-        }
-
-        add_to(parent) {
-            this.parent = parent;
-            parent.add(this.mesh);
+            get_font_text_mesh(this.element, this.mesh, mine_text_position);
         }
 
         initial_rotation() {
@@ -44576,13 +44953,61 @@ var app = (function () {
         collide() {
             // let added_amount = Math.floor(collided_obj.damage / 10);
             const added_amount = 5;
-            let curr_el_cnts = get_store_value(current_element_counts);
-            if (curr_el_cnts[this.element]) {
-                curr_el_cnts[this.element] += added_amount;
-            } else {
-                curr_el_cnts[this.element] = added_amount;
+            // let mine_world_position = this.mesh.getWorldPosition(new THREE.Vector3());
+            // for (let i = 0; i < added_amount; i++) {
+            //     let piece = new CollectableMinePiece(this.camera, this.element, mine_world_position.clone());
+            //     piece.collect();
+            // }
+            let num_sparks = 5;
+            for (let j = 0; j < num_sparks; j++) {
+                this.create_collision_particle();
             }
-            current_element_counts.set(curr_el_cnts);
+            // let curr_el_cnts = get(current_element_counts)
+            // if (curr_el_cnts[this.element]) {
+            //     curr_el_cnts[this.element]['count'] += added_amount;
+            // } else {
+            //     curr_el_cnts[this.element] = {'count': added_amount};
+            // }
+            current_element_counts.update(this.element, added_amount);
+        }
+
+        create_collision_particle() {
+            // This particle will blast out in an arc
+            let particle = new MineSpark(this.element);
+            particle.add_to(this.mesh);
+            let radius = Math.random() * 10;
+            let phi = Math.random() * Math.PI / 3;
+            let theta = Math.random() * Math.PI * 2;
+            let direction = new Vector3().setFromSphericalCoords(radius, phi, theta);
+            let explode_helper = (state, time_delta) => {
+                let {total_time, finished, particle, direction} = state;
+                total_time += time_delta;
+                if (total_time > .5) {
+                    return {to_delete: [particle], finished: true};
+                }
+                let gravity = new Vector3(0, -1, 0);
+                direction.add(gravity.multiplyScalar(time_delta * 10));
+
+                let new_pos = new Vector3().addVectors(particle.mesh.position, direction.clone().multiplyScalar(time_delta * 50));
+                particle.mesh.position.set(new_pos.x, new_pos.y, new_pos.z);
+                return {total_time, finished, direction, particle}
+            };
+            let updater = new Updater(explode_helper, {finished: false, total_time: 0, direction: direction, particle: particle});
+            add_to_global_updates_queue(updater);
+        }
+    }
+
+    class MineSpark extends GameObj{
+        constructor(element) {
+            super();
+            this.mesh = new Mesh(mine_piece_geometry, element_to_material[element]);
+        }
+
+        dispose() {
+            this.mesh.geometry.dispose();
+            dispose_material(this.mesh.material);
+            this.mesh.parent = null;
+            this.mesh = null;
         }
     }
 
@@ -44594,10 +45019,40 @@ var app = (function () {
         return proxy
     }
 
+    // class CollectableMinePiece extends GameObj {
+    //     constructor(camera, element, mine_world_position) {
+    //         super();
+    //         this.camera = camera;
+    //         this.element = element;
+    //         this.mesh = new THREE.Mesh(mine_piece_geometry, element_to_material[this.element]);
+    //         this.add_to(this.camera)
+    //         let mine_pos_local_to_camera = this.camera.worldToLocal(mine_world_position)
+    //         this.mesh.position.set(mine_pos_local_to_camera.x, mine_pos_local_to_camera.y, mine_pos_local_to_camera.z);
+    //     }
+
+    //     collect() {
+    //         // These particles will fly towards the sidebar totals
+    //         let collect_helper = (state, time_delta) => {
+    //             let {total_time, finished} = state;
+    //             total_time += time_delta;
+    //             if (total_time > 3) {
+    //                 return {to_delete: [this], finished: true, total_time: total_time};
+    //             }
+
+    //             this.mesh.position.x += time_delta * 50;
+    //             return {total_time, finished}
+    //         }
+    //         let updater = new Updater(collect_helper, {finished: false, total_time: 0});
+    //         add_to_global_updates_queue(updater);
+    //     }
+
+    // }
+
 
 
     const cloud_material = new MeshStandardMaterial({color: 0xffffff,});
     const cloud_geometry = new SphereGeometry( 50, 20, 20 );
+    const cloud_text_position = new Vector3(-2, -60, 0);
 
     class Cloud extends GameObj {
         constructor() { 
@@ -44607,28 +45062,23 @@ var app = (function () {
             this.mesh.onclick = mine_or_cloud_onclick(this.element);
             // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
             // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
-            get_font_text_mesh(this.element, this);
-        }
-
-        add_to(parent) {
-            this.parent = parent;
-            parent.add(this.mesh);
+            get_font_text_mesh(this.element, this.mesh, cloud_text_position);
         }
 
         collide(collided_obj) {
             // let added_amount = Math.floor(collided_obj.damage / 10);
             let added_amount = 10;
-            let curr_el_cnts = get_store_value(current_element_counts);
-            if (curr_el_cnts[this.element]) {
-                curr_el_cnts[this.element] += added_amount;
-            } else {
-                curr_el_cnts[this.element] = added_amount;
-            }
-            current_element_counts.set(curr_el_cnts);
+            // let curr_el_cnts = get(current_element_counts)
+            // if (curr_el_cnts[this.element]) {
+            //     curr_el_cnts[this.element]['count'] += added_amount;
+            // } else {
+            //     curr_el_cnts[this.element] = {'count': added_amount};
+            // }
+            current_element_counts.update(this.element, added_amount);
         }
 
         initial_rotation() {
-            return;
+            this.rotateX(Math.PI/2);
         }
     }
 
@@ -45109,31 +45559,13 @@ var app = (function () {
     // https://attackingpixels.com/three-js-timeline-career-3D-portfolio/
 
 
-    class Updater {
-        constructor(step_function, state) {
-            /*
-            The idea is that an updater will run the step function every frame until some condition is met. It runs the
-            function, which updates the state, which includes a variable 'finished'. Every time the game loop goes through
-            the updates_queue, it will make a new queue at the end that only includes updaters that arent finished.
-            */
-            this.step_function = step_function;
-            this.state = state;
-        }
-
-        update(time_delta){
-            this.state = this.step_function(this.state, time_delta);
-        }
-    }
-
-
     const earth_radius = 3000;
     const camera_offset = 50;
     // const speed = .2;
     // const frame_rate = 60;
     // const world_units_scale = 1/frame_rate  // used to adjust the speed of things, because moving an obj 10 units is super fast/far 
 
-    var global_updates_queue, 
-        global_clock,
+    var global_clock,
         time_delta,
         earth_initial_position,
         scene$1,
@@ -45152,8 +45584,6 @@ var app = (function () {
 
 
     function initialize_vars(){
-        // TODO: this should be part of the global state, and then we can break out the movement code into another file
-        global_updates_queue = [];
         global_clock = new Clock();
         earth_initial_position = new Vector3(0,0,0);
         earth = create_earth();
@@ -45194,7 +45624,7 @@ var app = (function () {
             renderer$1.render(scene$1, camera$1);
 
             let move_camera_updater = new Updater(move_camera, {});
-            global_updates_queue.push(move_camera_updater);
+            add_to_global_updates_queue(move_camera_updater);
 
             spawn_objects();
         }
@@ -45218,6 +45648,7 @@ var app = (function () {
         animate(){
             requestAnimationFrame(()=>{
                 if (get_store_value(game_state)['state'] === GameStates.GAMEOVER) {
+                    global_updates_queue.set([]);
                     return;
                 }
                 this.animate();
@@ -45226,8 +45657,9 @@ var app = (function () {
                 renderer$1.render(scene$1, camera$1);
                 let next_updates = [];
                 // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
-                for (let i=0; i<global_updates_queue.length; i++) {
-                    let updater = global_updates_queue[i];
+                let guq = get_store_value(global_updates_queue);
+                for (let i=0; i<guq.length; i++) {
+                    let updater = guq[i];
                     updater.update(time_delta);
                     if (!updater.state.finished) { 
                         next_updates.push(updater);
@@ -45238,49 +45670,8 @@ var app = (function () {
                     }
                 }
                 stats.end();
-                global_updates_queue = next_updates;
+                global_updates_queue.set(next_updates);
             });
-        }
-    }
-
-    // Dispose of the current scene, renderer, and any associated resources
-    function dispose_scene() {
-        if (scene$1) {
-            // Traverse the scene to dispose geometries, materials, and textures
-            scene$1.traverse(object => {
-                if (object.isMesh) {
-                    if (object.geometry) {
-                        object.geometry.dispose();
-                    }
-                    if (object.material) {
-                        if (object.material.isMaterial) {
-                            cleanMaterial(object.material);
-                        } else {
-                            // An array of materials
-                            for (const material of object.material) cleanMaterial(material);
-                        }
-                    }
-                }
-            });
-        }
-
-        // Function to clean materials
-        function cleanMaterial(material) {
-            console.log('disposing material');
-            material.dispose();
-            // Dispose textures
-            for (const key of Object.keys(material)) {
-                const value = material[key];
-                if (value && typeof value === 'object' && 'minFilter' in value) {
-                    value.dispose();
-                }
-            }
-        }
-
-        // Remove the renderer's DOM element and dispose the renderer
-        if (renderer$1) {
-            renderer$1.domElement.remove();
-            renderer$1.dispose();
         }
     }
 
@@ -45402,7 +45793,7 @@ var app = (function () {
     function spawn_objects() {
         for (let i=0; i<100; i++) {
             initialize_in_random_position(get_random_type());
-            // initialize_in_random_position(object_type_details['cloud'])
+            // initialize_in_random_position(object_type_details['mine'])
         }
         // initialize_in_random_position(object_type_details['cloud'])
         // initialize_in_random_position(object_type_details['mine'])
@@ -45460,18 +45851,19 @@ var app = (function () {
             }
             let collisions = enemy.check_collisions([camera$1]);
             if (collisions.length) {
+                console.log('hit camera');
                 game_over();
             }
 
             return state
         }
         let updater = new Updater(move_enemy, {enemy});
-        global_updates_queue.push(updater);
+        add_to_global_updates_queue(updater);
     }
 
 
     function initialize_in_random_position(type_of_obj) {
-        let obj = type_of_obj['create_function']();
+        let obj = type_of_obj['create_function']({camera: camera$1});
         let parent = new Object3D();
         obj.add_to(parent);
         earth.add(parent);
@@ -45635,7 +46027,7 @@ var app = (function () {
         }
         if (!axe_is_swinging) {
             let swing_axe_updater = new Updater(swing_axe, {finished: false, total_radians: 0, direction: -1, has_collided: false});
-            global_updates_queue.push(swing_axe_updater);
+            add_to_global_updates_queue(swing_axe_updater);
         }
     }
 
@@ -45699,7 +46091,7 @@ var app = (function () {
 
         let len = current_direction_vector.length();
         if (len > 1) {
-            let drag = current_direction_vector.clone().normalize().multiplyScalar(len/20);
+            let drag = current_direction_vector.clone().normalize().multiplyScalar(len/5);
             current_direction_vector.sub(drag);
         } else {
             current_direction_vector.set(0, 0, 0);
@@ -45746,7 +46138,7 @@ var app = (function () {
             return {finished, initial_time, has_collided}
         }
         let jump_updater = new Updater(jump_helper, {initial_time: global_clock.elapsedTime, finished: false, has_collided: false});
-        global_updates_queue.push(jump_updater);
+        add_to_global_updates_queue(jump_updater);
     }
 
 
@@ -45776,12 +46168,18 @@ var app = (function () {
         let entries = Object.entries(parse_formula_to_dict(compound));
         for (let i=0; i<entries.length; i++) {
             let [element, count_needed] = entries[i];
-            if (element_counts[element] === undefined || element_counts[element] - count_needed < 0) {
-                return [false, {}]
+            if (element_counts[element] === undefined || element_counts[element]['count'] - count_needed < 0) {
+                return false
             }
-            element_counts[element] = element_counts[element] - count_needed;
+            element_counts[element]['count'] = element_counts[element]['count'] - count_needed;
         }
-        return [true, element_counts]
+
+        for (let i=0; i<Object.keys(element_counts).length; i++) {
+            let element = Object.keys(element_counts)[i];
+            console.log('setting', element, element_counts[element]['count']);
+            current_element_counts.set(element, element_counts[element]['count']);
+        }
+        return true
     }
 
     function try_to_fire_player_weapon(compound){
@@ -45792,15 +46190,14 @@ var app = (function () {
             // target.object.material.color.set('#eb4034')
         };
         let params = {'parent': scene$1, initial_pos, onclick};
-        let [can_fire_weapon, new_counts] = check_if_weapon_can_fire_and_get_new_counts(compound);
-        if (!can_fire_weapon) return;
+        let weapon_will_fire = check_if_weapon_can_fire_and_get_new_counts(compound);
+        if (!weapon_will_fire) return;
         let projectile = create_compound(compound, params);
-        current_element_counts.set(new_counts);
         scene$1.add(projectile.mesh);
         let initial_time = global_clock.elapsedTime;
         let direction = camera$1.getWorldDirection(new Vector3());
         let updater = new Updater(blast_projectile, {projectile: projectile, initial_time, direction});
-        global_updates_queue.push(updater);
+        add_to_global_updates_queue(updater);
     }
 
     function blast_projectile(state, time_delta){
@@ -45837,6 +46234,7 @@ var app = (function () {
         current_game_state['state'] = GameStates.GAMEOVER;
         game_state.set(current_game_state);
         dispose_scene();
+        dispose_renderer();
     }
 
     /* src/components/battle_scene/compound_card.svelte generated by Svelte v3.50.0 */
@@ -46270,20 +46668,31 @@ var app = (function () {
     	}
     }
 
+    function fade(node, { delay = 0, duration = 400, easing = identity } = {}) {
+        const o = +getComputedStyle(node).opacity;
+        return {
+            delay,
+            duration,
+            easing,
+            css: t => `opacity: ${t * o}`
+        };
+    }
+
     /* src/components/battle_scene/right_element_bar.svelte generated by Svelte v3.50.0 */
 
-    const { Object: Object_1$1 } = globals;
+    const { Object: Object_1$1, console: console_1$2 } = globals;
     const file$4 = "src/components/battle_scene/right_element_bar.svelte";
 
     function get_each_context$1(ctx, list, i) {
     	const child_ctx = ctx.slice();
     	child_ctx[1] = list[i][0];
-    	child_ctx[2] = list[i][1];
+    	child_ctx[2] = list[i][1].count;
+    	child_ctx[3] = list[i][1].last_updated;
     	return child_ctx;
     }
 
-    // (7:4) {#each Object.entries($current_element_counts) as [el, count]}
-    function create_each_block$1(ctx) {
+    // (16:4) {#each Object.entries($current_element_counts) as [el, {count, last_updated}
+    function create_each_block$1(key_1, ctx) {
     	let div;
     	let p;
     	let t0_value = /*el*/ ctx[1] + "";
@@ -46292,8 +46701,11 @@ var app = (function () {
     	let t2_value = /*count*/ ctx[2] + "";
     	let t2;
     	let t3;
+    	let div_intro;
 
     	const block = {
+    		key: key_1,
+    		first: null,
     		c: function create() {
     			div = element("div");
     			p = element("p");
@@ -46301,9 +46713,11 @@ var app = (function () {
     			t1 = text(": ");
     			t2 = text(t2_value);
     			t3 = space$1();
-    			add_location(p, file$4, 8, 12, 243);
-    			attr_dev(div, "class", "el-count svelte-1wylw3y");
-    			add_location(div, file$4, 7, 8, 208);
+    			add_location(p, file$4, 17, 12, 845);
+    			attr_dev(div, "class", "el-count svelte-18vqqcx");
+    			toggle_class(div, "highlight", should_highlight(/*last_updated*/ ctx[3]));
+    			add_location(div, file$4, 16, 8, 733);
+    			this.first = div;
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -46313,10 +46727,24 @@ var app = (function () {
     			append_dev(p, t2);
     			append_dev(div, t3);
     		},
-    		p: function update(ctx, dirty) {
+    		p: function update(new_ctx, dirty) {
+    			ctx = new_ctx;
     			if (dirty & /*$current_element_counts*/ 1 && t0_value !== (t0_value = /*el*/ ctx[1] + "")) set_data_dev(t0, t0_value);
     			if (dirty & /*$current_element_counts*/ 1 && t2_value !== (t2_value = /*count*/ ctx[2] + "")) set_data_dev(t2, t2_value);
+
+    			if (dirty & /*should_highlight, Object, $current_element_counts*/ 1) {
+    				toggle_class(div, "highlight", should_highlight(/*last_updated*/ ctx[3]));
+    			}
     		},
+    		i: function intro(local) {
+    			if (!div_intro) {
+    				add_render_callback(() => {
+    					div_intro = create_in_transition(div, fade, { duration: 300 });
+    					div_intro.start();
+    				});
+    			}
+    		},
+    		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
     		}
@@ -46326,7 +46754,7 @@ var app = (function () {
     		block,
     		id: create_each_block$1.name,
     		type: "each",
-    		source: "(7:4) {#each Object.entries($current_element_counts) as [el, count]}",
+    		source: "(16:4) {#each Object.entries($current_element_counts) as [el, {count, last_updated}",
     		ctx
     	});
 
@@ -46337,12 +46765,17 @@ var app = (function () {
     	let div1;
     	let div0;
     	let t;
+    	let each_blocks = [];
+    	let each_1_lookup = new Map();
     	let each_value = Object.entries(/*$current_element_counts*/ ctx[0]);
     	validate_each_argument(each_value);
-    	let each_blocks = [];
+    	const get_key = ctx => /*el*/ ctx[1] + /*count*/ ctx[2];
+    	validate_each_keys(ctx, each_value, get_each_context$1, get_key);
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+    		let child_ctx = get_each_context$1(ctx, each_value, i);
+    		let key = get_key(child_ctx);
+    		each_1_lookup.set(key, each_blocks[i] = create_each_block$1(key, child_ctx));
     	}
 
     	const block = {
@@ -46356,11 +46789,11 @@ var app = (function () {
     			}
 
     			attr_dev(div0, "id", "spacer");
-    			attr_dev(div0, "class", "svelte-1wylw3y");
-    			add_location(div0, file$4, 5, 4, 109);
+    			attr_dev(div0, "class", "svelte-18vqqcx");
+    			add_location(div0, file$4, 13, 4, 420);
     			attr_dev(div1, "id", "sidebar-right");
-    			attr_dev(div1, "class", "svelte-1wylw3y");
-    			add_location(div1, file$4, 4, 0, 80);
+    			attr_dev(div1, "class", "svelte-18vqqcx");
+    			add_location(div1, file$4, 12, 0, 391);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -46375,35 +46808,25 @@ var app = (function () {
     			}
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*Object, $current_element_counts*/ 1) {
+    			if (dirty & /*should_highlight, Object, $current_element_counts*/ 1) {
     				each_value = Object.entries(/*$current_element_counts*/ ctx[0]);
     				validate_each_argument(each_value);
-    				let i;
-
-    				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context$1(ctx, each_value, i);
-
-    					if (each_blocks[i]) {
-    						each_blocks[i].p(child_ctx, dirty);
-    					} else {
-    						each_blocks[i] = create_each_block$1(child_ctx);
-    						each_blocks[i].c();
-    						each_blocks[i].m(div1, null);
-    					}
-    				}
-
-    				for (; i < each_blocks.length; i += 1) {
-    					each_blocks[i].d(1);
-    				}
-
-    				each_blocks.length = each_value.length;
+    				validate_each_keys(ctx, each_value, get_each_context$1, get_key);
+    				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, div1, destroy_block, create_each_block$1, null, get_each_context$1);
     			}
     		},
-    		i: noop,
+    		i: function intro(local) {
+    			for (let i = 0; i < each_value.length; i += 1) {
+    				transition_in(each_blocks[i]);
+    			}
+    		},
     		o: noop,
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div1);
-    			destroy_each(each_blocks, detaching);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].d();
+    			}
     		}
     	};
 
@@ -46418,6 +46841,14 @@ var app = (function () {
     	return block;
     }
 
+    function should_highlight(last_updated) {
+    	// if the last update was recent, the element will be highlighted
+    	let now = Date.now();
+
+    	console.log(now, last_updated, now - last_updated);
+    	return Date.now() - last_updated < 1000;
+    }
+
     function instance$4($$self, $$props, $$invalidate) {
     	let $current_element_counts;
     	validate_store(current_element_counts, 'current_element_counts');
@@ -46427,11 +46858,13 @@ var app = (function () {
     	const writable_props = [];
 
     	Object_1$1.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Right_element_bar> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1$2.warn(`<Right_element_bar> was created with unknown prop '${key}'`);
     	});
 
     	$$self.$capture_state = () => ({
     		current_element_counts,
+    		fade,
+    		should_highlight,
     		$current_element_counts
     	});
 

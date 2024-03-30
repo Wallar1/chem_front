@@ -22,6 +22,11 @@ export const possible_scenes = Object.freeze({
     'CompoundCreator': Symbol('compound creator')
 });
 export const current_scene = writable(possible_scenes.Battle);
+// export const current_scene = writable(possible_scenes.CompoundCreator);
+
+
+export const global_updates_queue = writable([]);
+
 
 export const current_scientist = writable(scientists.RobertBoyle);
 
@@ -33,10 +38,39 @@ export const key_to_compound = writable({
     '5': 'H2O'
 })
 
-let counts = {
-    'H': 20,
+let initial_counts = {
+    'H': {
+        count: 20,
+        last_updated: Date.now(),
+    }
 }
-export const current_element_counts = writable(counts);
+function create_current_counts_store() {
+    const { subscribe, set: originalSet, update } = writable(initial_counts);
+
+    return {
+        subscribe,
+        update: (element, added_amount) => {
+            update(counts => {
+                if (!counts[element]) {
+                    counts[element] = { count: 0, last_updated: Date.now() };
+                }
+                counts[element]['count'] += added_amount;
+                counts[element]['last_updated'] = Date.now();
+                return counts;
+            });
+        },
+        set: (element, new_count) => {
+            const new_counts = { ...initial_counts };
+            if (!new_counts[element]) {
+                new_counts[element] = { count: 0, last_updated: Date.now() };
+            }
+            new_counts[element]['count'] = new_count;
+            new_counts[element]['last_updated'] = Date.now();
+            originalSet(new_counts);
+        },
+    };
+}
+export const current_element_counts = create_current_counts_store();
 
 
 /*
@@ -56,7 +90,7 @@ export const max_number_possible_for_each_compound = derived(
                 if ($current_element_counts[element] === undefined) {
                     current_max_count = 0;
                 } else {
-                    let max_possible = Math.floor($current_element_counts[element] / count_needed);
+                    let max_possible = Math.floor($current_element_counts[element]['count'] / count_needed);
                     current_max_count = Math.min(max_possible, current_max_count);
                 }
             }
