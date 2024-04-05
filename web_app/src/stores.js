@@ -19,10 +19,12 @@ export const possible_scenes = Object.freeze({
     'Loading': Symbol('loading'),
     'Timeline': Symbol('timeline'),
     'Battle': Symbol('battle'),
-    'CompoundCreator': Symbol('compound creator')
+    'CompoundCreator': Symbol('compound creator'),
+    'BalanceEquation': Symbol('balance equation'),
 });
-export const current_scene = writable(possible_scenes.Battle);
+// export const current_scene = writable(possible_scenes.Battle);
 // export const current_scene = writable(possible_scenes.CompoundCreator);
+export const current_scene = writable(possible_scenes.BalanceEquation);
 
 
 export const global_updates_queue = writable([]);
