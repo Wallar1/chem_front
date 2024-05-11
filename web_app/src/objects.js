@@ -2,7 +2,15 @@ import * as THREE from 'three';
 import { get } from 'svelte/store';
 
 import { get_random_solid_element, get_random_gas_element, get_font_text_mesh, dispose_material } from './helper_functions';
-import { current_element_counts, global_updates_queue, player_score, player_health } from './stores.js';
+import { 
+    current_element_counts,
+    global_updates_queue,
+    player_score,
+    player_health,
+    atoms,
+    creator_moves_remaining,
+    selected_atom,
+} from './stores.js';
 
 
 function get_all_properties(obj) {
@@ -460,6 +468,92 @@ class Test {
 }
 
 
+const SPACING = 75;
+const ATOM_SIZE = 25;
+const normal_material = new THREE.MeshNormalMaterial();
+const label_scale = new THREE.Vector3(5/ATOM_SIZE, 5/ATOM_SIZE, 5/ATOM_SIZE)
+const label_position = new THREE.Vector3(-0.5, 0, 1)
+
+class Compound {
+    constructor(root, csv_atoms, csv_bonds, use_normal=false, show_label=true) {
+        this.root = root;
+        this.name = 'compound name';
+        this.element_counts = {};
+
+        const bondGeometry = new THREE.BoxGeometry( 1, 1, 1 );
+        const atomGeometry = new THREE.IcosahedronGeometry( 1, 3 );
+        const materials = {}
+        for (let i = 1; i < csv_atoms.length; i++) {
+            const csv_atom = csv_atoms[i];
+            const element = csv_atom.element
+            if (!materials[element.toLowerCase()]) {
+                let color_info = get(atoms)[element]['color']
+                let color = new THREE.Color(`rgb(${color_info[0]}, ${color_info[1]}, ${color_info[2]})`);
+                materials[element.toLowerCase()] = new THREE.MeshToonMaterial( { color: color } );
+            }
+            let atom_material;
+            if (use_normal) {
+                atom_material = normal_material;
+            } else {
+                atom_material = element_to_material[element]
+            }
+            const atom_obj = new THREE.Mesh( atomGeometry, atom_material );
+            atom_obj.position.set( ...csv_atom.coordinates );
+            atom_obj.position.multiplyScalar(SPACING);
+            if (show_label){
+                get_font_text_mesh(element, atom_obj, label_position, label_scale)
+            }
+            atom_obj.scale.set( ATOM_SIZE, ATOM_SIZE, ATOM_SIZE );
+            atom_obj.onclick = () => {
+                if (element === get(selected_atom)) {
+                    atom_obj.material = materials[element.toLowerCase()];
+                }
+            }
+            root.add( atom_obj );
+        }
+        const start = new THREE.Vector3();
+        const end = new THREE.Vector3();
+        const bondMaterial = new THREE.MeshToonMaterial( { color: 0xffffff } );
+        for (let i = 0; i < csv_bonds.length; i++) {
+            const csv_bond = csv_bonds[i];
+            start.set(...csv_atoms[csv_bond.atoms[0]].coordinates);
+            start.multiplyScalar(SPACING);
+            end.set(...csv_atoms[csv_bond.atoms[1]].coordinates);
+            end.multiplyScalar(SPACING)
+            const parent_object = new THREE.Object3D();
+            parent_object.position.copy( start );
+            parent_object.position.lerp( end, 0.5 );
+            parent_object.scale.set( 5, 5, start.distanceTo( end ) );
+            parent_object.lookAt( end );
+            parent_object.scale.set( 5, 5, start.distanceTo( end ) );
+            root.add( parent_object );
+            if (csv_bond.count === 1) {
+                const object = new THREE.Mesh( bondGeometry, bondMaterial );
+                parent_object.add( object );
+            } else if (csv_bond.count === 2) {
+                const object = new THREE.Mesh( bondGeometry, bondMaterial );
+                object.position.y = 1;
+                parent_object.add( object );
+                const object2 = new THREE.Mesh( bondGeometry, bondMaterial );
+                object2.position.y = -1;
+                parent_object.add( object2 );
+            } else if (csv_bond.count === 3) {
+                const object = new THREE.Mesh( bondGeometry, bondMaterial );
+                object.position.y = 2;
+                parent_object.add( object );
+                const object2 = new THREE.Mesh( bondGeometry, bondMaterial );
+                parent_object.add( object2 );
+                const object3 = new THREE.Mesh( bondGeometry, bondMaterial );
+                object3.position.y = -2;
+                parent_object.add( object3 );
+            } else {
+                throw new Error('Too many bonds!');
+            }
+        }
+    }
+}
+
+
 export {
     Updater,
     add_to_global_updates_queue,
@@ -472,4 +566,5 @@ export {
     create_mine,
     create_cloud,
     Axe,
+    Compound
 };

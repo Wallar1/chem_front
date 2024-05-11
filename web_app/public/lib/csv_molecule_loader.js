@@ -62,6 +62,7 @@ class CSVLoader extends Loader {
 					atom_or_bond[i] = parseFloat(atom_or_bond[i]);
 				}
 			}
+			// if the length is 3, it must be a bond. If it is 4, it is an atom
 			if (atom_or_bond.length === 3) {
 				// bond. First 2 numbers are the atom indices, and the 3rd is the number of bonds between them
 				bonds.push({

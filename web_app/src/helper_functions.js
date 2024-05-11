@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 const loader = new THREE.FontLoader();
-export function get_font_text_mesh(characters, parent, position) {
+export function get_font_text_mesh(characters, parent, position, scale) {
     loader.load( 'helvetiker_regular.typeface.json', function ( font ) {
         const matLite = new THREE.MeshBasicMaterial( {
             color: 0x006699,
@@ -10,10 +10,17 @@ export function get_font_text_mesh(characters, parent, position) {
         } );
         const shapes = font.generateShapes( characters, 5 );
         const geometry = new THREE.ShapeGeometry( shapes );
+        if (scale) {
+            geometry.scale(scale.x, scale.y, scale.z);
+        } else {
+            geometry.scale(5, 5, 0);
+        }
+
         const text = new THREE.Mesh( geometry, matLite );
 
         parent.add(text)
         text.position.set(position.x, position.y, position.z)
+        console.log(text)
         // text.position.y += 60  // to put it over the mine
         // text.position.x -= 2  // to center it
         // render();
