@@ -130,3 +130,48 @@ export const creator_moves_remaining = writable(0);
 export const player_health = writable(100);
 
 export const player_score = writable(0);
+
+export const sides = Object.freeze({
+    LEFT: 'left',
+    RIGHT: 'right',
+    BALANCED: 'balanced',
+})
+
+
+let initial_reactant_counts = {}
+initial_reactant_counts[sides.LEFT] = {}
+initial_reactant_counts[sides.RIGHT] = {}
+export const reactant_counts = writable(initial_reactant_counts)
+
+export const balance_rotations = derived(
+	reactant_counts,
+	($reactant_counts) => {
+        let _balance_rotations = {};
+        [sides.LEFT, sides.RIGHT].forEach(l_or_r => {
+            Object.keys($reactant_counts[l_or_r]).forEach(el => {
+                let left_count = $reactant_counts[sides.LEFT][el] || 0;
+                let right_count = $reactant_counts[sides.RIGHT][el] || 0;
+                let degrees_of_rotation = left_vs_right_to_degrees_of_rotation(left_count, right_count)
+                _balance_rotations[el] = degrees_of_rotation;
+            });
+        });
+        return _balance_rotations;
+    }
+);
+
+
+
+/*
+This function returns the degrees of rotation.
+Imagine there are 16 C atoms, all on the left. Then this function should return -90
+If all the atoms were on the right, it would return 90
+If balanced, return 0
+If 12/16 were on the right, it should return 45
+and if 12/16 were on the left, it should return -45.
+
+
+15 out of 16 should return -80 or so.
+*/
+function left_vs_right_to_degrees_of_rotation(left_count, right_count) {
+    return ((right_count) / (right_count + left_count)) * 180 - 90
+}
