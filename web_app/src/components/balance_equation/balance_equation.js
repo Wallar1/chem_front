@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { get } from 'svelte/store';
 
-import {Compound, Updater, add_to_global_updates_queue} from '../../objects.js';
-import { game_state, GameStates, global_updates_queue, reactant_counts, balance_rotations, sides } from '../../stores.js';
-import { dispose_renderer, dispose_scene, get_font_text_mesh } from '../../helper_functions.js';
+import { Compound } from '../../objects.js';
+import { game_state, GameStates, global_updates_queue, element_counts, sides, compounds_in_scene } from '../../stores.js';
+import { dispose_renderer, dispose_scene } from '../../helper_functions.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CraigDragControls } from '../../craig_drag_controls.js';
 import { CSVLoader } from '../../../public/lib/csv_molecule_loader.js';
@@ -30,8 +30,6 @@ export class BalanceEquationScene {
         initialize_vars();
         renderer = create_renderer();
         // this.orbit_controls = new OrbitControls( camera, renderer.domElement );
-        const canvas_container = document.getElementById('canvas-container')
-        canvas_container.appendChild(renderer.domElement);
 
         scene = new THREE.Scene()
         scene.background = new THREE.Color(0xabcdef);
@@ -79,6 +77,11 @@ export class BalanceEquationScene {
             global_updates_queue.set(next_updates)
         });
     }
+
+    add_molecule_in_play(molecule_name, x, y) {
+        let pos = screen_pos_to_world_pos(x, y)
+        create_molecule_group(molecule_name, pos);
+    }
 }
 
 function csv_atoms_to_atom_counts(csv_atoms) {
@@ -97,7 +100,7 @@ function csv_atoms_to_atom_counts(csv_atoms) {
 }
 
 // TODO: we could cache this, or hardcode it
-function update_reactant_counts(selected, add_or_subtract) {
+function update_element_counts(selected, add_or_subtract) {
     /*
     selected: the molecule group that will be clicked on
     add_or_subtract: either +1 to add, or -1 to subtract
@@ -105,25 +108,27 @@ function update_reactant_counts(selected, add_or_subtract) {
     let side = check_left_or_right(selected)
     let csv_atoms = cached_atoms_and_bonds[selected.name]['atoms']
     let atom_counts = csv_atoms_to_atom_counts(csv_atoms);
-    let _reactant_counts = get(reactant_counts);
+    let _element_counts = get(element_counts);
     for (let [element, count] of Object.entries(atom_counts)) {
-        let current_count = _reactant_counts[side][element] ?  _reactant_counts[side][element] : 0;
+        let current_count = _element_counts[side][element] ?  _element_counts[side][element] : 0;
         let new_count = current_count + (add_or_subtract * count);
-        _reactant_counts[side][element] = new_count;
+        _element_counts[side][element] = new_count;
     }
-    reactant_counts.set(_reactant_counts)
+    element_counts.set(_element_counts)
 }
 
 function on_mouse_down_callback(selected) {
-    update_reactant_counts(selected, -1)
+    update_element_counts(selected, -1)
 }
 
 function on_mouse_up_callback(selected) {
-    update_reactant_counts(selected, 1)
+    update_element_counts(selected, 1)
 }
 
 function create_renderer(){
+    const canvas_container = document.getElementById('canvas-container');
     const renderer = new THREE.WebGLRenderer({
+        canvas: canvas_container.firstChild,
         antialias: false,
         powerPreference: "high-performance",
     });
@@ -131,7 +136,7 @@ function create_renderer(){
     renderer.shadowMap.enabled = false;
     // renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(canvas_container.offsetWidth, canvas_container.offsetHeight);
     return renderer
 }
 
@@ -164,30 +169,22 @@ function create_directional_light(){
     return light
 }
 
-
-
-const atom_material = new THREE.MeshStandardMaterial({color: 0xffffff,});
-const atom_geometry = new THREE.SphereGeometry( 50, 20, 20 );
-const atom_text_position = new THREE.Vector3(-10, -80, 0)
-
 const cached_atoms_and_bonds = {}
 
 function spawn_initial_objects(){
     const csv_loader = new CSVLoader();
-    let rand_pos;
+    let pos;
     let carbon_dioxide_path = 'models/sdf/carbon_dioxide.sdf';
     csv_loader.load( carbon_dioxide_path, function ( csv ) {
-        let compound = 'carbon_dioxide'
+        let compound = 'carbon dioxide'
         cached_atoms_and_bonds[compound] = {
             'atoms': csv.atoms,
             'bonds': csv.bonds,
         }
         // one in play
-        rand_pos = new THREE.Vector3(100*5, 0, 0);
-        create_molecule_group(compound, rand_pos);
-        // one below to add to the scene
-        rand_pos = new THREE.Vector3(100*5, -500, 0);
-        create_molecule_group(compound, rand_pos);
+        pos = screen_pos_to_world_pos(-.3, .3)
+        create_molecule_group(compound, pos);
+        add_compound_to_list_in_scene(sides.LEFT, compound);
     })
 
     let ethane_path = 'models/sdf/ethane.sdf';
@@ -198,13 +195,17 @@ function spawn_initial_objects(){
             'bonds': csv.bonds,
         }
         // one starts off in play
-        rand_pos = new THREE.Vector3(100, 0, 0);
-        create_molecule_group(compound, rand_pos);
-        // one you can add to the scene
-        rand_pos = new THREE.Vector3(100, -500, 0);
-        create_molecule_group(compound, rand_pos);
-        console.log(cached_atoms_and_bonds)
+        pos = screen_pos_to_world_pos(.2, .3)
+        create_molecule_group(compound, pos);
+        add_compound_to_list_in_scene(sides.RIGHT, compound);
     })
+}
+
+function add_compound_to_list_in_scene(side, compound) {
+    compounds_in_scene.update(compounds_in_scene => {
+        compounds_in_scene[side].push(compound);
+        return compounds_in_scene;
+    });
 }
 
 function create_molecule_group(molecule_name, position) {
@@ -216,7 +217,7 @@ function create_molecule_group(molecule_name, position) {
     draggable_objects.push(molecule_group);
     scene.add(molecule_group);
     molecule_group.position.set(position.x, position.y, position.z);
-    update_reactant_counts(molecule_group, 1)
+    update_element_counts(molecule_group, 1)
 }
 
 
@@ -229,3 +230,32 @@ function end_scene(){
 function check_left_or_right(obj) {
     return obj.position.x < 0 ? sides.LEFT : sides.RIGHT;
 }
+
+function screen_pos_to_world_pos(x, y) {
+    // x and y need to be between -1 and 1 (normalized device coordinates)
+    // x goes from left to right -1 to 1, but y goes from bottom to top -1 to 1
+    // this totally assumes that the camera is looking at 0, 0, 0 and that is the center of the scene
+    let screen_pos = new THREE.Vector2(x, y);
+    let ray_caster = new THREE.Raycaster();
+    let plane = new THREE.Plane();
+    ray_caster.setFromCamera( screen_pos, camera );
+    const normal_towards_camera = new THREE.Vector3(0, 0, 1);
+    let intersection_point = new THREE.Vector3();
+    plane.set(normal_towards_camera, 0)
+    ray_caster.ray.intersectPlane( plane, intersection_point );
+    return intersection_point;
+}
+
+
+
+
+
+
+/*
+
+2 things to do:
+
+ability to delete molecules: drag to the trash can
+dont allow people to drag molecules off the screen or to the other side
+
+*/

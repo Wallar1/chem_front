@@ -138,19 +138,19 @@ export const sides = Object.freeze({
 })
 
 
-let initial_reactant_counts = {}
-initial_reactant_counts[sides.LEFT] = {}
-initial_reactant_counts[sides.RIGHT] = {}
-export const reactant_counts = writable(initial_reactant_counts)
+let initial_element_counts = {}
+initial_element_counts[sides.LEFT] = {}
+initial_element_counts[sides.RIGHT] = {}
+export const element_counts = writable(initial_element_counts)
 
 export const balance_rotations = derived(
-	reactant_counts,
-	($reactant_counts) => {
+	element_counts,
+	($element_counts) => {
         let _balance_rotations = {};
         [sides.LEFT, sides.RIGHT].forEach(l_or_r => {
-            Object.keys($reactant_counts[l_or_r]).forEach(el => {
-                let left_count = $reactant_counts[sides.LEFT][el] || 0;
-                let right_count = $reactant_counts[sides.RIGHT][el] || 0;
+            Object.keys($element_counts[l_or_r]).forEach(el => {
+                let left_count = $element_counts[sides.LEFT][el] || 0;
+                let right_count = $element_counts[sides.RIGHT][el] || 0;
                 let degrees_of_rotation = left_vs_right_to_degrees_of_rotation(left_count, right_count)
                 _balance_rotations[el] = degrees_of_rotation;
             });
@@ -158,6 +158,11 @@ export const balance_rotations = derived(
         return _balance_rotations;
     }
 );
+
+let initial_compounds_in_scene = {};
+initial_compounds_in_scene[sides.LEFT] = [];
+initial_compounds_in_scene[sides.RIGHT] = [];
+export const compounds_in_scene = writable(initial_compounds_in_scene);
 
 
 
