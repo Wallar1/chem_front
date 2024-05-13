@@ -2,13 +2,18 @@
     import { onMount } from 'svelte';
     import { expoOut } from 'svelte/easing';
     import { BalanceEquationScene} from './balance_equation.js';
-    import {balance_rotations} from '../../stores.js';
+    import {balance_rotations, compounds_in_scene, sides} from '../../stores.js';
+    
+    let balance_equation_scene;
     onMount(async () => {
-        new BalanceEquationScene();
+        balance_equation_scene = new BalanceEquationScene();
     })
 
-    function check_balance() {
-        return Object.values($balance_rotations).filter(k => k !== 0).length ? false : true;
+    let balanced = false;
+    $: {
+        let counts = Object.values($balance_rotations);
+        console.log(JSON.stringify(counts))
+        balanced = !counts.length || counts.filter(k => k !== 0).length ? false : true;
     }
 
     function calc_color(rotation) {
@@ -40,7 +45,6 @@
         // from https://learn.svelte.dev/tutorial/custom-css-transitions. I am trying to make this:
         // style="transform: rotate({rotation}deg); color: {calc_color(rotation)}
         // into an animation
-        console.log(duration, rotation)
         return {
             duration,
             css: t => {
@@ -53,50 +57,213 @@
         }
     }
 
+    function add_molecule_to_scene(compound, side) {
+        let x;
+        let y = .2;
+        if (side === sides.LEFT) {
+            x = -.5
+        } else if (side === sides.RIGHT) {
+            x = .5
+        }
+        console.log(compound, side, x, y)
+        balance_equation_scene.add_molecule_in_play(compound, x, y);
+    }
 </script>
 
 <div id='outer'>
-    <div id='canvas-container'></div>
-    <div id='balance-arrows'>
-        {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
-            <div style="display: flex;">
-                <p>{el}</p>
-                <p in:custom_rotate={{duration: 1000, rotation: rotation}} style="transform: rotate({rotation}deg); color: {calc_color(rotation)}">↑</p>
+    <div id='canvas-container'>
+        <canvas></canvas>
+    </div>
+    <div id='arrow-container'>
+        <div id='balance-arrows'>
+            {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
+                <div class="p-cont">
+                    <p class="spaced-p">{el}</p>
+                    <p class="spaced-p" in:custom_rotate={{duration: 1000, rotation: rotation}} style="transform: rotate({rotation}deg); color: {calc_color(rotation)}">↑</p>
+                </div>
+            {/each}
+        </div>
+        <h1 class="center-arrow">↑</h1>
+        <hr class='middle-divider'>
+        <div class={balanced ? "jiggle" : ""} id='submit'>Submit!</div>
+    </div>
+    <div class="add-molecules-container">
+        {#each [sides.LEFT, sides.RIGHT] as side (side)}
+            <div class="{side} add-molecules">
+                {#each $compounds_in_scene[side] as compound (compound)}
+                    <div class="add-molecule-button" on:click|stopPropagation={() => add_molecule_to_scene(compound, side)}>
+                        <p>{compound}</p>
+                    </div>
+                {/each}
             </div>
         {/each}
     </div>
-    <div id='check-balance' on:click={check_balance}>Check Balance!</div>
 </div>
 
 <style>
+
     #outer {
         background-color: #050505;
         background: radial-gradient(ellipse at center,  rgba(43,45,48,1) 0%,rgba(0,0,0,1) 100%);
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        display: flex;
+    }
+    canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 1;  /* needs to be above 0 I think. I made it negative and click events were blocked */
+    }
+    #canvas-container {
+        height: 80vh;
+        width: 100vw;
+    }
+    #arrow-container{
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        width: 100%;
+        pointer-events: none;  /* this allows the clicks to pass through to the canvas */
+    }
+    .center-arrow {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        color: white;
+        transform: rotate(90deg);
+        font-size: 100px;
+        width: 100px;
+        margin: 0;
     }
 
-    #check-balance {
-        position: absolute;
-        top: 10%;
-        left: 50%;
+    .middle-divider {
+        border-top: dashed 5px;
+        background-color: transparent;
+        color: rgba(255,255,255,.3);
+        /* translating 50 so that it goes on top of the center-arrow, because 50 is half of 100 (the width of the arrow) */
+        transform: translate(50px) rotate(90deg);
+    }
+
+    #submit {
         font-size: 35px;
         color: white;
         cursor: pointer;
-        width: 150px;
-        height: 100px;
-        border: 2px solid white;
+        width: 140px;
+        height: 50px;
+        border: 2px solid rgb(163, 0, 152);
         border-radius: 5px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: fixed;
+        left: 90%;
+        top: 20px;
     }
 
     #balance-arrows {
-        position: absolute;
-        top: 30%;
-        left: 50%;
         font-size: 35px;
         color: white;
         cursor: pointer;
-        width: 150px;
+        width: 100%;
         height: 100px;
         display: flex;
         justify-content: space-around;
+        background-color:rgb(119, 144, 203);
+        width: 600px;
+        position: fixed;
+        left: calc(50vw - 300px);
+        top: 0;
+        z-index: 3;
     }
+    .p-cont {
+        display: flex;
+        align-items: center;
+    }
+    .spaced-p {
+        padding: 10px;
+        margin: 0;
+    }
+    .jiggle {
+        animation-name: jiggle;
+        animation-duration: 2s;
+        animation-timing-function: ease-in-out;
+        animation-iteration-count: infinite;
+    }
+    @keyframes jiggle {
+        0% {
+            transform: rotate(0deg);
+        }
+        5% {
+            transform: rotate(1deg);
+        }
+        10% {
+            /* to -1 */
+            transform: rotate(-2deg);
+        }
+        15% {
+            /* to +3 */
+            transform: rotate(4deg);
+        }
+        20% {
+            /* to -3 */
+            transform: rotate(-6deg);
+        }
+        25% {
+            /* to +5 */
+            transform: rotate(8deg);
+        }
+        30% {
+            /* to -4 */
+            transform: rotate(-8deg);
+        }
+        35% {
+            /* to +3 */
+            transform: rotate(7deg);
+        }
+        40% {
+            /* to -3 */
+            transform: rotate(-6deg);
+        }
+        45% {
+            /* to +1 */
+            transform: rotate(4deg);
+        }
+        /* doing nothing from 50 - 100% so that there is a delay between each iteration */
+        50%, 100% {
+            transform: rotate(0deg);
+        }
+    }
+
+    .add-molecules-container {
+        position: fixed;
+        top: 80vh;
+        display: flex;
+        justify-content: space-around;
+        height: 20vh;
+        width: 100vw;
+    }
+
+    .add-molecules {
+        display: flex;
+        justify-content: space-around;
+        width: 40%;
+    }
+
+    .add-molecule-button {
+        border: 1px solid black;
+        border-radius: 5px;
+        height: 50%;
+        width: auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .add-molecule-button p {
+        margin: 10px;
+        padding: 0;
+    }
+
 </style>
