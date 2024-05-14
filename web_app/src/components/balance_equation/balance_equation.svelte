@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { expoOut } from 'svelte/easing';
     import { BalanceEquationScene} from './balance_equation.js';
-    import {balance_rotations, compounds_in_scene, sides} from '../../stores.js';
+    import {balance_rotations, compounds_in_scene, sides, need_to_delete} from '../../stores.js';
     
     let balance_equation_scene;
     onMount(async () => {
@@ -57,16 +57,20 @@
         }
     }
 
+    function getRandomBetween(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+
     function add_molecule_to_scene(compound, side) {
-        let x;
-        let y = .2;
-        if (side === sides.LEFT) {
-            x = -.5
-        } else if (side === sides.RIGHT) {
-            x = .5
-        }
-        console.log(compound, side, x, y)
+        let y = getRandomBetween(-.4, -.8);
+        let x_multiplier = side === sides.LEFT ? -1 : 1;
+        let x = x_multiplier * getRandomBetween(.2, .8);
         balance_equation_scene.add_molecule_in_play(compound, x, y);
+    }
+
+    function toggle_delete_molecule_from_scene() {
+        $need_to_delete = !$need_to_delete;
     }
 </script>
 
@@ -97,6 +101,7 @@
                 {/each}
             </div>
         {/each}
+        <div class={$need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</div>
     </div>
 </div>
 
@@ -130,10 +135,11 @@
     }
     .center-arrow {
         position: fixed;
-        top: 50%;
+        top: 40%;
         left: 50%;
         color: white;
-        transform: rotate(90deg);
+        /* translating -50 to account for its width */
+        transform: translate(-50px) rotate(90deg);
         font-size: 100px;
         width: 100px;
         margin: 0;
@@ -143,8 +149,7 @@
         border-top: dashed 5px;
         background-color: transparent;
         color: rgba(255,255,255,.3);
-        /* translating 50 so that it goes on top of the center-arrow, because 50 is half of 100 (the width of the arrow) */
-        transform: translate(50px) rotate(90deg);
+        transform: rotate(90deg);
     }
 
     #submit {
@@ -244,6 +249,7 @@
         justify-content: space-around;
         height: 20vh;
         width: 100vw;
+        padding: 10px;
     }
 
     .add-molecules {
@@ -264,6 +270,21 @@
     .add-molecule-button p {
         margin: 10px;
         padding: 0;
+    }
+
+    #trash {
+        font-size: 50px;
+        cursor: pointer;
+        position: fixed;
+        left: 50%;
+        align-content: center;
+    }
+    .gray {
+        border: none;
+    }
+    .red {
+        border: 1px solid red;
+        border-radius: 5px;
     }
 
 </style>

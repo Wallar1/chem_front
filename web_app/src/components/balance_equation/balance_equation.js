@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 
 import { Compound } from '../../objects.js';
 import { game_state, GameStates, global_updates_queue, element_counts, sides, compounds_in_scene } from '../../stores.js';
-import { dispose_renderer, dispose_scene } from '../../helper_functions.js';
+import { dispose_renderer, dispose_group } from '../../helper_functions.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CraigDragControls } from '../../craig_drag_controls.js';
 import { CSVLoader } from '../../../public/lib/csv_molecule_loader.js';
@@ -43,7 +43,7 @@ export class BalanceEquationScene {
 
         renderer.render(scene, camera);
         spawn_initial_objects();
-        let craig_drag_controls = new CraigDragControls(
+        this.drag_controls = new CraigDragControls(
             renderer, camera, draggable_objects, on_mouse_down_callback, on_mouse_up_callback
         );
         this.animate();
@@ -174,38 +174,41 @@ const cached_atoms_and_bonds = {}
 function spawn_initial_objects(){
     const csv_loader = new CSVLoader();
     let pos;
-    let carbon_dioxide_path = 'models/sdf/carbon_dioxide.sdf';
-    csv_loader.load( carbon_dioxide_path, function ( csv ) {
-        let compound = 'carbon dioxide'
-        cached_atoms_and_bonds[compound] = {
-            'atoms': csv.atoms,
-            'bonds': csv.bonds,
+    let _compounds_in_scene = get(compounds_in_scene);
+    for (let side of [sides.LEFT, sides.RIGHT]) {
+        for (let i=0; i<_compounds_in_scene[side].length; i++) {
+            let compound = _compounds_in_scene[side][i];
+            let path = `models/sdf/${compound.replace(' ', '_')}.sdf`;
+            csv_loader.load( path, function ( csv ) {
+                cached_atoms_and_bonds[compound] = {
+                    'atoms': csv.atoms,
+                    'bonds': csv.bonds,
+                }
+                let y = .1
+                /* I want them to be put evenly between the range of .2 and .8. So if there
+                is one, it will go to .5. If there are two, they will go to .4 and .6 etc.
+                In the future I might do the math, but for now it is hardcoded */
+                const x_positions = {
+                    1: [.5],
+                    2: [.4, .7],
+                    3: [.3, .5, .7],
+                }
+                let x;
+                if (side === sides.LEFT) {
+                    let side_x_multiplier = -1;
+                    // reversing so that the molecules appear over the correct buttons
+                    let positions_reversed = x_positions[_compounds_in_scene[side].length].slice().reverse();
+                    x = positions_reversed[i] * side_x_multiplier;
+                } else {
+                    let side_x_multiplier = 1;
+                    x = x_positions[_compounds_in_scene[side].length][i] * side_x_multiplier;
+                }
+                
+                pos = screen_pos_to_world_pos(x, y)
+                create_molecule_group(compound, pos);
+            })
         }
-        // one in play
-        pos = screen_pos_to_world_pos(-.3, .3)
-        create_molecule_group(compound, pos);
-        add_compound_to_list_in_scene(sides.LEFT, compound);
-    })
-
-    let ethane_path = 'models/sdf/ethane.sdf';
-    csv_loader.load( ethane_path, function ( csv ) {
-        let compound = 'ethane'
-        cached_atoms_and_bonds[compound] = {
-            'atoms': csv.atoms,
-            'bonds': csv.bonds,
-        }
-        // one starts off in play
-        pos = screen_pos_to_world_pos(.2, .3)
-        create_molecule_group(compound, pos);
-        add_compound_to_list_in_scene(sides.RIGHT, compound);
-    })
-}
-
-function add_compound_to_list_in_scene(side, compound) {
-    compounds_in_scene.update(compounds_in_scene => {
-        compounds_in_scene[side].push(compound);
-        return compounds_in_scene;
-    });
+    }
 }
 
 function create_molecule_group(molecule_name, position) {
@@ -222,7 +225,7 @@ function create_molecule_group(molecule_name, position) {
 
 
 function end_scene(){
-    dispose_scene();
+    dispose_group(scene);
     dispose_renderer();
 }
 
@@ -245,17 +248,3 @@ function screen_pos_to_world_pos(x, y) {
     ray_caster.ray.intersectPlane( plane, intersection_point );
     return intersection_point;
 }
-
-
-
-
-
-
-/*
-
-2 things to do:
-
-ability to delete molecules: drag to the trash can
-dont allow people to drag molecules off the screen or to the other side
-
-*/

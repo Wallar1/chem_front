@@ -20,7 +20,7 @@ export function get_font_text_mesh(characters, parent, position, scale) {
 
         parent.add(text)
         text.position.set(position.x, position.y, position.z)
-        console.log(text)
+        // console.log(text)
         // text.position.y += 60  // to put it over the mine
         // text.position.x -= 2  // to center it
         // render();
@@ -120,11 +120,11 @@ export function dispose_material(material) {
     }
 }
 
-// Dispose of the current scene, renderer, and any associated resources
-export function dispose_scene(scene) {
-    if (scene) {
-        // Traverse the scene to dispose geometries, materials, and textures
-        scene.traverse(object => {
+// Dispose of the current group and any associated resources
+export function dispose_group(group) {
+    if (group) {
+        // Traverse the group to dispose geometries, materials, and textures
+        group.traverse(object => {
             if (object.isMesh) {
                 if (object.geometry) {
                     object.geometry.dispose();
@@ -139,6 +139,9 @@ export function dispose_scene(scene) {
                 }
             }
         });
+        if (group.parent) {
+            group.parent.remove(group);
+        }
     }
 }
 
@@ -149,4 +152,10 @@ export function dispose_renderer(renderer) {
         renderer.domElement.remove();
         renderer.dispose();
     }
+}
+
+export function have_same_sign(a, b) {
+    // ^ is XOR. If the first bit is 1 and the second bit is 0, then the result is 1. But if they have the same bit,
+    // then the result is 0, meaning they have the same sign
+    return (a ^ b) >= 0;
 }
