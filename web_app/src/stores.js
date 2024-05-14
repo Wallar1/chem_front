@@ -121,6 +121,14 @@ export const atoms = writable({
         'color': [20, 20, 20],
         'bonds': 1,
     },
+    'NA': {
+        'color': [171, 92, 242],
+        'bonds': 1,
+    },
+    'CL': {
+        'color': [31, 240, 31],
+        'bonds': 1,
+    },
 })
 
 export const selected_atom = writable('C');
@@ -160,8 +168,21 @@ export const balance_rotations = derived(
 );
 
 let initial_compounds_in_scene = {};
-initial_compounds_in_scene[sides.LEFT] = [];
-initial_compounds_in_scene[sides.RIGHT] = [];
+// hard
+// initial_compounds_in_scene[sides.LEFT] = ['ethane', 'oxygen gas'];
+// initial_compounds_in_scene[sides.RIGHT] = ['carbon dioxide', 'water'];
+
+// too easy
+// initial_compounds_in_scene[sides.LEFT] = ['hydrochloric acid', 'sodium hydroxide'];
+// initial_compounds_in_scene[sides.RIGHT] = ['sodium chloride', 'water'];
+
+// easy
+// initial_compounds_in_scene[sides.LEFT] = ['nitrogen gas', 'hydrogen gas'];
+// initial_compounds_in_scene[sides.RIGHT] = ['ammonia'];
+
+// medium/hard
+initial_compounds_in_scene[sides.LEFT] = ['ammonia', 'oxygen gas'];
+initial_compounds_in_scene[sides.RIGHT] = ['nitrogen gas', 'water'];
 export const compounds_in_scene = writable(initial_compounds_in_scene);
 
 
@@ -180,3 +201,5 @@ and if 12/16 were on the left, it should return -45.
 function left_vs_right_to_degrees_of_rotation(left_count, right_count) {
     return ((right_count) / (right_count + left_count)) * 180 - 90
 }
+
+export const need_to_delete = writable(false);

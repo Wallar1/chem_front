@@ -225,8 +225,10 @@ const element_to_material = {
     'H': new THREE.MeshStandardMaterial({color: 0xffffff,}),
     'C': new THREE.MeshStandardMaterial({color: 0x876a45,}),  // 000000
     'N': new THREE.MeshStandardMaterial({color: 0x00cde8,}),
-    'O': new THREE.MeshStandardMaterial({color: 0xffffff,}),
-    'Au': new THREE.MeshStandardMaterial({color: 0xebd834,}),
+    'O': new THREE.MeshStandardMaterial({color: 0x0000aa,}),
+    'AU': new THREE.MeshStandardMaterial({color: 0xebd834,}),
+    'NA': new THREE.MeshStandardMaterial({color: 0x575757,}),
+    'CL': new THREE.MeshStandardMaterial({color: 0x00ff00,}),
 }
 const mine_geometry = new THREE.ConeGeometry( 50, 100, 32 );
 const mine_piece_geometry = new THREE.SphereGeometry( 2, 10, 10 );

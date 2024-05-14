@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {Updater, add_to_global_updates_queue, create_enemy, create_mine, create_cloud, Axe} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
 import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue, player_health } from '../../stores.js';
-import { parse_formula_to_dict, get_random_element, dispose_renderer, dispose_scene } from '../../helper_functions.js';
+import { parse_formula_to_dict, get_random_element, dispose_renderer, dispose_group } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
 
@@ -732,7 +732,7 @@ function game_over(){
     let current_game_state = get(game_state)
     current_game_state['state'] = GameStates.GAMEOVER;
     game_state.set(current_game_state)
-    dispose_scene();
+    dispose_group(scene);
     dispose_renderer();
 }
 

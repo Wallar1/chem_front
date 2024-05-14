@@ -9,8 +9,11 @@ To do this I need to listen for the drag event, and if an object is selected, dr
 */
 
 import * as THREE from 'three';
+import { get } from 'svelte/store';
 
-import {Updater, add_to_global_updates_queue} from './objects.js';
+import { Updater, add_to_global_updates_queue } from './objects.js';
+import { have_same_sign, dispose_group } from './helper_functions.js';
+import { need_to_delete } from './stores.js';
 
 
 function default_on_mouse_down_callback(selected) {
@@ -46,12 +49,15 @@ export class CraigDragControls {
         this.onPointerCancel = this.onPointerCancel.bind(this);
 
         this.add_event_listeners();
+
+        this.selected = null;
     }
 
     add_event_listeners(){
         this.renderer.domElement.addEventListener('pointermove', this.onPointerMove);
         this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
         this.renderer.domElement.addEventListener('pointerup', this.onPointerCancel);
+        this.renderer.domElement.addEventListener('contextmenu', this.onPointerCancel);
         // this.renderer.domElement.addEventListener('pointerleave', this.onPointerCancel);
     }
 
@@ -59,6 +65,7 @@ export class CraigDragControls {
         this.renderer.domElement.removeEventListener('pointermove', this.onPointerMove);
         this.renderer.domElement.removeEventListener('pointerdown', this.onPointerDown);
         this.renderer.domElement.removeEventListener('pointerup', this.onPointerCancel);
+        this.renderer.domElement.removeEventListener('contextmenu', this.onPointerCancel);
         // this.renderer.domElement.removeEventListener('pointerleave', this.onPointerCancel);
     }
 
@@ -77,7 +84,12 @@ export class CraigDragControls {
     move_object(state, time_delta) {
         // see onPointerDown for why we use the offset and inverse matrix
         let {selected, intersection_point, offset, inverseMatrix} = state;
-        selected.position.copy( intersection_point.sub( offset ).applyMatrix4( inverseMatrix ) );
+        let new_pos = intersection_point.sub( offset ).applyMatrix4( inverseMatrix )
+        // Dont allow the object to cross over the center line. Idk if this should be hardcoded, but maybe it
+        // can be a flag in the future
+        if (have_same_sign(new_pos.x, selected.position.x)) {
+            selected.position.copy(new_pos);
+        }
         return {finished: true}
     }
 
@@ -88,10 +100,9 @@ export class CraigDragControls {
     }
 
     onPointerMove(event) {
-        this.update_pointer( event );
-        this.raycaster.setFromCamera( this.mouse, this.camera );
-
         if ( this.selected ) {
+            this.update_pointer( event );
+            this.raycaster.setFromCamera( this.mouse, this.camera );
             this.raycaster.ray.intersectPlane( this.plane, this.intersection_point )
             if (this.intersection_point) {
                 let state = {
@@ -114,6 +125,21 @@ export class CraigDragControls {
 
         if ( intersections.length > 0 ) {
             this.selected = this.findGroup(intersections[0].object);
+
+            if (get(need_to_delete)) {
+                this.on_mouse_down_callback(this.selected)
+                dispose_group(this.selected);
+                // need to share "draggable_objects" with the scene, so dont overwrite it
+                for (let i=0;i<this.draggable_objects.length;i++) {
+                    if (this.draggable_objects[i] === this.selected) {
+                        this.draggable_objects.splice(i, 1);
+                        break;
+                    }
+                }
+                this.selected = null;
+                need_to_delete.set(false);
+                return;
+            }
 
             this.plane.setFromNormalAndCoplanarPoint(
                 this.camera.getWorldDirection(this.plane.normal),
