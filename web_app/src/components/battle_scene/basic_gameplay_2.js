@@ -3,9 +3,9 @@ import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
-import {Updater, add_to_global_updates_queue, create_enemy, create_mine, create_cloud, Axe} from '../../objects.js';
+import {Updater, add_to_global_updates_queue, create_enemy, create_mine, create_cloud, Axe, create_lab} from '../../objects.js';
 import {create_compound} from '../../compounds.js';
-import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue, player_health } from '../../stores.js';
+import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue, player_health, initial_player_health, player_score } from '../../stores.js';
 import { parse_formula_to_dict, get_random_element, dispose_renderer, dispose_group } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
@@ -41,6 +41,7 @@ var global_clock,
     mouse,
     enemies,
     clouds,
+    labs,
     mines,
     stats;
 
@@ -57,9 +58,11 @@ function initialize_vars(){
     enemies = [];
     clouds = [];
     mines = [];
+    labs = [];
     stats = new Stats();
     stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
     document.body.appendChild( stats.dom );
+    invincible_until = 0;
 }
 
 export class BattleScene {
@@ -109,7 +112,10 @@ export class BattleScene {
 
     animate(){
         requestAnimationFrame(()=>{
-            if (get(game_state)['state'] === GameStates.GAMEOVER) {
+            if (get(game_state)['state'] === GameStates.GAMELOST) {
+                global_updates_queue.set([])
+                return;
+            } else if (get(game_state)['state'] === GameStates.GAMEWON) {
                 global_updates_queue.set([])
                 return;
             }
@@ -238,6 +244,11 @@ const object_type_details = {
         'probability': get(game_state)['level'],
         'extra_z_distance': 40,
         'create_function': create_enemy,
+    },
+    'lab': {
+        'probability': 1,
+        'extra_z_distance': 40,
+        'create_function': create_lab,
     }
 }
 function get_random_type() {
@@ -271,6 +282,10 @@ function add_enemy_movement_updater(enemy) {
         */
         let {enemy} = state
         if (enemy.should_delete) {
+            enemies = enemies.filter(e => e !== enemy)
+            if (!enemies.length) {
+                game_won();
+            }
             return {finished: true, to_delete: [enemy]}
         }
 
@@ -343,7 +358,9 @@ function initialize_in_random_position(type_of_obj) {
         mines.push(obj)
     } else if (type_of_obj['create_function'] === create_cloud) {
         clouds.push(obj)
-    }
+    } else if (type_of_obj['create_function'] === create_lab) {
+        labs.push(obj)
+    } 
     parent.updateMatrixWorld(true)
 }
 
@@ -586,22 +603,28 @@ function jump_curve(x) {
     return Math.sin(3*x)
 }
 
+function check_camera_intersects(array_of_possible_intersections) {
+    let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
+    const camera_box = new THREE.Box3().setFromCenterAndSize(camera_world_position, new THREE.Vector3(100, 100, 100))
+    const box = new THREE.Box3()
+    let has_collided = false;
+    for (let i=0; i<array_of_possible_intersections.length; i++) {
+        let possible_intersected_obj = array_of_possible_intersections[i]
+        box.setFromObject(possible_intersected_obj.mesh)
+        if (camera_box.intersectsBox(box)) {
+            possible_intersected_obj.collide()
+            has_collided = true;
+        }
+    }
+    return has_collided;
+}
+
 function jump(state, time_delta) {
     function jump_helper(func_state, func_time_delta){
         let {finished, initial_time, has_collided} = func_state
         camera.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - initial_time) * 150;
-        let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
-        const camera_box = new THREE.Box3().setFromCenterAndSize(camera_world_position, new THREE.Vector3(100, 100, 100))
-        const cloud_box = new THREE.Box3()
         if (!has_collided) {
-            for (let i=0; i<clouds.length; i++) {
-                let cloud = clouds[i]
-                cloud_box.setFromObject(cloud.mesh)
-                if (camera_box.intersectsBox(cloud_box)) {
-                    cloud.collide()
-                    has_collided = true;
-                }
-            }
+            has_collided = check_camera_intersects(clouds) | check_camera_intersects(labs);
         }
 
         if (global_clock.elapsedTime - initial_time > Math.PI/3) {
@@ -705,6 +728,7 @@ function blast_projectile(state, time_delta){
 
     let collisions = projectile.check_collisions(enemies);
     collisions.forEach(collided_obj => collided_obj.collide(projectile));
+    console.log(enemies.length)
 
     if (collisions.length) {
         return {finished: true, to_delete: [projectile]}
@@ -723,14 +747,27 @@ function damage_player(damage = 10){
     health = Math.max(0, health - damage);
     player_health.set(health)
     if (health <= 0) {
-        game_over();
+        game_lost();
     }
 }
 
 
-function game_over(){
+function game_lost(){
     let current_game_state = get(game_state)
-    current_game_state['state'] = GameStates.GAMEOVER;
+    current_game_state['state'] = GameStates.GAMELOST;
+    game_state.set(current_game_state)
+
+    player_score.set(0);
+    player_health.set(initial_player_health)
+    current_element_counts.reset();
+
+    dispose_group(scene);
+    dispose_renderer();
+}
+
+function game_won(){
+    let current_game_state = get(game_state)
+    current_game_state['state'] = GameStates.GAMEWON;
     game_state.set(current_game_state)
     dispose_group(scene);
     dispose_renderer();

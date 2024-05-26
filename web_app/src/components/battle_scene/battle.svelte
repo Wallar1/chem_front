@@ -25,7 +25,9 @@
         battle_scene.animate();
     }
 
-    $: show_overlay = ($game_state.state === GameStates.STARTING || $game_state.state === GameStates.GAMEOVER);
+    $: show_overlay = ($game_state.state === GameStates.STARTING || 
+                       $game_state.state === GameStates.GAMELOST ||
+                       $game_state.state === GameStates.GAMEWON);
     $: if (show_overlay) {
         console.log(show_overlay, $game_state.state)
         document.exitPointerLock();
@@ -38,7 +40,7 @@
         canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
         canvas.requestPointerLock({unadjustedMovement: true,})
         console.log($game_state.state)
-        if ($game_state.state === GameStates.GAMEOVER) {
+        if ($game_state.state === GameStates.GAMELOST) {
             new_game();
         }
         start_game();
@@ -46,7 +48,7 @@
     }
 
     function go_back_to_timeline() {
-        $current_scene = possible_scenes.Timeline;
+        $current_scene = possible_scenes.Story;
     }
 </script>
 
@@ -54,8 +56,11 @@
     <div id='overlay-to-start' style={show_overlay ? 'display: flex;' : 'display: none;'}>
         {#if $game_state.state === GameStates.STARTING}
             <div class='button' on:click|stopPropagation={handle_click}>Start</div>
-        {:else if $game_state.state === GameStates.GAMEOVER}
+        {:else if $game_state.state === GameStates.GAMELOST}
             <h3>Game Over</h3>
+            <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
+        {:else if $game_state.state === GameStates.GAMEWON}
+            <h3>You Win!</h3>
             <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
         {/if}
     </div>

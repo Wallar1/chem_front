@@ -30590,6 +30590,151 @@ var app = (function () {
 
     }
 
+    class TorusKnotGeometry extends BufferGeometry {
+
+    	constructor( radius = 1, tube = 0.4, tubularSegments = 64, radialSegments = 8, p = 2, q = 3 ) {
+
+    		super();
+    		this.type = 'TorusKnotGeometry';
+
+    		this.parameters = {
+    			radius: radius,
+    			tube: tube,
+    			tubularSegments: tubularSegments,
+    			radialSegments: radialSegments,
+    			p: p,
+    			q: q
+    		};
+
+    		tubularSegments = Math.floor( tubularSegments );
+    		radialSegments = Math.floor( radialSegments );
+
+    		// buffers
+
+    		const indices = [];
+    		const vertices = [];
+    		const normals = [];
+    		const uvs = [];
+
+    		// helper variables
+
+    		const vertex = new Vector3();
+    		const normal = new Vector3();
+
+    		const P1 = new Vector3();
+    		const P2 = new Vector3();
+
+    		const B = new Vector3();
+    		const T = new Vector3();
+    		const N = new Vector3();
+
+    		// generate vertices, normals and uvs
+
+    		for ( let i = 0; i <= tubularSegments; ++ i ) {
+
+    			// the radian "u" is used to calculate the position on the torus curve of the current tubular segement
+
+    			const u = i / tubularSegments * p * Math.PI * 2;
+
+    			// now we calculate two points. P1 is our current position on the curve, P2 is a little farther ahead.
+    			// these points are used to create a special "coordinate space", which is necessary to calculate the correct vertex positions
+
+    			calculatePositionOnCurve( u, p, q, radius, P1 );
+    			calculatePositionOnCurve( u + 0.01, p, q, radius, P2 );
+
+    			// calculate orthonormal basis
+
+    			T.subVectors( P2, P1 );
+    			N.addVectors( P2, P1 );
+    			B.crossVectors( T, N );
+    			N.crossVectors( B, T );
+
+    			// normalize B, N. T can be ignored, we don't use it
+
+    			B.normalize();
+    			N.normalize();
+
+    			for ( let j = 0; j <= radialSegments; ++ j ) {
+
+    				// now calculate the vertices. they are nothing more than an extrusion of the torus curve.
+    				// because we extrude a shape in the xy-plane, there is no need to calculate a z-value.
+
+    				const v = j / radialSegments * Math.PI * 2;
+    				const cx = - tube * Math.cos( v );
+    				const cy = tube * Math.sin( v );
+
+    				// now calculate the final vertex position.
+    				// first we orient the extrusion with our basis vectos, then we add it to the current position on the curve
+
+    				vertex.x = P1.x + ( cx * N.x + cy * B.x );
+    				vertex.y = P1.y + ( cx * N.y + cy * B.y );
+    				vertex.z = P1.z + ( cx * N.z + cy * B.z );
+
+    				vertices.push( vertex.x, vertex.y, vertex.z );
+
+    				// normal (P1 is always the center/origin of the extrusion, thus we can use it to calculate the normal)
+
+    				normal.subVectors( vertex, P1 ).normalize();
+
+    				normals.push( normal.x, normal.y, normal.z );
+
+    				// uv
+
+    				uvs.push( i / tubularSegments );
+    				uvs.push( j / radialSegments );
+
+    			}
+
+    		}
+
+    		// generate indices
+
+    		for ( let j = 1; j <= tubularSegments; j ++ ) {
+
+    			for ( let i = 1; i <= radialSegments; i ++ ) {
+
+    				// indices
+
+    				const a = ( radialSegments + 1 ) * ( j - 1 ) + ( i - 1 );
+    				const b = ( radialSegments + 1 ) * j + ( i - 1 );
+    				const c = ( radialSegments + 1 ) * j + i;
+    				const d = ( radialSegments + 1 ) * ( j - 1 ) + i;
+
+    				// faces
+
+    				indices.push( a, b, d );
+    				indices.push( b, c, d );
+
+    			}
+
+    		}
+
+    		// build geometry
+
+    		this.setIndex( indices );
+    		this.setAttribute( 'position', new Float32BufferAttribute( vertices, 3 ) );
+    		this.setAttribute( 'normal', new Float32BufferAttribute( normals, 3 ) );
+    		this.setAttribute( 'uv', new Float32BufferAttribute( uvs, 2 ) );
+
+    		// this function calculates the current position on the torus curve
+
+    		function calculatePositionOnCurve( u, p, q, radius, position ) {
+
+    			const cu = Math.cos( u );
+    			const su = Math.sin( u );
+    			const quOverP = q / p * u;
+    			const cs = Math.cos( quOverP );
+
+    			position.x = radius * ( 2 + cs ) * 0.5 * cu;
+    			position.y = radius * ( 2 + cs ) * su * 0.5;
+    			position.z = radius * Math.sin( quOverP ) * 0.5;
+
+    		}
+
+    	}
+
+    }
+
     /**
      * parameters = {
      *  color: <THREE.Color>
@@ -42986,33 +43131,37 @@ var app = (function () {
         return (a ^ b) >= 0;
     }
 
-    const GameStates = Object.freeze({
-        'STARTING': Symbol('starting'),
-        'PLAYING': Symbol('playing'),
-        'GAMEOVER': Symbol('game_over'),
-    });
-
-    const game_state = writable({
-        'state': GameStates.STARTING,
-        'level': 1,
-    });
-
     const possible_scenes = Object.freeze({
         'Loading': Symbol('loading'),
         'Timeline': Symbol('timeline'),
         'Battle': Symbol('battle'),
         'CompoundCreator': Symbol('compound creator'),
         'BalanceEquation': Symbol('balance equation'),
+        'Story': Symbol('story'),
     });
-    // export const current_scene = writable(possible_scenes.Battle);
+    // export const current_scene = writable(possible_scenes.Story);
+    const current_scene = writable(possible_scenes.Battle);
+    // export const current_scene = writable(possible_scenes.Timeline);
     // export const current_scene = writable(possible_scenes.CompoundCreator);
-    const current_scene = writable(possible_scenes.BalanceEquation);
+    // export const current_scene = writable(possible_scenes.BalanceEquation);
 
 
     const global_updates_queue = writable([]);
 
 
+    // SCIENTIST TIMELINE SCENE
+
+
     const current_scientist = writable(scientists.RobertBoyle);
+
+
+
+
+    // BATTLE SCENE
+
+    const initial_player_health = 100;
+    const player_health = writable(initial_player_health);
+    const player_score = writable(0);
 
     const key_to_compound = writable({
         '1': 'H2',
@@ -43022,6 +43171,20 @@ var app = (function () {
         '5': 'H2O'
     });
 
+
+    const GameStates = Object.freeze({
+        'STARTING': Symbol('starting'),
+        'PLAYING': Symbol('playing'),
+        'GAMELOST': Symbol('game_over'),
+        'GAMEWON': Symbol('game won'),
+    });
+
+    const game_state = writable({
+        'state': GameStates.STARTING,
+        'level': 1,
+    });
+
+
     let initial_counts = {
         'H': {
             count: 20,
@@ -43029,7 +43192,7 @@ var app = (function () {
         }
     };
     function create_current_counts_store() {
-        const { subscribe, set: originalSet, update } = writable(initial_counts);
+        const { subscribe, set: originalSet, update } = writable(window.structuredClone(initial_counts));
 
         return {
             subscribe,
@@ -43044,14 +43207,20 @@ var app = (function () {
                 });
             },
             set: (element, new_count) => {
-                const new_counts = { ...initial_counts };
-                if (!new_counts[element]) {
-                    new_counts[element] = { count: 0, last_updated: Date.now() };
-                }
-                new_counts[element]['count'] = new_count;
-                new_counts[element]['last_updated'] = Date.now();
-                originalSet(new_counts);
+                update(counts => {
+                    if (!counts[element]) {
+                        counts[element] = { count: 0, last_updated: Date.now() };
+                    }
+                    counts[element]['count'] = new_count;
+                    counts[element]['last_updated'] = Date.now();
+                    return counts
+                });
             },
+            reset: () => {
+                const initial_with_updated_date = window.structuredClone(initial_counts);
+                initial_with_updated_date['H']['last_updated'] = Date.now();
+                originalSet(initial_with_updated_date);
+            }
         };
     }
     const current_element_counts = create_current_counts_store();
@@ -43084,6 +43253,13 @@ var app = (function () {
         }
     );
 
+
+
+
+
+    // MULTIPLE SCENES
+
+
     const atoms = writable({
         'C': {
             'color': [144, 144, 144],
@@ -43111,13 +43287,20 @@ var app = (function () {
         },
     });
 
+
+    // COMPOUND PAINT BY NUMBERS SCENE
+
+
     const selected_atom = writable('C');
 
     const creator_moves_remaining = writable(0);
 
-    const player_health = writable(100);
 
-    const player_score = writable(0);
+
+
+
+
+    // BALANCE EQUATION SCENE
 
     const sides = Object.freeze({
         LEFT: 'left',
@@ -43186,9 +43369,9 @@ var app = (function () {
 
     /* src/components/scientist_timeline/scientist_card.svelte generated by Svelte v3.50.0 */
 
-    const file$b = "src/components/scientist_timeline/scientist_card.svelte";
+    const file$c = "src/components/scientist_timeline/scientist_card.svelte";
 
-    function create_fragment$b(ctx) {
+    function create_fragment$c(ctx) {
     	let div3;
     	let img;
     	let img_src_value;
@@ -43234,21 +43417,21 @@ var app = (function () {
     			attr_dev(img, "alt", img_alt_value = /*scientist*/ ctx[0].name);
     			attr_dev(img, "class", "svelte-i7mye2");
     			toggle_class(img, "hide_image", /*hide_image*/ ctx[1]);
-    			add_location(img, file$b, 19, 4, 549);
+    			add_location(img, file$c, 19, 4, 549);
     			attr_dev(p0, "class", "svelte-i7mye2");
-    			add_location(p0, file$b, 22, 12, 678);
+    			add_location(p0, file$c, 22, 12, 678);
     			attr_dev(div0, "class", "button svelte-i7mye2");
-    			add_location(div0, file$b, 23, 12, 715);
+    			add_location(div0, file$c, 23, 12, 715);
     			attr_dev(div1, "class", "story svelte-i7mye2");
-    			add_location(div1, file$b, 21, 8, 646);
+    			add_location(div1, file$c, 21, 8, 646);
     			attr_dev(p1, "class", "svelte-i7mye2");
-    			add_location(p1, file$b, 25, 8, 830);
+    			add_location(p1, file$c, 25, 8, 830);
     			attr_dev(p2, "class", "svelte-i7mye2");
-    			add_location(p2, file$b, 26, 8, 862);
+    			add_location(p2, file$c, 26, 8, 862);
     			attr_dev(div2, "class", "text svelte-i7mye2");
-    			add_location(div2, file$b, 20, 4, 619);
+    			add_location(div2, file$c, 20, 4, 619);
     			attr_dev(div3, "class", "card svelte-i7mye2");
-    			add_location(div3, file$b, 18, 0, 469);
+    			add_location(div3, file$c, 18, 0, 469);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -43307,7 +43490,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$b.name,
+    		id: create_fragment$c.name,
     		type: "component",
     		source: "",
     		ctx
@@ -43316,7 +43499,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$b($$self, $$props, $$invalidate) {
+    function instance$c($$self, $$props, $$invalidate) {
     	let $current_scene;
     	let $current_scientist;
     	validate_store(current_scene, 'current_scene');
@@ -43379,13 +43562,13 @@ var app = (function () {
     class Scientist_card extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$b, create_fragment$b, safe_not_equal, { scientist: 0 });
+    		init$1(this, options, instance$c, create_fragment$c, safe_not_equal, { scientist: 0 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Scientist_card",
     			options,
-    			id: create_fragment$b.name
+    			id: create_fragment$c.name
     		});
 
     		const { ctx } = this.$$;
@@ -43408,7 +43591,7 @@ var app = (function () {
     /* src/components/scientist_timeline/scientist_timeline.svelte generated by Svelte v3.50.0 */
 
     const { Object: Object_1$4 } = globals;
-    const file$a = "src/components/scientist_timeline/scientist_timeline.svelte";
+    const file$b = "src/components/scientist_timeline/scientist_timeline.svelte";
 
     function get_each_context$4(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -43460,7 +43643,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$a(ctx) {
+    function create_fragment$b(ctx) {
     	let div0;
     	let t0;
     	let div1;
@@ -43493,9 +43676,9 @@ var app = (function () {
     			p = element("p");
     			p.textContent = "Build Compounds In The Lab";
     			attr_dev(div0, "class", "widescreen svelte-15irslr");
-    			add_location(div0, file$a, 12, 0, 303);
-    			add_location(p, file$a, 18, 4, 455);
-    			add_location(div1, file$a, 17, 0, 445);
+    			add_location(div0, file$b, 12, 0, 303);
+    			add_location(p, file$b, 18, 4, 455);
+    			add_location(div1, file$b, 17, 0, 445);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -43576,7 +43759,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$a.name,
+    		id: create_fragment$b.name,
     		type: "component",
     		source: "",
     		ctx
@@ -43585,7 +43768,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$a($$self, $$props, $$invalidate) {
+    function instance$b($$self, $$props, $$invalidate) {
     	let $current_scene;
     	validate_store(current_scene, 'current_scene');
     	component_subscribe($$self, current_scene, $$value => $$invalidate(2, $current_scene = $$value));
@@ -43619,13 +43802,13 @@ var app = (function () {
     class Scientist_timeline extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$a, create_fragment$a, safe_not_equal, {});
+    		init$1(this, options, instance$b, create_fragment$b, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Scientist_timeline",
     			options,
-    			id: create_fragment$a.name
+    			id: create_fragment$b.name
     		});
     	}
     }
@@ -45004,6 +45187,8 @@ var app = (function () {
     }
 
 
+
+
     function create_enemy(arg_dict) {
         let enemy = new Enemy(arg_dict);
         let proxy = new Proxy(enemy, proxy_handler('mesh'));
@@ -45189,10 +45374,36 @@ var app = (function () {
         }
     }
 
-
     function create_cloud(arg_dict) {
         let cloud = new Cloud(arg_dict);
         let proxy = new Proxy(cloud, proxy_handler('mesh'));
+        // proxy.position.copy(arg_dict['position'])
+        return proxy
+    }
+
+
+    const torus_geometry = new TorusKnotGeometry( 50, 5, 100, 16 ); 
+    const torus_material = new MeshBasicMaterial( { color: 0xffff00 } ); 
+    class Lab extends GameObj {
+        constructor() {
+            super();
+            this.mesh = new Mesh( torus_geometry, torus_material );
+        }
+
+        collide(collided_obj) {
+            console.log('collided with lab');
+            return;
+        }
+
+        initial_rotation() {
+            return;
+        }
+    }
+
+
+    function create_lab(arg_dict) {
+        let lab = new Lab(arg_dict);
+        let proxy = new Proxy(lab, proxy_handler('mesh'));
         // proxy.position.copy(arg_dict['position'])
         return proxy
     }
@@ -45772,6 +45983,7 @@ var app = (function () {
         mouse$2,
         enemies,
         clouds,
+        labs,
         mines,
         stats;
 
@@ -45788,9 +46000,11 @@ var app = (function () {
         enemies = [];
         clouds = [];
         mines = [];
+        labs = [];
         stats = new Stats();
         stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
         document.body.appendChild( stats.dom );
+        invincible_until = 0;
     }
 
     class BattleScene {
@@ -45840,7 +46054,10 @@ var app = (function () {
 
         animate(){
             requestAnimationFrame(()=>{
-                if (get_store_value(game_state)['state'] === GameStates.GAMEOVER) {
+                if (get_store_value(game_state)['state'] === GameStates.GAMELOST) {
+                    global_updates_queue.set([]);
+                    return;
+                } else if (get_store_value(game_state)['state'] === GameStates.GAMEWON) {
                     global_updates_queue.set([]);
                     return;
                 }
@@ -45969,6 +46186,11 @@ var app = (function () {
             'probability': get_store_value(game_state)['level'],
             'extra_z_distance': 40,
             'create_function': create_enemy,
+        },
+        'lab': {
+            'probability': 1,
+            'extra_z_distance': 40,
+            'create_function': create_lab,
         }
     };
     function get_random_type() {
@@ -46002,6 +46224,10 @@ var app = (function () {
             */
             let {enemy} = state;
             if (enemy.should_delete) {
+                enemies = enemies.filter(e => e !== enemy);
+                if (!enemies.length) {
+                    game_won();
+                }
                 return {finished: true, to_delete: [enemy]}
             }
 
@@ -46074,7 +46300,9 @@ var app = (function () {
             mines.push(obj);
         } else if (type_of_obj['create_function'] === create_cloud) {
             clouds.push(obj);
-        }
+        } else if (type_of_obj['create_function'] === create_lab) {
+            labs.push(obj);
+        } 
         parent.updateMatrixWorld(true);
     }
 
@@ -46305,22 +46533,28 @@ var app = (function () {
         return Math.sin(3*x)
     }
 
+    function check_camera_intersects(array_of_possible_intersections) {
+        let camera_world_position = camera$2.getWorldPosition(new Vector3());
+        const camera_box = new Box3().setFromCenterAndSize(camera_world_position, new Vector3(100, 100, 100));
+        const box = new Box3();
+        let has_collided = false;
+        for (let i=0; i<array_of_possible_intersections.length; i++) {
+            let possible_intersected_obj = array_of_possible_intersections[i];
+            box.setFromObject(possible_intersected_obj.mesh);
+            if (camera_box.intersectsBox(box)) {
+                possible_intersected_obj.collide();
+                has_collided = true;
+            }
+        }
+        return has_collided;
+    }
+
     function jump(state, time_delta) {
         function jump_helper(func_state, func_time_delta){
             let {finished, initial_time, has_collided} = func_state;
             camera$2.position.z = earth_radius + camera_offset + jump_curve(global_clock$1.elapsedTime - initial_time) * 150;
-            let camera_world_position = camera$2.getWorldPosition(new Vector3());
-            const camera_box = new Box3().setFromCenterAndSize(camera_world_position, new Vector3(100, 100, 100));
-            const cloud_box = new Box3();
             if (!has_collided) {
-                for (let i=0; i<clouds.length; i++) {
-                    let cloud = clouds[i];
-                    cloud_box.setFromObject(cloud.mesh);
-                    if (camera_box.intersectsBox(cloud_box)) {
-                        cloud.collide();
-                        has_collided = true;
-                    }
-                }
+                has_collided = check_camera_intersects(clouds) | check_camera_intersects(labs);
             }
 
             if (global_clock$1.elapsedTime - initial_time > Math.PI/3) {
@@ -46412,6 +46646,7 @@ var app = (function () {
 
         let collisions = projectile.check_collisions(enemies);
         collisions.forEach(collided_obj => collided_obj.collide(projectile));
+        console.log(enemies.length);
 
         if (collisions.length) {
             return {finished: true, to_delete: [projectile]}
@@ -46430,14 +46665,27 @@ var app = (function () {
         health = Math.max(0, health - damage);
         player_health.set(health);
         if (health <= 0) {
-            game_over();
+            game_lost();
         }
     }
 
 
-    function game_over(){
+    function game_lost(){
         let current_game_state = get_store_value(game_state);
-        current_game_state['state'] = GameStates.GAMEOVER;
+        current_game_state['state'] = GameStates.GAMELOST;
+        game_state.set(current_game_state);
+
+        player_score.set(0);
+        player_health.set(initial_player_health);
+        current_element_counts.reset();
+
+        dispose_group(scene$2);
+        dispose_renderer();
+    }
+
+    function game_won(){
+        let current_game_state = get_store_value(game_state);
+        current_game_state['state'] = GameStates.GAMEWON;
         game_state.set(current_game_state);
         dispose_group(scene$2);
         dispose_renderer();
@@ -46447,9 +46695,9 @@ var app = (function () {
 
     /* src/components/battle_scene/compound_card.svelte generated by Svelte v3.50.0 */
 
-    const file$9 = "src/components/battle_scene/compound_card.svelte";
+    const file$a = "src/components/battle_scene/compound_card.svelte";
 
-    function create_fragment$9(ctx) {
+    function create_fragment$a(ctx) {
     	let div1;
     	let div0;
     	let p0;
@@ -46489,19 +46737,19 @@ var app = (function () {
     			t7 = space$1();
     			h2 = element("h2");
     			t8 = text(/*el_name*/ ctx[0]);
-    			add_location(p0, file$9, 9, 8, 218);
-    			add_location(p1, file$9, 10, 8, 277);
-    			add_location(p2, file$9, 11, 8, 327);
+    			add_location(p0, file$a, 9, 8, 218);
+    			add_location(p1, file$a, 10, 8, 277);
+    			add_location(p2, file$a, 11, 8, 327);
     			attr_dev(div0, "class", "stats svelte-1pdq31t");
-    			add_location(div0, file$9, 8, 4, 190);
+    			add_location(div0, file$a, 8, 4, 190);
     			attr_dev(h2, "class", "el_name svelte-1pdq31t");
-    			add_location(h2, file$9, 13, 4, 366);
+    			add_location(h2, file$a, 13, 4, 366);
 
     			attr_dev(div1, "class", div1_class_value = "" + (null_to_empty(/*count_available*/ ctx[2]
     			? 'card high_opac'
     			: 'card low_opac') + " svelte-1pdq31t"));
 
-    			add_location(div1, file$9, 7, 0, 119);
+    			add_location(div1, file$a, 7, 0, 119);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -46547,7 +46795,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$9.name,
+    		id: create_fragment$a.name,
     		type: "component",
     		source: "",
     		ctx
@@ -46556,7 +46804,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$9($$self, $$props, $$invalidate) {
+    function instance$a($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_card', slots, []);
     	let { el_name } = $$props;
@@ -46596,7 +46844,7 @@ var app = (function () {
     	constructor(options) {
     		super(options);
 
-    		init$1(this, options, instance$9, create_fragment$9, safe_not_equal, {
+    		init$1(this, options, instance$a, create_fragment$a, safe_not_equal, {
     			el_name: 0,
     			damage: 1,
     			count_available: 2,
@@ -46607,7 +46855,7 @@ var app = (function () {
     			component: this,
     			tagName: "Compound_card",
     			options,
-    			id: create_fragment$9.name
+    			id: create_fragment$a.name
     		});
 
     		const { ctx } = this.$$;
@@ -46667,7 +46915,7 @@ var app = (function () {
 
     const { Object: Object_1$3 } = globals;
 
-    const file$8 = "src/components/battle_scene/bottom_compound_bar.svelte";
+    const file$9 = "src/components/battle_scene/bottom_compound_bar.svelte";
 
     function get_each_context$3(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -46732,7 +46980,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$8(ctx) {
+    function create_fragment$9(ctx) {
     	let div;
     	let current;
     	let each_value = Object.entries(/*$key_to_compound*/ ctx[0]);
@@ -46757,7 +47005,7 @@ var app = (function () {
 
     			attr_dev(div, "id", "sidebar-bottom");
     			attr_dev(div, "class", "svelte-55y4qn");
-    			add_location(div, file$8, 6, 0, 225);
+    			add_location(div, file$9, 6, 0, 225);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -46826,7 +47074,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$8.name,
+    		id: create_fragment$9.name,
     		type: "component",
     		source: "",
     		ctx
@@ -46835,7 +47083,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$8($$self, $$props, $$invalidate) {
+    function instance$9($$self, $$props, $$invalidate) {
     	let $key_to_compound;
     	let $max_number_possible_for_each_compound;
     	validate_store(key_to_compound, 'key_to_compound');
@@ -46865,13 +47113,13 @@ var app = (function () {
     class Bottom_compound_bar extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$8, create_fragment$8, safe_not_equal, {});
+    		init$1(this, options, instance$9, create_fragment$9, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Bottom_compound_bar",
     			options,
-    			id: create_fragment$8.name
+    			id: create_fragment$9.name
     		});
     	}
     }
@@ -46893,7 +47141,7 @@ var app = (function () {
     /* src/components/battle_scene/right_element_bar.svelte generated by Svelte v3.50.0 */
 
     const { Object: Object_1$2 } = globals;
-    const file$7 = "src/components/battle_scene/right_element_bar.svelte";
+    const file$8 = "src/components/battle_scene/right_element_bar.svelte";
 
     function get_each_context$2(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -46925,10 +47173,10 @@ var app = (function () {
     			t1 = text(": ");
     			t2 = text(t2_value);
     			t3 = space$1();
-    			add_location(p, file$7, 16, 12, 606);
+    			add_location(p, file$8, 16, 12, 606);
     			attr_dev(div, "class", "el-count svelte-18vqqcx");
     			toggle_class(div, "highlight", should_highlight(/*last_updated*/ ctx[3]));
-    			add_location(div, file$7, 15, 8, 494);
+    			add_location(div, file$8, 15, 8, 494);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -46973,7 +47221,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$7(ctx) {
+    function create_fragment$8(ctx) {
     	let div1;
     	let div0;
     	let t;
@@ -47002,10 +47250,10 @@ var app = (function () {
 
     			attr_dev(div0, "id", "spacer");
     			attr_dev(div0, "class", "svelte-18vqqcx");
-    			add_location(div0, file$7, 13, 4, 366);
+    			add_location(div0, file$8, 13, 4, 366);
     			attr_dev(div1, "id", "sidebar-right");
     			attr_dev(div1, "class", "svelte-18vqqcx");
-    			add_location(div1, file$7, 12, 0, 337);
+    			add_location(div1, file$8, 12, 0, 337);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -47044,7 +47292,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$7.name,
+    		id: create_fragment$8.name,
     		type: "component",
     		source: "",
     		ctx
@@ -47058,7 +47306,7 @@ var app = (function () {
     	return Date.now() - last_updated < 1000;
     }
 
-    function instance$7($$self, $$props, $$invalidate) {
+    function instance$8($$self, $$props, $$invalidate) {
     	let $current_element_counts;
     	validate_store(current_element_counts, 'current_element_counts');
     	component_subscribe($$self, current_element_counts, $$value => $$invalidate(0, $current_element_counts = $$value));
@@ -47083,21 +47331,21 @@ var app = (function () {
     class Right_element_bar$1 extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$7, create_fragment$7, safe_not_equal, {});
+    		init$1(this, options, instance$8, create_fragment$8, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Right_element_bar",
     			options,
-    			id: create_fragment$7.name
+    			id: create_fragment$8.name
     		});
     	}
     }
 
     /* src/components/battle_scene/health_bar.svelte generated by Svelte v3.50.0 */
-    const file$6 = "src/components/battle_scene/health_bar.svelte";
+    const file$7 = "src/components/battle_scene/health_bar.svelte";
 
-    function create_fragment$6(ctx) {
+    function create_fragment$7(ctx) {
     	let div1;
     	let div0;
     	let div0_style_value;
@@ -47108,10 +47356,10 @@ var app = (function () {
     			div0 = element("div");
     			attr_dev(div0, "class", "health svelte-1ew6biq");
     			attr_dev(div0, "style", div0_style_value = `width: ${/*$player_health*/ ctx[0]}%`);
-    			add_location(div0, file$6, 5, 4, 99);
+    			add_location(div0, file$7, 5, 4, 99);
     			attr_dev(div1, "id", "health-bar");
     			attr_dev(div1, "class", "svelte-1ew6biq");
-    			add_location(div1, file$6, 4, 0, 73);
+    			add_location(div1, file$7, 4, 0, 73);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -47134,7 +47382,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$6.name,
+    		id: create_fragment$7.name,
     		type: "component",
     		source: "",
     		ctx
@@ -47143,7 +47391,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$6($$self, $$props, $$invalidate) {
+    function instance$7($$self, $$props, $$invalidate) {
     	let $player_health;
     	validate_store(player_health, 'player_health');
     	component_subscribe($$self, player_health, $$value => $$invalidate(0, $player_health = $$value));
@@ -47162,21 +47410,21 @@ var app = (function () {
     class Health_bar extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$6, create_fragment$6, safe_not_equal, {});
+    		init$1(this, options, instance$7, create_fragment$7, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Health_bar",
     			options,
-    			id: create_fragment$6.name
+    			id: create_fragment$7.name
     		});
     	}
     }
 
     /* src/components/battle_scene/score.svelte generated by Svelte v3.50.0 */
-    const file$5 = "src/components/battle_scene/score.svelte";
+    const file$6 = "src/components/battle_scene/score.svelte";
 
-    function create_fragment$5(ctx) {
+    function create_fragment$6(ctx) {
     	let div;
     	let t;
 
@@ -47186,7 +47434,7 @@ var app = (function () {
     			t = text(/*$player_score*/ ctx[0]);
     			attr_dev(div, "id", "score");
     			attr_dev(div, "class", "svelte-lnnuzm");
-    			add_location(div, file$5, 4, 0, 72);
+    			add_location(div, file$6, 4, 0, 72);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -47207,7 +47455,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$5.name,
+    		id: create_fragment$6.name,
     		type: "component",
     		source: "",
     		ctx
@@ -47216,7 +47464,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$5($$self, $$props, $$invalidate) {
+    function instance$6($$self, $$props, $$invalidate) {
     	let $player_score;
     	validate_store(player_score, 'player_score');
     	component_subscribe($$self, player_score, $$value => $$invalidate(0, $player_score = $$value));
@@ -47235,13 +47483,13 @@ var app = (function () {
     class Score extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$5, create_fragment$5, safe_not_equal, {});
+    		init$1(this, options, instance$6, create_fragment$6, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Score",
     			options,
-    			id: create_fragment$5.name
+    			id: create_fragment$6.name
     		});
     	}
     }
@@ -47250,9 +47498,59 @@ var app = (function () {
 
     const { console: console_1$2 } = globals;
 
-    const file$4 = "src/components/battle_scene/battle.svelte";
+    const file$5 = "src/components/battle_scene/battle.svelte";
 
-    // (57:60) 
+    // (62:59) 
+    function create_if_block_2$1(ctx) {
+    	let h3;
+    	let t1;
+    	let div;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			h3 = element("h3");
+    			h3.textContent = "You Win!";
+    			t1 = space$1();
+    			div = element("div");
+    			div.textContent = "Back to the Lab";
+    			add_location(h3, file$5, 62, 12, 2298);
+    			attr_dev(div, "class", "button svelte-jgh4a6");
+    			add_location(div, file$5, 63, 12, 2328);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, h3, anchor);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(/*go_back_to_timeline*/ ctx[3]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(h3);
+    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_2$1.name,
+    		type: "if",
+    		source: "(62:59) ",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (59:60) 
     function create_if_block_1$1(ctx) {
     	let h3;
     	let t1;
@@ -47267,9 +47565,9 @@ var app = (function () {
     			t1 = space$1();
     			div = element("div");
     			div.textContent = "Back to the Lab";
-    			add_location(h3, file$4, 57, 12, 2018);
+    			add_location(h3, file$5, 59, 12, 2106);
     			attr_dev(div, "class", "button svelte-jgh4a6");
-    			add_location(div, file$4, 58, 12, 2049);
+    			add_location(div, file$5, 60, 12, 2137);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, h3, anchor);
@@ -47295,14 +47593,14 @@ var app = (function () {
     		block,
     		id: create_if_block_1$1.name,
     		type: "if",
-    		source: "(57:60) ",
+    		source: "(59:60) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (55:8) {#if $game_state.state === GameStates.STARTING}
+    // (57:8) {#if $game_state.state === GameStates.STARTING}
     function create_if_block$1(ctx) {
     	let div;
     	let mounted;
@@ -47313,7 +47611,7 @@ var app = (function () {
     			div = element("div");
     			div.textContent = "Start";
     			attr_dev(div, "class", "button svelte-jgh4a6");
-    			add_location(div, file$4, 55, 12, 1873);
+    			add_location(div, file$5, 57, 12, 1961);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -47335,14 +47633,14 @@ var app = (function () {
     		block,
     		id: create_if_block$1.name,
     		type: "if",
-    		source: "(55:8) {#if $game_state.state === GameStates.STARTING}",
+    		source: "(57:8) {#if $game_state.state === GameStates.STARTING}",
     		ctx
     	});
 
     	return block;
     }
 
-    function create_fragment$4(ctx) {
+    function create_fragment$5(ctx) {
     	let div3;
     	let div0;
     	let div0_style_value;
@@ -47362,7 +47660,8 @@ var app = (function () {
 
     	function select_block_type(ctx, dirty) {
     		if (/*$game_state*/ ctx[1].state === GameStates.STARTING) return create_if_block$1;
-    		if (/*$game_state*/ ctx[1].state === GameStates.GAMEOVER) return create_if_block_1$1;
+    		if (/*$game_state*/ ctx[1].state === GameStates.GAMELOST) return create_if_block_1$1;
+    		if (/*$game_state*/ ctx[1].state === GameStates.GAMEWON) return create_if_block_2$1;
     	}
 
     	let current_block_type = select_block_type(ctx);
@@ -47396,13 +47695,13 @@ var app = (function () {
     			: 'display: none;');
 
     			attr_dev(div0, "class", "svelte-jgh4a6");
-    			add_location(div0, file$4, 53, 4, 1718);
+    			add_location(div0, file$5, 55, 4, 1806);
     			attr_dev(div1, "id", "cursor");
     			attr_dev(div1, "class", "svelte-jgh4a6");
-    			add_location(div1, file$4, 65, 4, 2242);
+    			add_location(div1, file$5, 70, 4, 2521);
     			attr_dev(div2, "id", "canvas-container");
-    			add_location(div2, file$4, 66, 4, 2270);
-    			add_location(div3, file$4, 52, 0, 1708);
+    			add_location(div2, file$5, 71, 4, 2549);
+    			add_location(div3, file$5, 54, 0, 1796);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -47475,7 +47774,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$4.name,
+    		id: create_fragment$5.name,
     		type: "component",
     		source: "",
     		ctx
@@ -47484,7 +47783,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$4($$self, $$props, $$invalidate) {
+    function instance$5($$self, $$props, $$invalidate) {
     	let show_overlay;
     	let $current_scene;
     	let $game_state;
@@ -47521,7 +47820,7 @@ var app = (function () {
     		canvas.requestPointerLock({ unadjustedMovement: true });
     		console.log($game_state.state);
 
-    		if ($game_state.state === GameStates.GAMEOVER) {
+    		if ($game_state.state === GameStates.GAMELOST) {
     			new_game();
     		}
 
@@ -47530,7 +47829,7 @@ var app = (function () {
     	}
 
     	function go_back_to_timeline() {
-    		set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
+    		set_store_value(current_scene, $current_scene = possible_scenes.Story, $current_scene);
     	}
 
     	const writable_props = [];
@@ -47572,7 +47871,7 @@ var app = (function () {
 
     	$$self.$$.update = () => {
     		if ($$self.$$.dirty & /*$game_state*/ 2) {
-    			$$invalidate(0, show_overlay = $game_state.state === GameStates.STARTING || $game_state.state === GameStates.GAMEOVER);
+    			$$invalidate(0, show_overlay = $game_state.state === GameStates.STARTING || $game_state.state === GameStates.GAMELOST || $game_state.state === GameStates.GAMEWON);
     		}
 
     		if ($$self.$$.dirty & /*show_overlay, $game_state, battle_scene*/ 19) {
@@ -47590,13 +47889,13 @@ var app = (function () {
     class Battle extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$4, create_fragment$4, safe_not_equal, {});
+    		init$1(this, options, instance$5, create_fragment$5, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Battle",
     			options,
-    			id: create_fragment$4.name
+    			id: create_fragment$5.name
     		});
     	}
     }
@@ -48763,7 +49062,9 @@ var app = (function () {
             let csv_bonds = csv.bonds;
             creator_moves_remaining.set(csv_atoms.length + errors_allowed);
 
-            new Compound$1(root, csv_atoms, csv_bonds, use_normal=true, show_label=false);       
+            const use_normal = true;
+            const show_label = false;
+            new Compound$1(root, csv_atoms, csv_bonds, use_normal, show_label);       
 
             // geometryAtoms.computeBoundingBox();
             // geometryAtoms.boundingBox.getCenter( offset ).negate();
@@ -48844,7 +49145,7 @@ var app = (function () {
     /* src/components/compound_creator/right_element_bar.svelte generated by Svelte v3.50.0 */
 
     const { Object: Object_1$1, console: console_1$1 } = globals;
-    const file$3 = "src/components/compound_creator/right_element_bar.svelte";
+    const file$4 = "src/components/compound_creator/right_element_bar.svelte";
 
     function get_each_context$1(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -48868,7 +49169,7 @@ var app = (function () {
     		c: function create() {
     			div = element("div");
     			t = text(t_value);
-    			add_location(div, file$3, 11, 8, 342);
+    			add_location(div, file$4, 11, 8, 342);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -48901,7 +49202,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$3(ctx) {
+    function create_fragment$4(ctx) {
     	let div3;
     	let div0;
     	let t0;
@@ -48939,12 +49240,12 @@ var app = (function () {
     			t4 = text(/*$selected_atom*/ ctx[0]);
     			attr_dev(div0, "id", "spacer");
     			attr_dev(div0, "class", "svelte-qn44li");
-    			add_location(div0, file$3, 9, 4, 215);
-    			add_location(div1, file$3, 13, 4, 446);
-    			add_location(div2, file$3, 14, 4, 488);
+    			add_location(div0, file$4, 9, 4, 215);
+    			add_location(div1, file$4, 13, 4, 446);
+    			add_location(div2, file$4, 14, 4, 488);
     			attr_dev(div3, "id", "sidebar-right");
     			attr_dev(div3, "class", "svelte-qn44li");
-    			add_location(div3, file$3, 8, 0, 186);
+    			add_location(div3, file$4, 8, 0, 186);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -49010,7 +49311,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$3.name,
+    		id: create_fragment$4.name,
     		type: "component",
     		source: "",
     		ctx
@@ -49019,7 +49320,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$3($$self, $$props, $$invalidate) {
+    function instance$4($$self, $$props, $$invalidate) {
     	let $selected_atom;
     	let $atoms;
     	let $creator_moves_remaining;
@@ -49068,21 +49369,21 @@ var app = (function () {
     class Right_element_bar extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$3, create_fragment$3, safe_not_equal, {});
+    		init$1(this, options, instance$4, create_fragment$4, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Right_element_bar",
     			options,
-    			id: create_fragment$3.name
+    			id: create_fragment$4.name
     		});
     	}
     }
 
     /* src/components/compound_creator/compound_creator.svelte generated by Svelte v3.50.0 */
-    const file$2 = "src/components/compound_creator/compound_creator.svelte";
+    const file$3 = "src/components/compound_creator/compound_creator.svelte";
 
-    function create_fragment$2(ctx) {
+    function create_fragment$3(ctx) {
     	let div1;
     	let rightsidebar;
     	let t;
@@ -49097,10 +49398,10 @@ var app = (function () {
     			t = space$1();
     			div0 = element("div");
     			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$2, 12, 4, 286);
+    			add_location(div0, file$3, 12, 4, 286);
     			attr_dev(div1, "id", "outer");
     			attr_dev(div1, "class", "svelte-1i2m9uj");
-    			add_location(div1, file$2, 10, 0, 245);
+    			add_location(div1, file$3, 10, 0, 245);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -49130,7 +49431,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$2.name,
+    		id: create_fragment$3.name,
     		type: "component",
     		source: "",
     		ctx
@@ -49139,7 +49440,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$2($$self, $$props, $$invalidate) {
+    function instance$3($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_creator', slots, []);
 
@@ -49160,13 +49461,13 @@ var app = (function () {
     class Compound_creator extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$2, create_fragment$2, safe_not_equal, {});
+    		init$1(this, options, instance$3, create_fragment$3, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Compound_creator",
     			options,
-    			id: create_fragment$2.name
+    			id: create_fragment$3.name
     		});
     	}
     }
@@ -49376,7 +49677,10 @@ var app = (function () {
         // TODO: is this standard for every scene? Maybe this is a utility function
         animate(){
             requestAnimationFrame(()=>{
-                if (get_store_value(game_state)['state'] === GameStates.GAMEOVER) {
+                if (get_store_value(game_state)['state'] === GameStates.GAMELOST) {
+                    global_updates_queue.set([]);
+                    return;
+                } else if (get_store_value(game_state)['state'] === GameStates.GAMEWON) {
                     global_updates_queue.set([]);
                     return;
                 }
@@ -49571,7 +49875,7 @@ var app = (function () {
 
     const { Object: Object_1, console: console_1 } = globals;
 
-    const file$1 = "src/components/balance_equation/balance_equation.svelte";
+    const file$2 = "src/components/balance_equation/balance_equation.svelte";
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
@@ -49616,13 +49920,13 @@ var app = (function () {
     			t2 = text("↑");
     			t3 = space$1();
     			attr_dev(p0, "class", "spaced-p svelte-f81ott");
-    			add_location(p0, file$1, 84, 20, 3046);
+    			add_location(p0, file$2, 84, 20, 3046);
     			attr_dev(p1, "class", "spaced-p svelte-f81ott");
     			set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[17] + "deg)");
     			set_style(p1, "color", calc_color(/*rotation*/ ctx[17]));
-    			add_location(p1, file$1, 85, 20, 3095);
+    			add_location(p1, file$2, 85, 20, 3095);
     			attr_dev(div, "class", "p-cont svelte-f81ott");
-    			add_location(div, file$1, 83, 16, 3005);
+    			add_location(div, file$2, 83, 16, 3005);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -49696,9 +50000,9 @@ var app = (function () {
     			p = element("p");
     			t = text(t_value);
     			attr_dev(p, "class", "svelte-f81ott");
-    			add_location(p, file$1, 98, 24, 3834);
+    			add_location(p, file$2, 98, 24, 3834);
     			attr_dev(div, "class", "add-molecule-button svelte-f81ott");
-    			add_location(div, file$1, 97, 20, 3705);
+    			add_location(div, file$2, 97, 20, 3705);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -49760,7 +50064,7 @@ var app = (function () {
     			}
 
     			attr_dev(div, "class", "" + (/*side*/ ctx[10] + " add-molecules" + " svelte-f81ott"));
-    			add_location(div, file$1, 95, 12, 3577);
+    			add_location(div, file$2, 95, 12, 3577);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -49800,7 +50104,7 @@ var app = (function () {
     	return block;
     }
 
-    function create_fragment$1(ctx) {
+    function create_fragment$2(ctx) {
     	let div6;
     	let div0;
     	let canvas;
@@ -49881,31 +50185,31 @@ var app = (function () {
     			div4 = element("div");
     			t8 = text("🗑️");
     			attr_dev(canvas, "class", "svelte-f81ott");
-    			add_location(canvas, file$1, 78, 8, 2806);
+    			add_location(canvas, file$2, 78, 8, 2806);
     			attr_dev(div0, "id", "canvas-container");
     			attr_dev(div0, "class", "svelte-f81ott");
-    			add_location(div0, file$1, 77, 4, 2770);
+    			add_location(div0, file$2, 77, 4, 2770);
     			attr_dev(div1, "id", "balance-arrows");
     			attr_dev(div1, "class", "svelte-f81ott");
-    			add_location(div1, file$1, 81, 8, 2874);
+    			add_location(div1, file$2, 81, 8, 2874);
     			attr_dev(h1, "class", "center-arrow svelte-f81ott");
-    			add_location(h1, file$1, 89, 8, 3315);
+    			add_location(h1, file$2, 89, 8, 3315);
     			attr_dev(hr, "class", "middle-divider svelte-f81ott");
-    			add_location(hr, file$1, 90, 8, 3355);
+    			add_location(hr, file$2, 90, 8, 3355);
     			attr_dev(div2, "class", div2_class_value = "" + (null_to_empty(/*balanced*/ ctx[1] ? "jiggle" : "") + " svelte-f81ott"));
     			attr_dev(div2, "id", "submit");
-    			add_location(div2, file$1, 91, 8, 3391);
+    			add_location(div2, file$2, 91, 8, 3391);
     			attr_dev(div3, "id", "arrow-container");
     			attr_dev(div3, "class", "svelte-f81ott");
-    			add_location(div3, file$1, 80, 4, 2839);
+    			add_location(div3, file$2, 80, 4, 2839);
     			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*$need_to_delete*/ ctx[2] ? 'red' : 'gray') + " svelte-f81ott"));
     			attr_dev(div4, "id", "trash");
-    			add_location(div4, file$1, 103, 8, 3946);
+    			add_location(div4, file$2, 103, 8, 3946);
     			attr_dev(div5, "class", "add-molecules-container svelte-f81ott");
-    			add_location(div5, file$1, 93, 4, 3470);
+    			add_location(div5, file$2, 93, 4, 3470);
     			attr_dev(div6, "id", "outer");
     			attr_dev(div6, "class", "svelte-f81ott");
-    			add_location(div6, file$1, 76, 0, 2749);
+    			add_location(div6, file$2, 76, 0, 2749);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -49992,7 +50296,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$1.name,
+    		id: create_fragment$2.name,
     		type: "component",
     		source: "",
     		ctx
@@ -50032,7 +50336,7 @@ var app = (function () {
     	return Math.random() * (max - min) + min;
     }
 
-    function instance$1($$self, $$props, $$invalidate) {
+    function instance$2($$self, $$props, $$invalidate) {
     	let $need_to_delete;
     	let $balance_rotations;
     	let $compounds_in_scene;
@@ -50148,11 +50452,145 @@ var app = (function () {
     class Balance_equation extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init$1(this, options, instance$1, create_fragment$1, safe_not_equal, {});
+    		init$1(this, options, instance$2, create_fragment$2, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Balance_equation",
+    			options,
+    			id: create_fragment$2.name
+    		});
+    	}
+    }
+
+    /* src/components/story_scene/story_scene.svelte generated by Svelte v3.50.0 */
+    const file$1 = "src/components/story_scene/story_scene.svelte";
+
+    function create_fragment$1(ctx) {
+    	let div;
+    	let img;
+    	let img_src_value;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			div = element("div");
+    			img = element("img");
+    			if (!src_url_equal(img.src, img_src_value = /*curr_path*/ ctx[1])) attr_dev(img, "src", img_src_value);
+    			attr_dev(img, "alt", /*curr_image*/ ctx[0]);
+    			attr_dev(img, "class", "svelte-2yz4hx");
+    			add_location(img, file$1, 29, 4, 907);
+    			attr_dev(div, "id", "outer");
+    			attr_dev(div, "class", "svelte-2yz4hx");
+    			add_location(div, file$1, 28, 0, 843);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div, anchor);
+    			append_dev(div, img);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(/*show_next_image*/ ctx[2]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*curr_path*/ 2 && !src_url_equal(img.src, img_src_value = /*curr_path*/ ctx[1])) {
+    				attr_dev(img, "src", img_src_value);
+    			}
+
+    			if (dirty & /*curr_image*/ 1) {
+    				attr_dev(img, "alt", /*curr_image*/ ctx[0]);
+    			}
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$1.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    const base_path = 'story_pics';
+    const blasting_off = 'blasting_off';
+    const entering_lab = 'entering_lab';
+
+    function instance$1($$self, $$props, $$invalidate) {
+    	let $current_scene;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(3, $current_scene = $$value));
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots('Story_scene', slots, []);
+    	const blasting_off_path = `${base_path}/${blasting_off}.png`;
+    	const entering_lab_path = `${base_path}/${entering_lab}.png`;
+    	let curr_image = blasting_off;
+    	let curr_path = blasting_off_path;
+
+    	function show_next_image() {
+    		// const img1 = new Image();
+    		if (curr_image === blasting_off) {
+    			$$invalidate(0, curr_image = entering_lab);
+    			$$invalidate(1, curr_path = entering_lab_path);
+    		} else if (curr_image === entering_lab) {
+    			set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
+    		}
+    	} // document.body.appendChild(img1);
+
+    	const writable_props = [];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Story_scene> was created with unknown prop '${key}'`);
+    	});
+
+    	$$self.$capture_state = () => ({
+    		current_scene,
+    		possible_scenes,
+    		base_path,
+    		blasting_off,
+    		entering_lab,
+    		blasting_off_path,
+    		entering_lab_path,
+    		curr_image,
+    		curr_path,
+    		show_next_image,
+    		$current_scene
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ('curr_image' in $$props) $$invalidate(0, curr_image = $$props.curr_image);
+    		if ('curr_path' in $$props) $$invalidate(1, curr_path = $$props.curr_path);
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	return [curr_image, curr_path, show_next_image];
+    }
+
+    class Story_scene extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init$1(this, options, instance$1, create_fragment$1, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Story_scene",
     			options,
     			id: create_fragment$1.name
     		});
@@ -50162,7 +50600,7 @@ var app = (function () {
     /* src/App.svelte generated by Svelte v3.50.0 */
     const file = "src/App.svelte";
 
-    // (19:1) {:else}
+    // (22:1) {:else}
     function create_else_block(ctx) {
     	let p;
 
@@ -50170,7 +50608,7 @@ var app = (function () {
     		c: function create() {
     			p = element("p");
     			p.textContent = "Loading ...";
-    			add_location(p, file, 19, 2, 721);
+    			add_location(p, file, 22, 2, 851);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
@@ -50186,14 +50624,53 @@ var app = (function () {
     		block,
     		id: create_else_block.name,
     		type: "else",
-    		source: "(19:1) {:else}",
+    		source: "(22:1) {:else}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (17:62) 
+    // (20:52) 
+    function create_if_block_4(ctx) {
+    	let story;
+    	let current;
+    	story = new Story_scene({ $$inline: true });
+
+    	const block = {
+    		c: function create() {
+    			create_component(story.$$.fragment);
+    		},
+    		m: function mount(target, anchor) {
+    			mount_component(story, target, anchor);
+    			current = true;
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(story.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(story.$$.fragment, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			destroy_component(story, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_4.name,
+    		type: "if",
+    		source: "(20:52) ",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (18:62) 
     function create_if_block_3(ctx) {
     	let balanceequation;
     	let current;
@@ -50225,14 +50702,14 @@ var app = (function () {
     		block,
     		id: create_if_block_3.name,
     		type: "if",
-    		source: "(17:62) ",
+    		source: "(18:62) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (15:53) 
+    // (16:53) 
     function create_if_block_2(ctx) {
     	let battle;
     	let current;
@@ -50264,14 +50741,14 @@ var app = (function () {
     		block,
     		id: create_if_block_2.name,
     		type: "if",
-    		source: "(15:53) ",
+    		source: "(16:53) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (13:55) 
+    // (14:55) 
     function create_if_block_1(ctx) {
     	let timeline;
     	let current;
@@ -50303,14 +50780,14 @@ var app = (function () {
     		block,
     		id: create_if_block_1.name,
     		type: "if",
-    		source: "(13:55) ",
+    		source: "(14:55) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (11:1) {#if $current_scene === possible_scenes.CompoundCreator}
+    // (12:1) {#if $current_scene === possible_scenes.CompoundCreator}
     function create_if_block(ctx) {
     	let compoundcreator;
     	let current;
@@ -50342,7 +50819,7 @@ var app = (function () {
     		block,
     		id: create_if_block.name,
     		type: "if",
-    		source: "(11:1) {#if $current_scene === possible_scenes.CompoundCreator}",
+    		source: "(12:1) {#if $current_scene === possible_scenes.CompoundCreator}",
     		ctx
     	});
 
@@ -50360,6 +50837,7 @@ var app = (function () {
     		create_if_block_1,
     		create_if_block_2,
     		create_if_block_3,
+    		create_if_block_4,
     		create_else_block
     	];
 
@@ -50370,7 +50848,8 @@ var app = (function () {
     		if (/*$current_scene*/ ctx[0] === possible_scenes.Timeline) return 1;
     		if (/*$current_scene*/ ctx[0] === possible_scenes.Battle) return 2;
     		if (/*$current_scene*/ ctx[0] === possible_scenes.BalanceEquation) return 3;
-    		return 4;
+    		if (/*$current_scene*/ ctx[0] === possible_scenes.Story) return 4;
+    		return 5;
     	}
 
     	current_block_type_index = select_block_type(ctx);
@@ -50380,7 +50859,7 @@ var app = (function () {
     		c: function create() {
     			main = element("main");
     			if_block.c();
-    			add_location(main, file, 9, 0, 404);
+    			add_location(main, file, 10, 0, 470);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -50458,6 +50937,7 @@ var app = (function () {
     		Battle,
     		CompoundCreator: Compound_creator,
     		BalanceEquation: Balance_equation,
+    		Story: Story_scene,
     		$current_scene
     	});
 
