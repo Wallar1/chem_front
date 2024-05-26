@@ -43141,9 +43141,9 @@ var app = (function () {
     });
     // export const current_scene = writable(possible_scenes.Story);
     // export const current_scene = writable(possible_scenes.Battle);
-    // export const current_scene = writable(possible_scenes.Timeline);
+    const current_scene = writable(possible_scenes.Timeline);
     // export const current_scene = writable(possible_scenes.CompoundCreator);
-    const current_scene = writable(possible_scenes.BalanceEquation);
+    // export const current_scene = writable(possible_scenes.BalanceEquation);
 
 
     const global_updates_queue = writable([]);
