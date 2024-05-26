@@ -211,6 +211,8 @@ class Enemy extends GameObj {
 }
 
 
+
+
 function create_enemy(arg_dict) {
     let enemy = new Enemy(arg_dict)
     let proxy = new Proxy(enemy, proxy_handler('mesh'));
@@ -398,10 +400,36 @@ class Cloud extends GameObj {
     }
 }
 
-
 function create_cloud(arg_dict) {
     let cloud = new Cloud(arg_dict)
     let proxy = new Proxy(cloud, proxy_handler('mesh'));
+    // proxy.position.copy(arg_dict['position'])
+    return proxy
+}
+
+
+const torus_geometry = new THREE.TorusKnotGeometry( 50, 5, 100, 16 ); 
+const torus_material = new THREE.MeshBasicMaterial( { color: 0xffff00 } ); 
+class Lab extends GameObj {
+    constructor() {
+        super();
+        this.mesh = new THREE.Mesh( torus_geometry, torus_material );
+    }
+
+    collide(collided_obj) {
+        console.log('collided with lab')
+        return;
+    }
+
+    initial_rotation() {
+        return;
+    }
+}
+
+
+function create_lab(arg_dict) {
+    let lab = new Lab(arg_dict)
+    let proxy = new Proxy(lab, proxy_handler('mesh'));
     // proxy.position.copy(arg_dict['position'])
     return proxy
 }
@@ -567,6 +595,7 @@ export {
     Mine,
     create_mine,
     create_cloud,
+    create_lab,
     Axe,
     Compound
 };

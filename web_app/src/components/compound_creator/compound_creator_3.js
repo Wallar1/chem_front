@@ -179,7 +179,9 @@ function loadMolecule( model ) {
         let csv_bonds = csv.bonds
         creator_moves_remaining.set(csv_atoms.length + errors_allowed)
 
-        new Compound(root, csv_atoms, csv_bonds, use_normal=true, show_label=false);       
+        const use_normal = true;
+        const show_label = false;
+        new Compound(root, csv_atoms, csv_bonds, use_normal, show_label);       
 
         // geometryAtoms.computeBoundingBox();
         // geometryAtoms.boundingBox.getCenter( offset ).negate();

@@ -5,6 +5,7 @@
 	import Battle from './components/battle_scene/battle.svelte';
 	import CompoundCreator from './components/compound_creator/compound_creator.svelte';
 	import BalanceEquation from './components/balance_equation/balance_equation.svelte';
+	import Story from './components/story_scene/story_scene.svelte';
 </script>
 
 <main>
@@ -16,6 +17,8 @@
 		<Battle/>
 	{:else if $current_scene === possible_scenes.BalanceEquation}
 		<BalanceEquation/>
+	{:else if $current_scene === possible_scenes.Story}
+		<Story/>
 	{:else}
 		<p>Loading ...</p>
 	{/if}

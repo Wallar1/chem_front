@@ -52,7 +52,10 @@ export class BalanceEquationScene {
     // TODO: is this standard for every scene? Maybe this is a utility function
     animate(){
         requestAnimationFrame(()=>{
-            if (get(game_state)['state'] === GameStates.GAMEOVER) {
+            if (get(game_state)['state'] === GameStates.GAMELOST) {
+                global_updates_queue.set([])
+                return;
+            } else if (get(game_state)['state'] === GameStates.GAMEWON) {
                 global_updates_queue.set([])
                 return;
             }

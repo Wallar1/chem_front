@@ -1,6 +1,5 @@
 # copied from https://github.com/ehemmerlin/svelter
 
-version: "3.4"
 services:
     chem:
         image: 627023082830.dkr.ecr.us-west-1.amazonaws.com/chem:latest
