@@ -15,9 +15,9 @@ export const possible_scenes = Object.freeze({
 });
 // export const current_scene = writable(possible_scenes.Story);
 // export const current_scene = writable(possible_scenes.Battle);
-// export const current_scene = writable(possible_scenes.Timeline);
+export const current_scene = writable(possible_scenes.Timeline);
 // export const current_scene = writable(possible_scenes.CompoundCreator);
-export const current_scene = writable(possible_scenes.BalanceEquation);
+// export const current_scene = writable(possible_scenes.BalanceEquation);
 
 
 export const global_updates_queue = writable([]);
