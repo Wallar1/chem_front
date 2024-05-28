@@ -369,7 +369,7 @@ function create_mine(arg_dict) {
 
 const cloud_material = new THREE.MeshStandardMaterial({color: 0xffffff,});
 const cloud_geometry = new THREE.SphereGeometry( 50, 20, 20 );
-const cloud_text_position = new THREE.Vector3(-2, -60, 0)
+const cloud_text_position = new THREE.Vector3(-2, -90, 0)
 
 class Cloud extends GameObj {
     constructor() { 
@@ -528,6 +528,7 @@ class Compound {
                 atom_material = element_to_material[element]
             }
             const atom_obj = new THREE.Mesh( atomGeometry, atom_material );
+            atom_obj.is_atom = true;
             atom_obj.position.set( ...csv_atom.coordinates );
             atom_obj.position.multiplyScalar(SPACING);
             if (show_label){
@@ -537,6 +538,7 @@ class Compound {
             atom_obj.onclick = () => {
                 if (element === get(selected_atom)) {
                     atom_obj.material = materials[element.toLowerCase()];
+                    atom_obj.correct_material = true;
                 }
             }
             root.add( atom_obj );

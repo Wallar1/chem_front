@@ -84,12 +84,9 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
+        color: #a2a2a2;
     }
     #overlay-to-start .button {
-        /* position: absolute;
-        top: 50%;
-        left: 50%; */
-        /* transform: translate(-50%, -50%); */
         border: 1px solid white;
         border-radius: 8px;
         padding: 10px;

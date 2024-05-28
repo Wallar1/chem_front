@@ -5,8 +5,9 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { CSVLoader } from '../../../public/lib/csv_molecule_loader.js';
 
 import {get} from 'svelte/store';
-import { creator_moves_remaining } from '../../stores.js';
+import { creator_moves_remaining, game_state, GameStates } from '../../stores.js';
 import { Compound } from '../../objects.js';
+import { dispose_renderer, dispose_group } from '../../helper_functions.js';
 
 
 let camera, scene, renderer, labelRenderer;
@@ -27,8 +28,6 @@ var mouse = new THREE.Vector2();
 
 const csv_loader = new CSVLoader();
 
-let errors_allowed = 5;
-
 // one problem is when you do "get" it isnt reactive. You just get the value at that time. If the value changes, you need to get it again
 // const atom_info = get(atoms);
 // const creator_moves_remaining_count = get(creator_moves_remaining);
@@ -47,17 +46,26 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     renderer.setSize( window.innerWidth, window.innerHeight );
     labelRenderer.setSize( window.innerWidth, window.innerHeight );
-    animate()
 }
+
+var is_rotating = false;
+function start_rotation() {is_rotating = true}
 
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
     labelRenderer.render( scene, camera );
+    if (is_rotating) {
+        root.rotation.y = root.rotation.y + .01;
+    }
 }
 
 function init() {
+    game_state.update(state => {
+        state['state'] = GameStates.STARTING;
+        return state;
+    });
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color( 0x5d879c );
@@ -76,6 +84,7 @@ function init() {
     renderer.setSize( window.innerWidth, window.innerHeight );
     document.getElementById( 'canvas-container' ).appendChild( renderer.domElement );
 
+    // TODO: what is this doing
     labelRenderer = new CSS2DRenderer();
     labelRenderer.setSize( window.innerWidth, window.innerHeight );
     labelRenderer.domElement.style.position = 'absolute';
@@ -88,10 +97,24 @@ function init() {
     controls.maxDistance = 1000;
 
     loadMolecule( MOLECULE_PATHS[current_molecule] );
-    window.addEventListener( 'resize', onWindowResize );
-    window.addEventListener('click', (event) => on_mouse_click(event), false)
-    window.addEventListener('mousemove', (event) => on_mouse_move(event), false)
+
+    add_event_listeners()
+
     mouse_ray.setFromCamera( mouse, camera );
+
+    is_rotating = false;
+}
+
+function add_event_listeners() {
+    window.addEventListener('resize', onWindowResize, false );
+    window.addEventListener('click', on_mouse_click, false)
+    window.addEventListener('mousemove', on_mouse_move, false)
+}
+
+function remove_event_listeners() {
+    window.removeEventListener('resize', onWindowResize, false);
+    window.removeEventListener('mousemove', on_mouse_move, false)
+    window.removeEventListener('click', on_mouse_click, false)
 }
 
 
@@ -154,9 +177,19 @@ function on_mouse_click(event) {
     let intersects = mouse_ray.intersectObjects( all_scene_objects, false );
     let intersects_with_click = intersects.filter(intersect => intersect.object.onclick) || [];
     if (intersects_with_click.length) {
-        creator_moves_remaining.set(get(creator_moves_remaining) - 1)
+        let moves_remaining = get(creator_moves_remaining) - 1
+        creator_moves_remaining.set(moves_remaining)
+        if (moves_remaining <= 0) {
+            lose_game()
+        }
         intersects_with_click[0].object.onclick()
+        let all_atoms = root.children.filter(obj => obj.is_atom === true)
+        let correct_atoms = all_atoms.filter(atom => atom.correct_material)
+        if (all_atoms.length === correct_atoms.length) {
+            win_game()
+        }
     }
+
     // intersects_with_click.forEach(intersect => {
     //     console.log(intersect)
     //     intersect.object.onclick()
@@ -164,97 +197,49 @@ function on_mouse_click(event) {
 }
 
 function loadMolecule( model ) {
-
     const url = 'models/sdf/' + model;
 
     while ( root.children.length > 0 ) {
-
         const object = root.children[ 0 ];
         object.parent.remove( object );
-
     }
 
     csv_loader.load( url, function ( csv ) {
         let csv_atoms = csv.atoms
         let csv_bonds = csv.bonds
+        let errors_allowed = Math.ceil(csv_atoms.length / 4)
         creator_moves_remaining.set(csv_atoms.length + errors_allowed)
 
         const use_normal = true;
         const show_label = false;
-        new Compound(root, csv_atoms, csv_bonds, use_normal, show_label);       
 
-        // geometryAtoms.computeBoundingBox();
-        // geometryAtoms.boundingBox.getCenter( offset ).negate();
-
-        // geometryAtoms.translate( offset.x, offset.y, offset.z );
-        // geometryBonds.translate( offset.x, offset.y, offset.z );
-
-        // let positions = geometryAtoms.getAttribute( 'position' );
-        // const colors = geometryAtoms.getAttribute( 'color' );
-
-        // const position = new THREE.Vector3();
-        // const color = new THREE.Color();
-
-        // for ( let i = 0; i < positions.count; i ++ ) {
-
-        //     position.x = positions.getX( i );
-        //     position.y = positions.getY( i );
-        //     position.z = positions.getZ( i );
-
-        //     color.r = colors.getX( i );
-        //     color.g = colors.getY( i );
-        //     color.b = colors.getZ( i );
-
-        //     const material = new THREE.MeshPhongMaterial( { color: color } );
-
-        //     const object = new THREE.Mesh( sphereGeometry, material );
-        //     object.position.copy( position );
-        //     object.position.multiplyScalar( 75 );
-        //     object.scale.multiplyScalar( 25 );
-        //     root.add( object );
-
-        //     const atom = json.atoms[ i ];
-
-        //     const text = document.createElement( 'div' );
-        //     text.className = 'label';
-        //     text.style.color = 'rgb(' + atom[ 3 ][ 0 ] + ',' + atom[ 3 ][ 1 ] + ',' + atom[ 3 ][ 2 ] + ')';
-        //     text.textContent = atom[ 4 ];
-
-        //     const label = new CSS2DObject( text );
-        //     label.position.copy( object.position );
-        //     root.add( label );
-
-        // }
-
-        // positions = geometryBonds.getAttribute( 'position' );
-
-        // const start = new THREE.Vector3();
-        // const end = new THREE.Vector3();
-
-        // for ( let i = 0; i < positions.count; i += 2 ) {
-
-        //     start.x = positions.getX( i );
-        //     start.y = positions.getY( i );
-        //     start.z = positions.getZ( i );
-
-        //     end.x = positions.getX( i + 1 );
-        //     end.y = positions.getY( i + 1 );
-        //     end.z = positions.getZ( i + 1 );
-
-        //     start.multiplyScalar( 75 );
-        //     end.multiplyScalar( 75 );
-
-        //     const object = new THREE.Mesh( boxGeometry, new THREE.MeshPhongMaterial( { color: 0xffffff } ) );
-        //     object.position.copy( start );
-        //     object.position.lerp( end, 0.5 );
-        //     object.scale.set( 5, 5, start.distanceTo( end ) );
-        //     object.lookAt( end );
-        //     root.add( object );
-
-        // }
+        new Compound(root, csv_atoms, csv_bonds, use_normal, show_label);
 
         animate();
 
     } );
 
+}
+
+function win_game() {
+    game_state.update(state => {
+        state['state'] = GameStates.GAMEWON;
+        return state;
+    });
+
+    // TODO: should we do this with an updater?
+    start_rotation()
+}
+
+function lose_game() {
+    game_state.update(state => {
+        state['state'] = GameStates.GAMELOST;
+        return state;
+    });
+}
+
+export function dispose() {
+    dispose_group(scene);
+    dispose_renderer(renderer);
+    remove_event_listeners()
 }
