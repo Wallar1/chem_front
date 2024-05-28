@@ -14,7 +14,6 @@
     function go_back_to_timeline() {
         dispose()
         $current_scene = possible_scenes.Timeline;
-        $game_state['state'] = GameStates.STARTING;
     }
 </script>
 
