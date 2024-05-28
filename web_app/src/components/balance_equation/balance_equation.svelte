@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { expoOut } from 'svelte/easing';
     import { BalanceEquationScene} from './balance_equation.js';
-    import {balance_rotations, compounds_in_scene, sides, need_to_delete} from '../../stores.js';
+    import {current_scene, possible_scenes, balance_rotations, compounds_in_scene, sides, need_to_delete} from '../../stores.js';
     
     let balance_equation_scene;
     onMount(async () => {
@@ -72,6 +72,14 @@
     function toggle_delete_molecule_from_scene() {
         $need_to_delete = !$need_to_delete;
     }
+
+    function go_to_timeline(event) {
+        console.log('timeline', $current_scene)
+        if (balanced) {
+            $current_scene = possible_scenes.Timeline;
+        }
+        console.log('timeline', $current_scene)
+    }
 </script>
 
 <div id='outer'>
@@ -89,8 +97,8 @@
         </div>
         <h1 class="center-arrow">↑</h1>
         <hr class='middle-divider'>
-        <div class={balanced ? "jiggle" : ""} id='submit'>Submit!</div>
     </div>
+    <div class={balanced ? "jiggle" : ""} id='submit' on:click|stopPropagation={go_to_timeline}>Submit!</div>
     <div class="add-molecules-container">
         {#each [sides.LEFT, sides.RIGHT] as side (side)}
             <div class="{side} add-molecules">
@@ -166,6 +174,7 @@
         position: fixed;
         left: 90%;
         top: 20px;
+        z-index: 3;
     }
 
     #balance-arrows {

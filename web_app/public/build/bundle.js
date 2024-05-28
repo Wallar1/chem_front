@@ -43140,8 +43140,8 @@ var app = (function () {
         'Story': Symbol('story'),
     });
     // export const current_scene = writable(possible_scenes.Story);
-    const current_scene = writable(possible_scenes.Battle);
-    // export const current_scene = writable(possible_scenes.Timeline);
+    // export const current_scene = writable(possible_scenes.Battle);
+    const current_scene = writable(possible_scenes.Timeline);
     // export const current_scene = writable(possible_scenes.CompoundCreator);
     // export const current_scene = writable(possible_scenes.BalanceEquation);
 
@@ -43595,7 +43595,7 @@ var app = (function () {
 
     function get_each_context$4(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[3] = list[i];
+    	child_ctx[2] = list[i];
     	return child_ctx;
     }
 
@@ -43605,7 +43605,7 @@ var app = (function () {
     	let current;
 
     	scientistcard = new Scientist_card({
-    			props: { scientist: /*scientist*/ ctx[3] },
+    			props: { scientist: /*scientist*/ ctx[2] },
     			$$inline: true
     		});
 
@@ -43645,9 +43645,10 @@ var app = (function () {
 
     function create_fragment$b(ctx) {
     	let div0;
-    	let t0;
+    	let t;
     	let div1;
-    	let p;
+    	let img;
+    	let img_src_value;
     	let current;
     	let mounted;
     	let dispose;
@@ -43671,14 +43672,16 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			t0 = space$1();
+    			t = space$1();
     			div1 = element("div");
-    			p = element("p");
-    			p.textContent = "Build Compounds In The Lab";
-    			attr_dev(div0, "class", "widescreen svelte-15irslr");
-    			add_location(div0, file$b, 12, 0, 303);
-    			add_location(p, file$b, 18, 4, 455);
-    			add_location(div1, file$b, 17, 0, 445);
+    			img = element("img");
+    			attr_dev(div0, "class", "widescreen svelte-sp8kxl");
+    			add_location(div0, file$b, 12, 0, 355);
+    			if (!src_url_equal(img.src, img_src_value = "lab_equipment.webp")) attr_dev(img, "src", img_src_value);
+    			attr_dev(img, "alt", "lab equipment");
+    			add_location(img, file$b, 18, 4, 529);
+    			attr_dev(div1, "class", "lab-equipment svelte-sp8kxl");
+    			add_location(div1, file$b, 17, 0, 497);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -43690,13 +43693,13 @@ var app = (function () {
     				each_blocks[i].m(div0, null);
     			}
 
-    			insert_dev(target, t0, anchor);
+    			insert_dev(target, t, anchor);
     			insert_dev(target, div1, anchor);
-    			append_dev(div1, p);
+    			append_dev(div1, img);
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen_dev(p, "click", stop_propagation(/*click_handler*/ ctx[1]), false, false, true);
+    				dispose = listen_dev(img, "click", stop_propagation(/*set_random_lab_scene*/ ctx[0]), false, false, true);
     				mounted = true;
     			}
     		},
@@ -43750,7 +43753,7 @@ var app = (function () {
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div0);
     			destroy_each(each_blocks, detaching);
-    			if (detaching) detach_dev(t0);
+    			if (detaching) detach_dev(t);
     			if (detaching) detach_dev(div1);
     			mounted = false;
     			dispose();
@@ -43771,12 +43774,18 @@ var app = (function () {
     function instance$b($$self, $$props, $$invalidate) {
     	let $current_scene;
     	validate_store(current_scene, 'current_scene');
-    	component_subscribe($$self, current_scene, $$value => $$invalidate(2, $current_scene = $$value));
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(1, $current_scene = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Scientist_timeline', slots, []);
 
-    	function set_compound_creator_scene() {
-    		set_store_value(current_scene, $current_scene = possible_scenes.CompoundCreator, $current_scene);
+    	function set_random_lab_scene(e) {
+    		set_store_value(
+    			current_scene,
+    			$current_scene = Math.random() < 0.5
+    			? possible_scenes.CompoundCreator
+    			: possible_scenes.BalanceEquation,
+    			$current_scene
+    		);
     	}
 
     	const writable_props = [];
@@ -43785,18 +43794,16 @@ var app = (function () {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Scientist_timeline> was created with unknown prop '${key}'`);
     	});
 
-    	const click_handler = e => set_compound_creator_scene();
-
     	$$self.$capture_state = () => ({
     		scientists,
     		ScientistCard: Scientist_card,
     		current_scene,
     		possible_scenes,
-    		set_compound_creator_scene,
+    		set_random_lab_scene,
     		$current_scene
     	});
 
-    	return [set_compound_creator_scene, click_handler];
+    	return [set_random_lab_scene];
     }
 
     class Scientist_timeline extends SvelteComponentDev {
@@ -45344,7 +45351,7 @@ var app = (function () {
 
     const cloud_material = new MeshStandardMaterial({color: 0xffffff,});
     const cloud_geometry = new SphereGeometry( 50, 20, 20 );
-    const cloud_text_position = new Vector3(-2, -60, 0);
+    const cloud_text_position = new Vector3(-2, -90, 0);
 
     class Cloud extends GameObj {
         constructor() { 
@@ -45480,6 +45487,7 @@ var app = (function () {
                     atom_material = element_to_material[element];
                 }
                 const atom_obj = new Mesh( atomGeometry, atom_material );
+                atom_obj.is_atom = true;
                 atom_obj.position.set( ...csv_atom.coordinates );
                 atom_obj.position.multiplyScalar(SPACING);
                 if (show_label){
@@ -45489,6 +45497,7 @@ var app = (function () {
                 atom_obj.onclick = () => {
                     if (element === get_store_value(selected_atom)) {
                         atom_obj.material = materials[element.toLowerCase()];
+                        atom_obj.correct_material = true;
                     }
                 };
                 root.add( atom_obj );
@@ -46680,7 +46689,7 @@ var app = (function () {
         current_element_counts.reset();
 
         dispose_group(scene$2);
-        dispose_renderer();
+        dispose_renderer(renderer$2);
     }
 
     function game_won(){
@@ -46688,7 +46697,7 @@ var app = (function () {
         current_game_state['state'] = GameStates.GAMEWON;
         game_state.set(current_game_state);
         dispose_group(scene$2);
-        dispose_renderer();
+        dispose_renderer(renderer$2);
     }
 
     // TODO: should I get rid of the Date.now() calls, and use the global clock?
@@ -47516,7 +47525,7 @@ var app = (function () {
     			div = element("div");
     			div.textContent = "Back to the Lab";
     			add_location(h3, file$5, 62, 12, 2298);
-    			attr_dev(div, "class", "button svelte-jgh4a6");
+    			attr_dev(div, "class", "button svelte-co7rvv");
     			add_location(div, file$5, 63, 12, 2328);
     		},
     		m: function mount(target, anchor) {
@@ -47551,7 +47560,7 @@ var app = (function () {
     }
 
     // (59:60) 
-    function create_if_block_1$1(ctx) {
+    function create_if_block_1$2(ctx) {
     	let h3;
     	let t1;
     	let div;
@@ -47566,7 +47575,7 @@ var app = (function () {
     			div = element("div");
     			div.textContent = "Back to the Lab";
     			add_location(h3, file$5, 59, 12, 2106);
-    			attr_dev(div, "class", "button svelte-jgh4a6");
+    			attr_dev(div, "class", "button svelte-co7rvv");
     			add_location(div, file$5, 60, 12, 2137);
     		},
     		m: function mount(target, anchor) {
@@ -47591,7 +47600,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_if_block_1$1.name,
+    		id: create_if_block_1$2.name,
     		type: "if",
     		source: "(59:60) ",
     		ctx
@@ -47601,7 +47610,7 @@ var app = (function () {
     }
 
     // (57:8) {#if $game_state.state === GameStates.STARTING}
-    function create_if_block$1(ctx) {
+    function create_if_block$2(ctx) {
     	let div;
     	let mounted;
     	let dispose;
@@ -47610,7 +47619,7 @@ var app = (function () {
     		c: function create() {
     			div = element("div");
     			div.textContent = "Start";
-    			attr_dev(div, "class", "button svelte-jgh4a6");
+    			attr_dev(div, "class", "button svelte-co7rvv");
     			add_location(div, file$5, 57, 12, 1961);
     		},
     		m: function mount(target, anchor) {
@@ -47631,7 +47640,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_if_block$1.name,
+    		id: create_if_block$2.name,
     		type: "if",
     		source: "(57:8) {#if $game_state.state === GameStates.STARTING}",
     		ctx
@@ -47659,8 +47668,8 @@ var app = (function () {
     	let current;
 
     	function select_block_type(ctx, dirty) {
-    		if (/*$game_state*/ ctx[1].state === GameStates.STARTING) return create_if_block$1;
-    		if (/*$game_state*/ ctx[1].state === GameStates.GAMELOST) return create_if_block_1$1;
+    		if (/*$game_state*/ ctx[1].state === GameStates.STARTING) return create_if_block$2;
+    		if (/*$game_state*/ ctx[1].state === GameStates.GAMELOST) return create_if_block_1$2;
     		if (/*$game_state*/ ctx[1].state === GameStates.GAMEWON) return create_if_block_2$1;
     	}
 
@@ -47694,10 +47703,10 @@ var app = (function () {
     			? 'display: flex;'
     			: 'display: none;');
 
-    			attr_dev(div0, "class", "svelte-jgh4a6");
+    			attr_dev(div0, "class", "svelte-co7rvv");
     			add_location(div0, file$5, 55, 4, 1806);
     			attr_dev(div1, "id", "cursor");
-    			attr_dev(div1, "class", "svelte-jgh4a6");
+    			attr_dev(div1, "class", "svelte-co7rvv");
     			add_location(div1, file$5, 70, 4, 2521);
     			attr_dev(div2, "id", "canvas-container");
     			add_location(div2, file$5, 71, 4, 2549);
@@ -48934,8 +48943,6 @@ var app = (function () {
 
     const csv_loader = new CSVLoader();
 
-    let errors_allowed = 5;
-
     // one problem is when you do "get" it isnt reactive. You just get the value at that time. If the value changes, you need to get it again
     // const atom_info = get(atoms);
     // const creator_moves_remaining_count = get(creator_moves_remaining);
@@ -48954,17 +48961,26 @@ var app = (function () {
         camera$1.updateProjectionMatrix();
         renderer$1.setSize( window.innerWidth, window.innerHeight );
         labelRenderer.setSize( window.innerWidth, window.innerHeight );
-        animate();
     }
+
+    var is_rotating = false;
+    function start_rotation() {is_rotating = true;}
 
     function animate() {
         requestAnimationFrame(animate);
         controls.update();
         renderer$1.render(scene$1, camera$1);
         labelRenderer.render( scene$1, camera$1 );
+        if (is_rotating) {
+            root.rotation.y = root.rotation.y + .01;
+        }
     }
 
     function init() {
+        game_state.update(state => {
+            state['state'] = GameStates.STARTING;
+            return state;
+        });
 
         scene$1 = new Scene();
         scene$1.background = new Color( 0x5d879c );
@@ -48983,6 +48999,7 @@ var app = (function () {
         renderer$1.setSize( window.innerWidth, window.innerHeight );
         document.getElementById( 'canvas-container' ).appendChild( renderer$1.domElement );
 
+        // TODO: what is this doing
         labelRenderer = new CSS2DRenderer();
         labelRenderer.setSize( window.innerWidth, window.innerHeight );
         labelRenderer.domElement.style.position = 'absolute';
@@ -48995,10 +49012,24 @@ var app = (function () {
         controls.maxDistance = 1000;
 
         loadMolecule( MOLECULE_PATHS[current_molecule] );
-        window.addEventListener( 'resize', onWindowResize );
-        window.addEventListener('click', (event) => on_mouse_click(), false);
-        window.addEventListener('mousemove', (event) => on_mouse_move(event), false);
+
+        add_event_listeners();
+
         mouse_ray$1.setFromCamera( mouse$1, camera$1 );
+
+        is_rotating = false;
+    }
+
+    function add_event_listeners() {
+        window.addEventListener('resize', onWindowResize, false );
+        window.addEventListener('click', on_mouse_click, false);
+        window.addEventListener('mousemove', on_mouse_move, false);
+    }
+
+    function remove_event_listeners$1() {
+        window.removeEventListener('resize', onWindowResize, false);
+        window.removeEventListener('mousemove', on_mouse_move, false);
+        window.removeEventListener('click', on_mouse_click, false);
     }
 
 
@@ -49037,9 +49068,19 @@ var app = (function () {
         let intersects = mouse_ray$1.intersectObjects( all_scene_objects, false );
         let intersects_with_click = intersects.filter(intersect => intersect.object.onclick) || [];
         if (intersects_with_click.length) {
-            creator_moves_remaining.set(get_store_value(creator_moves_remaining) - 1);
+            let moves_remaining = get_store_value(creator_moves_remaining) - 1;
+            creator_moves_remaining.set(moves_remaining);
+            if (moves_remaining <= 0) {
+                lose_game();
+            }
             intersects_with_click[0].object.onclick();
+            let all_atoms = root.children.filter(obj => obj.is_atom === true);
+            let correct_atoms = all_atoms.filter(atom => atom.correct_material);
+            if (all_atoms.length === correct_atoms.length) {
+                win_game();
+            }
         }
+
         // intersects_with_click.forEach(intersect => {
         //     console.log(intersect)
         //     intersect.object.onclick()
@@ -49047,99 +49088,51 @@ var app = (function () {
     }
 
     function loadMolecule( model ) {
-
         const url = 'models/sdf/' + model;
 
         while ( root.children.length > 0 ) {
-
             const object = root.children[ 0 ];
             object.parent.remove( object );
-
         }
 
         csv_loader.load( url, function ( csv ) {
             let csv_atoms = csv.atoms;
             let csv_bonds = csv.bonds;
+            let errors_allowed = Math.ceil(csv_atoms.length / 4);
             creator_moves_remaining.set(csv_atoms.length + errors_allowed);
 
             const use_normal = true;
             const show_label = false;
-            new Compound$1(root, csv_atoms, csv_bonds, use_normal, show_label);       
 
-            // geometryAtoms.computeBoundingBox();
-            // geometryAtoms.boundingBox.getCenter( offset ).negate();
-
-            // geometryAtoms.translate( offset.x, offset.y, offset.z );
-            // geometryBonds.translate( offset.x, offset.y, offset.z );
-
-            // let positions = geometryAtoms.getAttribute( 'position' );
-            // const colors = geometryAtoms.getAttribute( 'color' );
-
-            // const position = new THREE.Vector3();
-            // const color = new THREE.Color();
-
-            // for ( let i = 0; i < positions.count; i ++ ) {
-
-            //     position.x = positions.getX( i );
-            //     position.y = positions.getY( i );
-            //     position.z = positions.getZ( i );
-
-            //     color.r = colors.getX( i );
-            //     color.g = colors.getY( i );
-            //     color.b = colors.getZ( i );
-
-            //     const material = new THREE.MeshPhongMaterial( { color: color } );
-
-            //     const object = new THREE.Mesh( sphereGeometry, material );
-            //     object.position.copy( position );
-            //     object.position.multiplyScalar( 75 );
-            //     object.scale.multiplyScalar( 25 );
-            //     root.add( object );
-
-            //     const atom = json.atoms[ i ];
-
-            //     const text = document.createElement( 'div' );
-            //     text.className = 'label';
-            //     text.style.color = 'rgb(' + atom[ 3 ][ 0 ] + ',' + atom[ 3 ][ 1 ] + ',' + atom[ 3 ][ 2 ] + ')';
-            //     text.textContent = atom[ 4 ];
-
-            //     const label = new CSS2DObject( text );
-            //     label.position.copy( object.position );
-            //     root.add( label );
-
-            // }
-
-            // positions = geometryBonds.getAttribute( 'position' );
-
-            // const start = new THREE.Vector3();
-            // const end = new THREE.Vector3();
-
-            // for ( let i = 0; i < positions.count; i += 2 ) {
-
-            //     start.x = positions.getX( i );
-            //     start.y = positions.getY( i );
-            //     start.z = positions.getZ( i );
-
-            //     end.x = positions.getX( i + 1 );
-            //     end.y = positions.getY( i + 1 );
-            //     end.z = positions.getZ( i + 1 );
-
-            //     start.multiplyScalar( 75 );
-            //     end.multiplyScalar( 75 );
-
-            //     const object = new THREE.Mesh( boxGeometry, new THREE.MeshPhongMaterial( { color: 0xffffff } ) );
-            //     object.position.copy( start );
-            //     object.position.lerp( end, 0.5 );
-            //     object.scale.set( 5, 5, start.distanceTo( end ) );
-            //     object.lookAt( end );
-            //     root.add( object );
-
-            // }
+            new Compound$1(root, csv_atoms, csv_bonds, use_normal, show_label);
 
             animate();
 
         } );
 
+    }
+
+    function win_game() {
+        game_state.update(state => {
+            state['state'] = GameStates.GAMEWON;
+            return state;
+        });
+
+        // TODO: should we do this with an updater?
+        start_rotation();
+    }
+
+    function lose_game() {
+        game_state.update(state => {
+            state['state'] = GameStates.GAMELOST;
+            return state;
+        });
+    }
+
+    function dispose() {
+        dispose_group(scene$1);
+        dispose_renderer(renderer$1);
+        remove_event_listeners$1();
     }
 
     /* src/components/compound_creator/right_element_bar.svelte generated by Svelte v3.50.0 */
@@ -49153,11 +49146,13 @@ var app = (function () {
     	return child_ctx;
     }
 
-    // (11:4) {#each Object.keys($atoms) as atom_symbol}
-    function create_each_block$1(ctx) {
+    // (12:4) {#each Object.keys($atoms) as atom_symbol (atom_symbol)}
+    function create_each_block$1(key_1, ctx) {
     	let div;
+    	let h3;
     	let t_value = /*atom_symbol*/ ctx[6] + "";
     	let t;
+    	let div_class_value;
     	let mounted;
     	let dispose;
 
@@ -49166,14 +49161,25 @@ var app = (function () {
     	}
 
     	const block = {
+    		key: key_1,
+    		first: null,
     		c: function create() {
     			div = element("div");
+    			h3 = element("h3");
     			t = text(t_value);
-    			add_location(div, file$4, 11, 8, 342);
+    			add_location(h3, file$4, 14, 12, 551);
+
+    			attr_dev(div, "class", div_class_value = "" + (null_to_empty(/*$selected_atom*/ ctx[0] === /*atom_symbol*/ ctx[6]
+    			? 'select-atom-button highlighted'
+    			: 'select-atom-button') + " svelte-1vz0neb"));
+
+    			add_location(div, file$4, 12, 8, 357);
+    			this.first = div;
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
-    			append_dev(div, t);
+    			append_dev(div, h3);
+    			append_dev(h3, t);
 
     			if (!mounted) {
     				dispose = listen_dev(div, "click", stop_propagation(click_handler_1), false, false, true);
@@ -49183,6 +49189,12 @@ var app = (function () {
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
     			if (dirty & /*$atoms*/ 2 && t_value !== (t_value = /*atom_symbol*/ ctx[6] + "")) set_data_dev(t, t_value);
+
+    			if (dirty & /*$selected_atom, $atoms*/ 3 && div_class_value !== (div_class_value = "" + (null_to_empty(/*$selected_atom*/ ctx[0] === /*atom_symbol*/ ctx[6]
+    			? 'select-atom-button highlighted'
+    			: 'select-atom-button') + " svelte-1vz0neb"))) {
+    				attr_dev(div, "class", div_class_value);
+    			}
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
@@ -49195,7 +49207,7 @@ var app = (function () {
     		block,
     		id: create_each_block$1.name,
     		type: "each",
-    		source: "(11:4) {#each Object.keys($atoms) as atom_symbol}",
+    		source: "(12:4) {#each Object.keys($atoms) as atom_symbol (atom_symbol)}",
     		ctx
     	});
 
@@ -49203,28 +49215,33 @@ var app = (function () {
     }
 
     function create_fragment$4(ctx) {
-    	let div3;
+    	let div2;
     	let div0;
     	let t0;
+    	let each_blocks = [];
+    	let each_1_lookup = new Map();
     	let t1;
     	let div1;
-    	let t2;
+    	let h40;
     	let t3;
-    	let div2;
+    	let h41;
     	let t4;
     	let mounted;
     	let dispose;
     	let each_value = Object.keys(/*$atoms*/ ctx[1]);
     	validate_each_argument(each_value);
-    	let each_blocks = [];
+    	const get_key = ctx => /*atom_symbol*/ ctx[6];
+    	validate_each_keys(ctx, each_value, get_each_context$1, get_key);
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
+    		let child_ctx = get_each_context$1(ctx, each_value, i);
+    		let key = get_key(child_ctx);
+    		each_1_lookup.set(key, each_blocks[i] = create_each_block$1(key, child_ctx));
     	}
 
     	const block = {
     		c: function create() {
-    			div3 = element("div");
+    			div2 = element("div");
     			div0 = element("div");
     			t0 = space$1();
 
@@ -49234,37 +49251,39 @@ var app = (function () {
 
     			t1 = space$1();
     			div1 = element("div");
-    			t2 = text(/*$creator_moves_remaining*/ ctx[2]);
+    			h40 = element("h4");
+    			h40.textContent = "Moves Remaining:";
     			t3 = space$1();
-    			div2 = element("div");
-    			t4 = text(/*$selected_atom*/ ctx[0]);
+    			h41 = element("h4");
+    			t4 = text(/*$creator_moves_remaining*/ ctx[2]);
     			attr_dev(div0, "id", "spacer");
-    			attr_dev(div0, "class", "svelte-qn44li");
-    			add_location(div0, file$4, 9, 4, 215);
-    			add_location(div1, file$4, 13, 4, 446);
-    			add_location(div2, file$4, 14, 4, 488);
-    			attr_dev(div3, "id", "sidebar-right");
-    			attr_dev(div3, "class", "svelte-qn44li");
-    			add_location(div3, file$4, 8, 0, 186);
+    			attr_dev(div0, "class", "svelte-1vz0neb");
+    			add_location(div0, file$4, 10, 4, 216);
+    			add_location(h40, file$4, 18, 8, 619);
+    			add_location(h41, file$4, 19, 8, 653);
+    			add_location(div1, file$4, 17, 4, 605);
+    			attr_dev(div2, "id", "sidebar-right");
+    			attr_dev(div2, "class", "svelte-1vz0neb");
+    			add_location(div2, file$4, 9, 0, 187);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div3, anchor);
-    			append_dev(div3, div0);
-    			append_dev(div3, t0);
+    			insert_dev(target, div2, anchor);
+    			append_dev(div2, div0);
+    			append_dev(div2, t0);
 
     			for (let i = 0; i < each_blocks.length; i += 1) {
-    				each_blocks[i].m(div3, null);
+    				each_blocks[i].m(div2, null);
     			}
 
-    			append_dev(div3, t1);
-    			append_dev(div3, div1);
-    			append_dev(div1, t2);
-    			append_dev(div3, t3);
-    			append_dev(div3, div2);
-    			append_dev(div2, t4);
+    			append_dev(div2, t1);
+    			append_dev(div2, div1);
+    			append_dev(div1, h40);
+    			append_dev(div1, t3);
+    			append_dev(div1, h41);
+    			append_dev(h41, t4);
 
     			if (!mounted) {
     				dispose = listen_dev(div0, "click", stop_propagation(/*click_handler*/ ctx[4]), false, false, true);
@@ -49272,38 +49291,24 @@ var app = (function () {
     			}
     		},
     		p: function update(ctx, [dirty]) {
-    			if (dirty & /*set_selected_atom, Object, $atoms*/ 10) {
+    			if (dirty & /*$selected_atom, Object, $atoms, set_selected_atom*/ 11) {
     				each_value = Object.keys(/*$atoms*/ ctx[1]);
     				validate_each_argument(each_value);
-    				let i;
-
-    				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context$1(ctx, each_value, i);
-
-    					if (each_blocks[i]) {
-    						each_blocks[i].p(child_ctx, dirty);
-    					} else {
-    						each_blocks[i] = create_each_block$1(child_ctx);
-    						each_blocks[i].c();
-    						each_blocks[i].m(div3, t1);
-    					}
-    				}
-
-    				for (; i < each_blocks.length; i += 1) {
-    					each_blocks[i].d(1);
-    				}
-
-    				each_blocks.length = each_value.length;
+    				validate_each_keys(ctx, each_value, get_each_context$1, get_key);
+    				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, div2, destroy_block, create_each_block$1, t1, get_each_context$1);
     			}
 
-    			if (dirty & /*$creator_moves_remaining*/ 4) set_data_dev(t2, /*$creator_moves_remaining*/ ctx[2]);
-    			if (dirty & /*$selected_atom*/ 1) set_data_dev(t4, /*$selected_atom*/ ctx[0]);
+    			if (dirty & /*$creator_moves_remaining*/ 4) set_data_dev(t4, /*$creator_moves_remaining*/ ctx[2]);
     		},
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div3);
-    			destroy_each(each_blocks, detaching);
+    			if (detaching) detach_dev(div2);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].d();
+    			}
+
     			mounted = false;
     			dispose();
     		}
@@ -49381,39 +49386,183 @@ var app = (function () {
     }
 
     /* src/components/compound_creator/compound_creator.svelte generated by Svelte v3.50.0 */
+
     const file$3 = "src/components/compound_creator/compound_creator.svelte";
 
+    // (26:59) 
+    function create_if_block_1$1(ctx) {
+    	let h3;
+    	let t1;
+    	let div;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			h3 = element("h3");
+    			h3.textContent = "You Win!";
+    			t1 = space$1();
+    			div = element("div");
+    			div.textContent = "Back to the Timeline";
+    			add_location(h3, file$3, 26, 12, 1062);
+    			attr_dev(div, "class", "button svelte-1lpbxhu");
+    			add_location(div, file$3, 27, 12, 1092);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, h3, anchor);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(/*go_back_to_timeline*/ ctx[2]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(h3);
+    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block_1$1.name,
+    		type: "if",
+    		source: "(26:59) ",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (23:8) {#if $game_state.state === GameStates.GAMELOST}
+    function create_if_block$1(ctx) {
+    	let h3;
+    	let t1;
+    	let div;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			h3 = element("h3");
+    			h3.textContent = "You ran out of moves, and the molecule disappeared";
+    			t1 = space$1();
+    			div = element("div");
+    			div.textContent = "Back to the Timeline";
+    			add_location(h3, file$3, 23, 12, 824);
+    			attr_dev(div, "class", "button svelte-1lpbxhu");
+    			add_location(div, file$3, 24, 12, 896);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, h3, anchor);
+    			insert_dev(target, t1, anchor);
+    			insert_dev(target, div, anchor);
+
+    			if (!mounted) {
+    				dispose = listen_dev(div, "click", stop_propagation(/*go_back_to_timeline*/ ctx[2]), false, false, true);
+    				mounted = true;
+    			}
+    		},
+    		p: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(h3);
+    			if (detaching) detach_dev(t1);
+    			if (detaching) detach_dev(div);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block$1.name,
+    		type: "if",
+    		source: "(23:8) {#if $game_state.state === GameStates.GAMELOST}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
     function create_fragment$3(ctx) {
-    	let div1;
-    	let rightsidebar;
-    	let t;
+    	let div2;
     	let div0;
+    	let div0_style_value;
+    	let t0;
+    	let rightsidebar;
+    	let t1;
+    	let div1;
     	let current;
+
+    	function select_block_type(ctx, dirty) {
+    		if (/*$game_state*/ ctx[0].state === GameStates.GAMELOST) return create_if_block$1;
+    		if (/*$game_state*/ ctx[0].state === GameStates.GAMEWON) return create_if_block_1$1;
+    	}
+
+    	let current_block_type = select_block_type(ctx);
+    	let if_block = current_block_type && current_block_type(ctx);
     	rightsidebar = new Right_element_bar({ $$inline: true });
 
     	const block = {
     		c: function create() {
-    			div1 = element("div");
-    			create_component(rightsidebar.$$.fragment);
-    			t = space$1();
+    			div2 = element("div");
     			div0 = element("div");
-    			attr_dev(div0, "id", "canvas-container");
-    			add_location(div0, file$3, 12, 4, 286);
-    			attr_dev(div1, "id", "outer");
-    			attr_dev(div1, "class", "svelte-1i2m9uj");
-    			add_location(div1, file$3, 10, 0, 245);
+    			if (if_block) if_block.c();
+    			t0 = space$1();
+    			create_component(rightsidebar.$$.fragment);
+    			t1 = space$1();
+    			div1 = element("div");
+    			attr_dev(div0, "id", "overlay-to-start");
+
+    			attr_dev(div0, "style", div0_style_value = /*show_overlay*/ ctx[1]
+    			? 'display: flex;'
+    			: 'display: none;');
+
+    			attr_dev(div0, "class", "svelte-1lpbxhu");
+    			add_location(div0, file$3, 21, 4, 669);
+    			attr_dev(div1, "id", "canvas-container");
+    			add_location(div1, file$3, 31, 4, 1235);
+    			attr_dev(div2, "id", "outer");
+    			attr_dev(div2, "class", "svelte-1lpbxhu");
+    			add_location(div2, file$3, 20, 0, 648);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div1, anchor);
-    			mount_component(rightsidebar, div1, null);
-    			append_dev(div1, t);
-    			append_dev(div1, div0);
+    			insert_dev(target, div2, anchor);
+    			append_dev(div2, div0);
+    			if (if_block) if_block.m(div0, null);
+    			append_dev(div2, t0);
+    			mount_component(rightsidebar, div2, null);
+    			append_dev(div2, t1);
+    			append_dev(div2, div1);
     			current = true;
     		},
-    		p: noop,
+    		p: function update(ctx, [dirty]) {
+    			if (current_block_type === (current_block_type = select_block_type(ctx)) && if_block) {
+    				if_block.p(ctx, dirty);
+    			} else {
+    				if (if_block) if_block.d(1);
+    				if_block = current_block_type && current_block_type(ctx);
+
+    				if (if_block) {
+    					if_block.c();
+    					if_block.m(div0, null);
+    				}
+    			}
+
+    			if (!current || dirty & /*show_overlay*/ 2 && div0_style_value !== (div0_style_value = /*show_overlay*/ ctx[1]
+    			? 'display: flex;'
+    			: 'display: none;')) {
+    				attr_dev(div0, "style", div0_style_value);
+    			}
+    		},
     		i: function intro(local) {
     			if (current) return;
     			transition_in(rightsidebar.$$.fragment, local);
@@ -49424,7 +49573,12 @@ var app = (function () {
     			current = false;
     		},
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div1);
+    			if (detaching) detach_dev(div2);
+
+    			if (if_block) {
+    				if_block.d();
+    			}
+
     			destroy_component(rightsidebar);
     		}
     	};
@@ -49441,6 +49595,13 @@ var app = (function () {
     }
 
     function instance$3($$self, $$props, $$invalidate) {
+    	let show_overlay;
+    	let $game_state;
+    	let $current_scene;
+    	validate_store(game_state, 'game_state');
+    	component_subscribe($$self, game_state, $$value => $$invalidate(0, $game_state = $$value));
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(3, $current_scene = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_creator', slots, []);
 
@@ -49448,14 +49609,48 @@ var app = (function () {
     		new CompoundCreator();
     	});
 
+    	function go_back_to_timeline() {
+    		dispose();
+    		set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
+    		set_store_value(game_state, $game_state['state'] = GameStates.STARTING, $game_state);
+    	}
+
     	const writable_props = [];
 
     	Object.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Compound_creator> was created with unknown prop '${key}'`);
     	});
 
-    	$$self.$capture_state = () => ({ onMount, CompoundCreator, RightSideBar: Right_element_bar });
-    	return [];
+    	$$self.$capture_state = () => ({
+    		onMount,
+    		CompoundCreator,
+    		dispose,
+    		RightSideBar: Right_element_bar,
+    		game_state,
+    		GameStates,
+    		current_scene,
+    		possible_scenes,
+    		go_back_to_timeline,
+    		show_overlay,
+    		$game_state,
+    		$current_scene
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ('show_overlay' in $$props) $$invalidate(1, show_overlay = $$props.show_overlay);
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	$$self.$$.update = () => {
+    		if ($$self.$$.dirty & /*$game_state*/ 1) {
+    			$$invalidate(1, show_overlay = $game_state.state === GameStates.GAMELOST || $game_state.state === GameStates.GAMEWON);
+    		}
+    	};
+
+    	return [$game_state, show_overlay, go_back_to_timeline];
     }
 
     class Compound_creator extends SvelteComponentDev {
@@ -49879,28 +50074,28 @@ var app = (function () {
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[10] = list[i];
+    	child_ctx[12] = list[i];
     	return child_ctx;
     }
 
     function get_each_context_1(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[13] = list[i];
+    	child_ctx[15] = list[i];
     	return child_ctx;
     }
 
     function get_each_context_2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[16] = list[i][0];
-    	child_ctx[17] = list[i][1];
+    	child_ctx[18] = list[i][0];
+    	child_ctx[19] = list[i][1];
     	return child_ctx;
     }
 
-    // (83:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
+    // (91:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
     function create_each_block_2(key_1, ctx) {
     	let div;
     	let p0;
-    	let t0_value = /*el*/ ctx[16] + "";
+    	let t0_value = /*el*/ ctx[18] + "";
     	let t0;
     	let t1;
     	let p1;
@@ -49919,14 +50114,14 @@ var app = (function () {
     			p1 = element("p");
     			t2 = text("↑");
     			t3 = space$1();
-    			attr_dev(p0, "class", "spaced-p svelte-f81ott");
-    			add_location(p0, file$2, 84, 20, 3046);
-    			attr_dev(p1, "class", "spaced-p svelte-f81ott");
-    			set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[17] + "deg)");
-    			set_style(p1, "color", calc_color(/*rotation*/ ctx[17]));
-    			add_location(p1, file$2, 85, 20, 3095);
-    			attr_dev(div, "class", "p-cont svelte-f81ott");
-    			add_location(div, file$2, 83, 16, 3005);
+    			attr_dev(p0, "class", "spaced-p svelte-de41fw");
+    			add_location(p0, file$2, 92, 20, 3307);
+    			attr_dev(p1, "class", "spaced-p svelte-de41fw");
+    			set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[19] + "deg)");
+    			set_style(p1, "color", calc_color(/*rotation*/ ctx[19]));
+    			add_location(p1, file$2, 93, 20, 3356);
+    			attr_dev(div, "class", "p-cont svelte-de41fw");
+    			add_location(div, file$2, 91, 16, 3266);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -49940,14 +50135,14 @@ var app = (function () {
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if (dirty & /*$balance_rotations*/ 1 && t0_value !== (t0_value = /*el*/ ctx[16] + "")) set_data_dev(t0, t0_value);
+    			if (dirty & /*$balance_rotations*/ 1 && t0_value !== (t0_value = /*el*/ ctx[18] + "")) set_data_dev(t0, t0_value);
 
     			if (dirty & /*$balance_rotations*/ 1) {
-    				set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[17] + "deg)");
+    				set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[19] + "deg)");
     			}
 
     			if (dirty & /*$balance_rotations*/ 1) {
-    				set_style(p1, "color", calc_color(/*rotation*/ ctx[17]));
+    				set_style(p1, "color", calc_color(/*rotation*/ ctx[19]));
     			}
     		},
     		i: function intro(local) {
@@ -49955,7 +50150,7 @@ var app = (function () {
     				add_render_callback(() => {
     					p1_intro = create_in_transition(p1, /*custom_rotate*/ ctx[4], {
     						duration: 1000,
-    						rotation: /*rotation*/ ctx[17]
+    						rotation: /*rotation*/ ctx[19]
     					});
 
     					p1_intro.start();
@@ -49972,24 +50167,24 @@ var app = (function () {
     		block,
     		id: create_each_block_2.name,
     		type: "each",
-    		source: "(83:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}",
+    		source: "(91:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (97:16) {#each $compounds_in_scene[side] as compound (compound)}
+    // (105:16) {#each $compounds_in_scene[side] as compound (compound)}
     function create_each_block_1(key_1, ctx) {
     	let div;
     	let p;
-    	let t_value = /*compound*/ ctx[13] + "";
+    	let t_value = /*compound*/ ctx[15] + "";
     	let t;
     	let mounted;
     	let dispose;
 
     	function click_handler() {
-    		return /*click_handler*/ ctx[7](/*compound*/ ctx[13], /*side*/ ctx[10]);
+    		return /*click_handler*/ ctx[8](/*compound*/ ctx[15], /*side*/ ctx[12]);
     	}
 
     	const block = {
@@ -49999,10 +50194,10 @@ var app = (function () {
     			div = element("div");
     			p = element("p");
     			t = text(t_value);
-    			attr_dev(p, "class", "svelte-f81ott");
-    			add_location(p, file$2, 98, 24, 3834);
-    			attr_dev(div, "class", "add-molecule-button svelte-f81ott");
-    			add_location(div, file$2, 97, 20, 3705);
+    			attr_dev(p, "class", "svelte-de41fw");
+    			add_location(p, file$2, 106, 24, 4133);
+    			attr_dev(div, "class", "add-molecule-button svelte-de41fw");
+    			add_location(div, file$2, 105, 20, 4004);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -50017,7 +50212,7 @@ var app = (function () {
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if (dirty & /*$compounds_in_scene*/ 8 && t_value !== (t_value = /*compound*/ ctx[13] + "")) set_data_dev(t, t_value);
+    			if (dirty & /*$compounds_in_scene*/ 8 && t_value !== (t_value = /*compound*/ ctx[15] + "")) set_data_dev(t, t_value);
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
@@ -50030,21 +50225,21 @@ var app = (function () {
     		block,
     		id: create_each_block_1.name,
     		type: "each",
-    		source: "(97:16) {#each $compounds_in_scene[side] as compound (compound)}",
+    		source: "(105:16) {#each $compounds_in_scene[side] as compound (compound)}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (95:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}
+    // (103:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}
     function create_each_block(key_1, ctx) {
     	let div;
     	let each_blocks = [];
     	let each_1_lookup = new Map();
-    	let each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[10]];
+    	let each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[12]];
     	validate_each_argument(each_value_1);
-    	const get_key = ctx => /*compound*/ ctx[13];
+    	const get_key = ctx => /*compound*/ ctx[15];
     	validate_each_keys(ctx, each_value_1, get_each_context_1, get_key);
 
     	for (let i = 0; i < each_value_1.length; i += 1) {
@@ -50063,8 +50258,8 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(div, "class", "" + (/*side*/ ctx[10] + " add-molecules" + " svelte-f81ott"));
-    			add_location(div, file$2, 95, 12, 3577);
+    			attr_dev(div, "class", "" + (/*side*/ ctx[12] + " add-molecules" + " svelte-de41fw"));
+    			add_location(div, file$2, 103, 12, 3876);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -50078,7 +50273,7 @@ var app = (function () {
     			ctx = new_ctx;
 
     			if (dirty & /*add_molecule_to_scene, $compounds_in_scene, sides*/ 40) {
-    				each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[10]];
+    				each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[12]];
     				validate_each_argument(each_value_1);
     				validate_each_keys(ctx, each_value_1, get_each_context_1, get_key);
     				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value_1, each_1_lookup, div, destroy_block, create_each_block_1, null, get_each_context_1);
@@ -50097,7 +50292,7 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(95:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}",
+    		source: "(103:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}",
     		ctx
     	});
 
@@ -50109,7 +50304,7 @@ var app = (function () {
     	let div0;
     	let canvas;
     	let t0;
-    	let div3;
+    	let div2;
     	let div1;
     	let each_blocks_1 = [];
     	let each0_lookup = new Map();
@@ -50118,9 +50313,9 @@ var app = (function () {
     	let t3;
     	let hr;
     	let t4;
-    	let div2;
+    	let div3;
     	let t5;
-    	let div2_class_value;
+    	let div3_class_value;
     	let t6;
     	let div5;
     	let each_blocks = [];
@@ -50133,7 +50328,7 @@ var app = (function () {
     	let dispose;
     	let each_value_2 = Object.entries(/*$balance_rotations*/ ctx[0]);
     	validate_each_argument(each_value_2);
-    	const get_key = ctx => /*el*/ ctx[16] + /*rotation*/ ctx[17];
+    	const get_key = ctx => /*el*/ ctx[18] + /*rotation*/ ctx[19];
     	validate_each_keys(ctx, each_value_2, get_each_context_2, get_key);
 
     	for (let i = 0; i < each_value_2.length; i += 1) {
@@ -50144,7 +50339,7 @@ var app = (function () {
 
     	let each_value = [sides.LEFT, sides.RIGHT];
     	validate_each_argument(each_value);
-    	const get_key_1 = ctx => /*side*/ ctx[10];
+    	const get_key_1 = ctx => /*side*/ ctx[12];
     	validate_each_keys(ctx, each_value, get_each_context, get_key_1);
 
     	for (let i = 0; i < 2; i += 1) {
@@ -50159,7 +50354,7 @@ var app = (function () {
     			div0 = element("div");
     			canvas = element("canvas");
     			t0 = space$1();
-    			div3 = element("div");
+    			div2 = element("div");
     			div1 = element("div");
 
     			for (let i = 0; i < each_blocks_1.length; i += 1) {
@@ -50172,7 +50367,7 @@ var app = (function () {
     			t3 = space$1();
     			hr = element("hr");
     			t4 = space$1();
-    			div2 = element("div");
+    			div3 = element("div");
     			t5 = text("Submit!");
     			t6 = space$1();
     			div5 = element("div");
@@ -50184,32 +50379,32 @@ var app = (function () {
     			t7 = space$1();
     			div4 = element("div");
     			t8 = text("🗑️");
-    			attr_dev(canvas, "class", "svelte-f81ott");
-    			add_location(canvas, file$2, 78, 8, 2806);
+    			attr_dev(canvas, "class", "svelte-de41fw");
+    			add_location(canvas, file$2, 86, 8, 3067);
     			attr_dev(div0, "id", "canvas-container");
-    			attr_dev(div0, "class", "svelte-f81ott");
-    			add_location(div0, file$2, 77, 4, 2770);
+    			attr_dev(div0, "class", "svelte-de41fw");
+    			add_location(div0, file$2, 85, 4, 3031);
     			attr_dev(div1, "id", "balance-arrows");
-    			attr_dev(div1, "class", "svelte-f81ott");
-    			add_location(div1, file$2, 81, 8, 2874);
-    			attr_dev(h1, "class", "center-arrow svelte-f81ott");
-    			add_location(h1, file$2, 89, 8, 3315);
-    			attr_dev(hr, "class", "middle-divider svelte-f81ott");
-    			add_location(hr, file$2, 90, 8, 3355);
-    			attr_dev(div2, "class", div2_class_value = "" + (null_to_empty(/*balanced*/ ctx[1] ? "jiggle" : "") + " svelte-f81ott"));
-    			attr_dev(div2, "id", "submit");
-    			add_location(div2, file$2, 91, 8, 3391);
-    			attr_dev(div3, "id", "arrow-container");
-    			attr_dev(div3, "class", "svelte-f81ott");
-    			add_location(div3, file$2, 80, 4, 2839);
-    			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*$need_to_delete*/ ctx[2] ? 'red' : 'gray') + " svelte-f81ott"));
+    			attr_dev(div1, "class", "svelte-de41fw");
+    			add_location(div1, file$2, 89, 8, 3135);
+    			attr_dev(h1, "class", "center-arrow svelte-de41fw");
+    			add_location(h1, file$2, 97, 8, 3576);
+    			attr_dev(hr, "class", "middle-divider svelte-de41fw");
+    			add_location(hr, file$2, 98, 8, 3616);
+    			attr_dev(div2, "id", "arrow-container");
+    			attr_dev(div2, "class", "svelte-de41fw");
+    			add_location(div2, file$2, 88, 4, 3100);
+    			attr_dev(div3, "class", div3_class_value = "" + (null_to_empty(/*balanced*/ ctx[1] ? "jiggle" : "") + " svelte-de41fw"));
+    			attr_dev(div3, "id", "submit");
+    			add_location(div3, file$2, 100, 4, 3659);
+    			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*$need_to_delete*/ ctx[2] ? 'red' : 'gray') + " svelte-de41fw"));
     			attr_dev(div4, "id", "trash");
-    			add_location(div4, file$2, 103, 8, 3946);
-    			attr_dev(div5, "class", "add-molecules-container svelte-f81ott");
-    			add_location(div5, file$2, 93, 4, 3470);
+    			add_location(div4, file$2, 111, 8, 4245);
+    			attr_dev(div5, "class", "add-molecules-container svelte-de41fw");
+    			add_location(div5, file$2, 101, 4, 3769);
     			attr_dev(div6, "id", "outer");
-    			attr_dev(div6, "class", "svelte-f81ott");
-    			add_location(div6, file$2, 76, 0, 2749);
+    			attr_dev(div6, "class", "svelte-de41fw");
+    			add_location(div6, file$2, 84, 0, 3010);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -50219,20 +50414,20 @@ var app = (function () {
     			append_dev(div6, div0);
     			append_dev(div0, canvas);
     			append_dev(div6, t0);
-    			append_dev(div6, div3);
-    			append_dev(div3, div1);
+    			append_dev(div6, div2);
+    			append_dev(div2, div1);
 
     			for (let i = 0; i < each_blocks_1.length; i += 1) {
     				each_blocks_1[i].m(div1, null);
     			}
 
-    			append_dev(div3, t1);
-    			append_dev(div3, h1);
-    			append_dev(div3, t3);
-    			append_dev(div3, hr);
-    			append_dev(div3, t4);
-    			append_dev(div3, div2);
-    			append_dev(div2, t5);
+    			append_dev(div2, t1);
+    			append_dev(div2, h1);
+    			append_dev(div2, t3);
+    			append_dev(div2, hr);
+    			append_dev(div6, t4);
+    			append_dev(div6, div3);
+    			append_dev(div3, t5);
     			append_dev(div6, t6);
     			append_dev(div6, div5);
 
@@ -50245,7 +50440,11 @@ var app = (function () {
     			append_dev(div4, t8);
 
     			if (!mounted) {
-    				dispose = listen_dev(div4, "click", /*click_handler_1*/ ctx[8], false, false, false);
+    				dispose = [
+    					listen_dev(div3, "click", stop_propagation(/*go_to_timeline*/ ctx[7]), false, false, true),
+    					listen_dev(div4, "click", /*click_handler_1*/ ctx[9], false, false, false)
+    				];
+
     				mounted = true;
     			}
     		},
@@ -50257,8 +50456,8 @@ var app = (function () {
     				each_blocks_1 = update_keyed_each(each_blocks_1, dirty, get_key, 1, ctx, each_value_2, each0_lookup, div1, destroy_block, create_each_block_2, null, get_each_context_2);
     			}
 
-    			if (dirty & /*balanced*/ 2 && div2_class_value !== (div2_class_value = "" + (null_to_empty(/*balanced*/ ctx[1] ? "jiggle" : "") + " svelte-f81ott"))) {
-    				attr_dev(div2, "class", div2_class_value);
+    			if (dirty & /*balanced*/ 2 && div3_class_value !== (div3_class_value = "" + (null_to_empty(/*balanced*/ ctx[1] ? "jiggle" : "") + " svelte-de41fw"))) {
+    				attr_dev(div3, "class", div3_class_value);
     			}
 
     			if (dirty & /*sides, $compounds_in_scene, add_molecule_to_scene*/ 40) {
@@ -50268,7 +50467,7 @@ var app = (function () {
     				each_blocks = update_keyed_each(each_blocks, dirty, get_key_1, 1, ctx, each_value, each1_lookup, div5, destroy_block, create_each_block, t7, get_each_context);
     			}
 
-    			if (dirty & /*$need_to_delete*/ 4 && div4_class_value !== (div4_class_value = "" + (null_to_empty(/*$need_to_delete*/ ctx[2] ? 'red' : 'gray') + " svelte-f81ott"))) {
+    			if (dirty & /*$need_to_delete*/ 4 && div4_class_value !== (div4_class_value = "" + (null_to_empty(/*$need_to_delete*/ ctx[2] ? 'red' : 'gray') + " svelte-de41fw"))) {
     				attr_dev(div4, "class", div4_class_value);
     			}
     		},
@@ -50290,7 +50489,7 @@ var app = (function () {
     			}
 
     			mounted = false;
-    			dispose();
+    			run_all(dispose);
     		}
     	};
 
@@ -50337,9 +50536,12 @@ var app = (function () {
     }
 
     function instance$2($$self, $$props, $$invalidate) {
+    	let $current_scene;
     	let $need_to_delete;
     	let $balance_rotations;
     	let $compounds_in_scene;
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(11, $current_scene = $$value));
     	validate_store(need_to_delete, 'need_to_delete');
     	component_subscribe($$self, need_to_delete, $$value => $$invalidate(2, $need_to_delete = $$value));
     	validate_store(balance_rotations, 'balance_rotations');
@@ -50385,6 +50587,16 @@ var app = (function () {
     		set_store_value(need_to_delete, $need_to_delete = !$need_to_delete, $need_to_delete);
     	}
 
+    	function go_to_timeline(event) {
+    		console.log('timeline', $current_scene);
+
+    		if (balanced) {
+    			set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
+    		}
+
+    		console.log('timeline', $current_scene);
+    	}
+
     	const writable_props = [];
 
     	Object_1.keys($$props).forEach(key => {
@@ -50398,6 +50610,8 @@ var app = (function () {
     		onMount,
     		expoOut,
     		BalanceEquationScene,
+    		current_scene,
+    		possible_scenes,
     		balance_rotations,
     		compounds_in_scene,
     		sides,
@@ -50409,6 +50623,8 @@ var app = (function () {
     		getRandomBetween,
     		add_molecule_to_scene,
     		toggle_delete_molecule_from_scene,
+    		go_to_timeline,
+    		$current_scene,
     		$need_to_delete,
     		$balance_rotations,
     		$compounds_in_scene
@@ -50444,6 +50660,7 @@ var app = (function () {
     		custom_rotate,
     		add_molecule_to_scene,
     		toggle_delete_molecule_from_scene,
+    		go_to_timeline,
     		click_handler,
     		click_handler_1
     	];

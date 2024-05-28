@@ -762,7 +762,7 @@ function game_lost(){
     current_element_counts.reset();
 
     dispose_group(scene);
-    dispose_renderer();
+    dispose_renderer(renderer);
 }
 
 function game_won(){
@@ -770,7 +770,7 @@ function game_won(){
     current_game_state['state'] = GameStates.GAMEWON;
     game_state.set(current_game_state)
     dispose_group(scene);
-    dispose_renderer();
+    dispose_renderer(renderer);
 }
 
 // TODO: should I get rid of the Date.now() calls, and use the global clock?
