@@ -49411,7 +49411,7 @@ var app = (function () {
 
     const file$3 = "src/components/compound_creator/compound_creator.svelte";
 
-    // (25:59) 
+    // (26:59) 
     function create_if_block_1$1(ctx) {
     	let h3;
     	let t1;
@@ -49426,9 +49426,9 @@ var app = (function () {
     			t1 = space$1();
     			div = element("div");
     			div.textContent = "Back to the Timeline";
-    			add_location(h3, file$3, 25, 12, 1010);
+    			add_location(h3, file$3, 26, 12, 1062);
     			attr_dev(div, "class", "button svelte-1lpbxhu");
-    			add_location(div, file$3, 26, 12, 1040);
+    			add_location(div, file$3, 27, 12, 1092);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, h3, anchor);
@@ -49454,14 +49454,14 @@ var app = (function () {
     		block,
     		id: create_if_block_1$1.name,
     		type: "if",
-    		source: "(25:59) ",
+    		source: "(26:59) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (22:8) {#if $game_state.state === GameStates.GAMELOST}
+    // (23:8) {#if $game_state.state === GameStates.GAMELOST}
     function create_if_block$1(ctx) {
     	let h3;
     	let t1;
@@ -49476,9 +49476,9 @@ var app = (function () {
     			t1 = space$1();
     			div = element("div");
     			div.textContent = "Back to the Timeline";
-    			add_location(h3, file$3, 22, 12, 772);
+    			add_location(h3, file$3, 23, 12, 824);
     			attr_dev(div, "class", "button svelte-1lpbxhu");
-    			add_location(div, file$3, 23, 12, 844);
+    			add_location(div, file$3, 24, 12, 896);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, h3, anchor);
@@ -49504,7 +49504,7 @@ var app = (function () {
     		block,
     		id: create_if_block$1.name,
     		type: "if",
-    		source: "(22:8) {#if $game_state.state === GameStates.GAMELOST}",
+    		source: "(23:8) {#if $game_state.state === GameStates.GAMELOST}",
     		ctx
     	});
 
@@ -49546,12 +49546,12 @@ var app = (function () {
     			: 'display: none;');
 
     			attr_dev(div0, "class", "svelte-1lpbxhu");
-    			add_location(div0, file$3, 20, 4, 617);
+    			add_location(div0, file$3, 21, 4, 669);
     			attr_dev(div1, "id", "canvas-container");
-    			add_location(div1, file$3, 30, 4, 1183);
+    			add_location(div1, file$3, 31, 4, 1235);
     			attr_dev(div2, "id", "outer");
     			attr_dev(div2, "class", "svelte-1lpbxhu");
-    			add_location(div2, file$3, 19, 0, 596);
+    			add_location(div2, file$3, 20, 0, 648);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -49618,12 +49618,12 @@ var app = (function () {
 
     function instance$3($$self, $$props, $$invalidate) {
     	let show_overlay;
-    	let $current_scene;
     	let $game_state;
-    	validate_store(current_scene, 'current_scene');
-    	component_subscribe($$self, current_scene, $$value => $$invalidate(3, $current_scene = $$value));
+    	let $current_scene;
     	validate_store(game_state, 'game_state');
     	component_subscribe($$self, game_state, $$value => $$invalidate(0, $game_state = $$value));
+    	validate_store(current_scene, 'current_scene');
+    	component_subscribe($$self, current_scene, $$value => $$invalidate(3, $current_scene = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_creator', slots, []);
 
@@ -49634,6 +49634,7 @@ var app = (function () {
     	function go_back_to_timeline() {
     		dispose();
     		set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
+    		set_store_value(game_state, $game_state['state'] = GameStates.STARTING, $game_state);
     	}
 
     	const writable_props = [];
@@ -49653,8 +49654,8 @@ var app = (function () {
     		possible_scenes,
     		go_back_to_timeline,
     		show_overlay,
-    		$current_scene,
-    		$game_state
+    		$game_state,
+    		$current_scene
     	});
 
     	$$self.$inject_state = $$props => {
