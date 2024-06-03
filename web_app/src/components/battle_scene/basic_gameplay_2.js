@@ -43,8 +43,12 @@ var global_clock,
     clouds,
     labs,
     mines,
-    stats;
+    stats,
+    max_movement_speed,
+    max_stun_time,
+    stun_enemies;
 
+const original_max_movement_speed = 5;
 
 function initialize_vars(){
     global_clock = new THREE.Clock();
@@ -63,6 +67,9 @@ function initialize_vars(){
     stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
     document.body.appendChild( stats.dom );
     invincible_until = 0;
+    max_movement_speed = original_max_movement_speed;
+    stun_enemies = false;
+    max_stun_time = 1;
 }
 
 export class BattleScene {
@@ -280,7 +287,7 @@ function add_enemy_movement_updater(enemy) {
         The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
         We get the direction to the player and then project it onto the plane, and then move one step in that direction
         */
-        let {enemy} = state
+        let {enemy, stunned} = state
         if (enemy.should_delete) {
             enemies = enemies.filter(e => e !== enemy)
             if (!enemies.length) {
@@ -288,6 +295,9 @@ function add_enemy_movement_updater(enemy) {
             }
             return {finished: true, to_delete: [enemy]}
         }
+
+        // cant move or hurt player when stunned
+        if (stunned) return state;
 
         let camera_world_pos = camera.getWorldPosition(new THREE.Vector3())
         let enemy_world_pos = enemy.getWorldPosition(new THREE.Vector3())
@@ -333,8 +343,9 @@ function add_enemy_movement_updater(enemy) {
 
         return state
     }
-    let updater = new Updater(move_enemy, {enemy})
+    let updater = new Updater(move_enemy, {enemy, stunned: false})
     add_to_global_updates_queue(updater)
+    enemy.movement_updater = updater;
 }
 
 
@@ -360,6 +371,7 @@ function initialize_in_random_position(type_of_obj) {
         clouds.push(obj)
     } else if (type_of_obj['create_function'] === create_lab) {
         labs.push(obj)
+        add_lab_effect_updater(obj)
     } 
     parent.updateMatrixWorld(true)
 }
@@ -533,8 +545,6 @@ function movement_curve(x) {
 
 
 let current_direction_vector = new THREE.Vector3(0, 0, 0);
-const max_movement_speed = 10;
-
 const forward = new THREE.Vector3(0, 0, -1);
 const right = new THREE.Vector3(1, 0, 0);
 const back = new THREE.Vector3(0, 0, 1);
@@ -727,8 +737,23 @@ function blast_projectile(state, time_delta){
     mesh.position.add(direction)
 
     let collisions = projectile.check_collisions(enemies);
-    collisions.forEach(collided_obj => collided_obj.collide(projectile));
-    console.log(enemies.length)
+    collisions.forEach(collided_obj => {
+        collided_obj.collide(projectile);
+        if (stun_enemies) {
+            const stun_update_helper = (state, time_delta) => {
+                let {total_time} = state;
+                total_time += time_delta;
+                if (total_time >= max_stun_time) {
+                    collided_obj.movement_updater.state.stunned = false;
+                    return {finished: true}
+                }
+                collided_obj.movement_updater.state.stunned = true;
+                return {finished: false, total_time: total_time}
+            }
+            let stun_updater = new Updater(stun_update_helper, {finished: false, total_time: 0})
+            add_to_global_updates_queue(stun_updater)
+        }
+    });
 
     if (collisions.length) {
         return {finished: true, to_delete: [projectile]}
@@ -751,6 +776,48 @@ function damage_player(damage = 10){
     }
 }
 
+function create_speed_boost_updater() {
+    let time_limit_of_speed_boost = 5; // seconds
+    let speed_helper = (state, time_delta) => {
+        let {total_time} = state;
+        if (total_time > time_limit_of_speed_boost) {
+            max_movement_speed = original_max_movement_speed;
+            return {finished: true}
+        }
+        max_movement_speed = original_max_movement_speed * 2;
+        total_time += time_delta;
+        return {finished: false, total_time: total_time}
+    }
+    return new Updater(speed_helper, {finished: false, total_time: 0});
+}
+
+function create_stun_updater() {
+    let time_limit_of_stun_boost = 10;
+    let stun_helper = (state, time_delta) => {
+        let {total_time} = state;
+        if (total_time > time_limit_of_stun_boost) {
+            stun_enemies = false;
+            return {finished: true}
+        }
+        stun_enemies = true;
+        total_time += time_delta;
+        return {finished: false, total_time: total_time}
+    }
+    return new Updater(stun_helper, {finished: false, total_time: 0})
+}
+
+const lab_power_to_updater = {
+    'speed boost': create_speed_boost_updater,
+    'stun': create_stun_updater,
+}
+
+function add_lab_effect_updater(lab) {
+    lab.collide = () => {
+        let power = lab.effect.power
+        let updater = lab_power_to_updater[power]()
+        add_to_global_updates_queue(updater)
+    };
+}
 
 function game_lost(){
     let current_game_state = get(game_state)
@@ -774,3 +841,5 @@ function game_won(){
 }
 
 // TODO: should I get rid of the Date.now() calls, and use the global clock?
+
+// TODO: should there be a way of searching through the global updates queue and deleting effects if they get overridden?
