@@ -408,21 +408,46 @@ function create_cloud(arg_dict) {
 }
 
 
-const torus_geometry = new THREE.TorusKnotGeometry( 50, 5, 100, 16 ); 
-const torus_material = new THREE.MeshBasicMaterial( { color: 0xffff00 } ); 
+const lab_power_ups = {
+    // 'nuclear': {
+    //     'material': new THREE.MeshBasicMaterial( { color: 0x67d686 } ),
+    //     'power': 'chain reaction',
+    // },
+    'electrical': {
+        'material': new THREE.MeshBasicMaterial( { color: 0xffeb36 } ),
+        'power': 'stun',
+    },
+    'kinetic': {
+        'material': new THREE.MeshBasicMaterial( { color: 0x858585 } ),
+        'power': 'speed boost',
+    },
+    // 'thermal': {
+    //     'material': new THREE.MeshBasicMaterial( { color: 0xff5c5c } ),
+    //     'power': 'burn over time',
+    // },
+    // 'chemical': {
+    //     'material': new THREE.MeshBasicMaterial( { color: 0x58e6e8 } ),
+    //     'power': 'damage boost',
+    // },
+    // 'sound': {
+    //     'material': new THREE.MeshBasicMaterial( { color: 0xe388e0 } ),
+    //     'power': 'aoe pulses',
+    // }
+}
+const torus_geometry = new THREE.TorusKnotGeometry( 50, 5, 100, 16 );
+const lab_text_position = new THREE.Vector3(-2, 90, 0)
 class Lab extends GameObj {
-    constructor() {
+    constructor({camera}) {
         super();
-        this.mesh = new THREE.Mesh( torus_geometry, torus_material );
-    }
-
-    collide(collided_obj) {
-        console.log('collided with lab')
-        return;
+        let possible_effects = Object.keys(lab_power_ups)
+        let effect_name = possible_effects[Math.floor(Math.random() * possible_effects.length)]
+        this.effect = lab_power_ups[effect_name]
+        this.mesh = new THREE.Mesh( torus_geometry, this.effect['material'] );
+        get_font_text_mesh(this.effect['power'], this.mesh, lab_text_position)
     }
 
     initial_rotation() {
-        return;
+        this.rotateX(Math.PI/2);
     }
 }
 
@@ -598,6 +623,7 @@ export {
     create_mine,
     create_cloud,
     create_lab,
+    lab_power_ups,
     Axe,
-    Compound
+    Compound,
 };

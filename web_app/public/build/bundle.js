@@ -45389,21 +45389,46 @@ var app = (function () {
     }
 
 
-    const torus_geometry = new TorusKnotGeometry( 50, 5, 100, 16 ); 
-    const torus_material = new MeshBasicMaterial( { color: 0xffff00 } ); 
+    const lab_power_ups = {
+        // 'nuclear': {
+        //     'material': new THREE.MeshBasicMaterial( { color: 0x67d686 } ),
+        //     'power': 'chain reaction',
+        // },
+        'electrical': {
+            'material': new MeshBasicMaterial( { color: 0xffeb36 } ),
+            'power': 'stun',
+        },
+        'kinetic': {
+            'material': new MeshBasicMaterial( { color: 0x858585 } ),
+            'power': 'speed boost',
+        },
+        // 'thermal': {
+        //     'material': new THREE.MeshBasicMaterial( { color: 0xff5c5c } ),
+        //     'power': 'burn over time',
+        // },
+        // 'chemical': {
+        //     'material': new THREE.MeshBasicMaterial( { color: 0x58e6e8 } ),
+        //     'power': 'damage boost',
+        // },
+        // 'sound': {
+        //     'material': new THREE.MeshBasicMaterial( { color: 0xe388e0 } ),
+        //     'power': 'aoe pulses',
+        // }
+    };
+    const torus_geometry = new TorusKnotGeometry( 50, 5, 100, 16 );
+    const lab_text_position = new Vector3(-2, 90, 0);
     class Lab extends GameObj {
-        constructor() {
+        constructor({camera}) {
             super();
-            this.mesh = new Mesh( torus_geometry, torus_material );
-        }
-
-        collide(collided_obj) {
-            console.log('collided with lab');
-            return;
+            let possible_effects = Object.keys(lab_power_ups);
+            let effect_name = possible_effects[Math.floor(Math.random() * possible_effects.length)];
+            this.effect = lab_power_ups[effect_name];
+            this.mesh = new Mesh( torus_geometry, this.effect['material'] );
+            get_font_text_mesh(this.effect['power'], this.mesh, lab_text_position);
         }
 
         initial_rotation() {
-            return;
+            this.rotateX(Math.PI/2);
         }
     }
 
@@ -45994,8 +46019,12 @@ var app = (function () {
         clouds,
         labs,
         mines,
-        stats;
+        stats,
+        max_movement_speed,
+        max_stun_time,
+        stun_enemies;
 
+    const original_max_movement_speed = 5;
 
     function initialize_vars$1(){
         global_clock$1 = new Clock();
@@ -46014,6 +46043,9 @@ var app = (function () {
         stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
         document.body.appendChild( stats.dom );
         invincible_until = 0;
+        max_movement_speed = original_max_movement_speed;
+        stun_enemies = false;
+        max_stun_time = 1;
     }
 
     class BattleScene {
@@ -46231,7 +46263,7 @@ var app = (function () {
             The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
             We get the direction to the player and then project it onto the plane, and then move one step in that direction
             */
-            let {enemy} = state;
+            let {enemy, stunned} = state;
             if (enemy.should_delete) {
                 enemies = enemies.filter(e => e !== enemy);
                 if (!enemies.length) {
@@ -46239,6 +46271,9 @@ var app = (function () {
                 }
                 return {finished: true, to_delete: [enemy]}
             }
+
+            // cant move or hurt player when stunned
+            if (stunned) return state;
 
             let camera_world_pos = camera$2.getWorldPosition(new Vector3());
             let enemy_world_pos = enemy.getWorldPosition(new Vector3());
@@ -46284,8 +46319,9 @@ var app = (function () {
 
             return state
         }
-        let updater = new Updater(move_enemy, {enemy});
+        let updater = new Updater(move_enemy, {enemy, stunned: false});
         add_to_global_updates_queue(updater);
+        enemy.movement_updater = updater;
     }
 
 
@@ -46311,6 +46347,7 @@ var app = (function () {
             clouds.push(obj);
         } else if (type_of_obj['create_function'] === create_lab) {
             labs.push(obj);
+            add_lab_effect_updater(obj);
         } 
         parent.updateMatrixWorld(true);
     }
@@ -46472,8 +46509,6 @@ var app = (function () {
 
 
     let current_direction_vector = new Vector3(0, 0, 0);
-    const max_movement_speed = 10;
-
     const forward = new Vector3(0, 0, -1);
     const right = new Vector3(1, 0, 0);
     const back = new Vector3(0, 0, 1);
@@ -46654,8 +46689,23 @@ var app = (function () {
         mesh.position.add(direction);
 
         let collisions = projectile.check_collisions(enemies);
-        collisions.forEach(collided_obj => collided_obj.collide(projectile));
-        console.log(enemies.length);
+        collisions.forEach(collided_obj => {
+            collided_obj.collide(projectile);
+            if (stun_enemies) {
+                const stun_update_helper = (state, time_delta) => {
+                    let {total_time} = state;
+                    total_time += time_delta;
+                    if (total_time >= max_stun_time) {
+                        collided_obj.movement_updater.state.stunned = false;
+                        return {finished: true}
+                    }
+                    collided_obj.movement_updater.state.stunned = true;
+                    return {finished: false, total_time: total_time}
+                };
+                let stun_updater = new Updater(stun_update_helper, {finished: false, total_time: 0});
+                add_to_global_updates_queue(stun_updater);
+            }
+        });
 
         if (collisions.length) {
             return {finished: true, to_delete: [projectile]}
@@ -46678,6 +46728,48 @@ var app = (function () {
         }
     }
 
+    function create_speed_boost_updater() {
+        let time_limit_of_speed_boost = 5; // seconds
+        let speed_helper = (state, time_delta) => {
+            let {total_time} = state;
+            if (total_time > time_limit_of_speed_boost) {
+                max_movement_speed = original_max_movement_speed;
+                return {finished: true}
+            }
+            max_movement_speed = original_max_movement_speed * 2;
+            total_time += time_delta;
+            return {finished: false, total_time: total_time}
+        };
+        return new Updater(speed_helper, {finished: false, total_time: 0});
+    }
+
+    function create_stun_updater() {
+        let time_limit_of_stun_boost = 10;
+        let stun_helper = (state, time_delta) => {
+            let {total_time} = state;
+            if (total_time > time_limit_of_stun_boost) {
+                stun_enemies = false;
+                return {finished: true}
+            }
+            stun_enemies = true;
+            total_time += time_delta;
+            return {finished: false, total_time: total_time}
+        };
+        return new Updater(stun_helper, {finished: false, total_time: 0})
+    }
+
+    const lab_power_to_updater = {
+        'speed boost': create_speed_boost_updater,
+        'stun': create_stun_updater,
+    };
+
+    function add_lab_effect_updater(lab) {
+        lab.collide = () => {
+            let power = lab.effect.power;
+            let updater = lab_power_to_updater[power]();
+            add_to_global_updates_queue(updater);
+        };
+    }
 
     function game_lost(){
         let current_game_state = get_store_value(game_state);
@@ -46701,6 +46793,8 @@ var app = (function () {
     }
 
     // TODO: should I get rid of the Date.now() calls, and use the global clock?
+
+    // TODO: should there be a way of searching through the global updates queue and deleting effects if they get overridden?
 
     /* src/components/battle_scene/compound_card.svelte generated by Svelte v3.50.0 */
 
@@ -49411,7 +49505,7 @@ var app = (function () {
 
     const file$3 = "src/components/compound_creator/compound_creator.svelte";
 
-    // (26:59) 
+    // (25:59) 
     function create_if_block_1$1(ctx) {
     	let h3;
     	let t1;
@@ -49426,9 +49520,9 @@ var app = (function () {
     			t1 = space$1();
     			div = element("div");
     			div.textContent = "Back to the Timeline";
-    			add_location(h3, file$3, 26, 12, 1062);
+    			add_location(h3, file$3, 25, 12, 1010);
     			attr_dev(div, "class", "button svelte-1lpbxhu");
-    			add_location(div, file$3, 27, 12, 1092);
+    			add_location(div, file$3, 26, 12, 1040);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, h3, anchor);
@@ -49454,14 +49548,14 @@ var app = (function () {
     		block,
     		id: create_if_block_1$1.name,
     		type: "if",
-    		source: "(26:59) ",
+    		source: "(25:59) ",
     		ctx
     	});
 
     	return block;
     }
 
-    // (23:8) {#if $game_state.state === GameStates.GAMELOST}
+    // (22:8) {#if $game_state.state === GameStates.GAMELOST}
     function create_if_block$1(ctx) {
     	let h3;
     	let t1;
@@ -49476,9 +49570,9 @@ var app = (function () {
     			t1 = space$1();
     			div = element("div");
     			div.textContent = "Back to the Timeline";
-    			add_location(h3, file$3, 23, 12, 824);
+    			add_location(h3, file$3, 22, 12, 772);
     			attr_dev(div, "class", "button svelte-1lpbxhu");
-    			add_location(div, file$3, 24, 12, 896);
+    			add_location(div, file$3, 23, 12, 844);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, h3, anchor);
@@ -49504,7 +49598,7 @@ var app = (function () {
     		block,
     		id: create_if_block$1.name,
     		type: "if",
-    		source: "(23:8) {#if $game_state.state === GameStates.GAMELOST}",
+    		source: "(22:8) {#if $game_state.state === GameStates.GAMELOST}",
     		ctx
     	});
 
@@ -49546,12 +49640,12 @@ var app = (function () {
     			: 'display: none;');
 
     			attr_dev(div0, "class", "svelte-1lpbxhu");
-    			add_location(div0, file$3, 21, 4, 669);
+    			add_location(div0, file$3, 20, 4, 617);
     			attr_dev(div1, "id", "canvas-container");
-    			add_location(div1, file$3, 31, 4, 1235);
+    			add_location(div1, file$3, 30, 4, 1183);
     			attr_dev(div2, "id", "outer");
     			attr_dev(div2, "class", "svelte-1lpbxhu");
-    			add_location(div2, file$3, 20, 0, 648);
+    			add_location(div2, file$3, 19, 0, 596);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -49618,12 +49712,12 @@ var app = (function () {
 
     function instance$3($$self, $$props, $$invalidate) {
     	let show_overlay;
-    	let $game_state;
     	let $current_scene;
-    	validate_store(game_state, 'game_state');
-    	component_subscribe($$self, game_state, $$value => $$invalidate(0, $game_state = $$value));
+    	let $game_state;
     	validate_store(current_scene, 'current_scene');
     	component_subscribe($$self, current_scene, $$value => $$invalidate(3, $current_scene = $$value));
+    	validate_store(game_state, 'game_state');
+    	component_subscribe($$self, game_state, $$value => $$invalidate(0, $game_state = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots('Compound_creator', slots, []);
 
@@ -49634,7 +49728,6 @@ var app = (function () {
     	function go_back_to_timeline() {
     		dispose();
     		set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
-    		set_store_value(game_state, $game_state['state'] = GameStates.STARTING, $game_state);
     	}
 
     	const writable_props = [];
@@ -49654,8 +49747,8 @@ var app = (function () {
     		possible_scenes,
     		go_back_to_timeline,
     		show_overlay,
-    		$game_state,
-    		$current_scene
+    		$current_scene,
+    		$game_state
     	});
 
     	$$self.$inject_state = $$props => {
