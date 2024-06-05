@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { get } from 'svelte/store';
 
 import { Compound } from '../../objects.js';
-import { game_state, GameStates, global_updates_queue, element_counts, sides, compounds_in_scene } from '../../stores.js';
+import { game_state, GameStates, global_updates_queue, element_counts, initial_element_counts, sides, compounds_in_scene } from '../../stores.js';
 import { dispose_renderer, dispose_group } from '../../helper_functions.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CraigDragControls } from '../../craig_drag_controls.js';
@@ -14,11 +14,12 @@ var global_clock,
     renderer,
     camera,
     mouse_ray,
-    mouse;
-var draggable_objects = [];
+    mouse,
+    draggable_objects;
 
 
 function initialize_vars(){
+    draggable_objects = [];
     global_clock = new THREE.Clock();
     create_camera();
     mouse_ray = new THREE.Raycaster();
@@ -27,6 +28,7 @@ function initialize_vars(){
 
 export class BalanceEquationScene {
     constructor() {
+        element_counts.set(window.structuredClone(initial_element_counts))
         initialize_vars();
         renderer = create_renderer();
         // this.orbit_controls = new OrbitControls( camera, renderer.domElement );
@@ -227,9 +229,9 @@ function create_molecule_group(molecule_name, position) {
 }
 
 
-function end_scene(){
+export function end_scene(){
     dispose_group(scene);
-    dispose_renderer();
+    dispose_renderer(renderer);
 }
 
 
