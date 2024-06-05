@@ -15,9 +15,9 @@ export const possible_scenes = Object.freeze({
 });
 // export const current_scene = writable(possible_scenes.Story);
 // export const current_scene = writable(possible_scenes.Battle);
-export const current_scene = writable(possible_scenes.Timeline);
+// export const current_scene = writable(possible_scenes.Timeline);
 // export const current_scene = writable(possible_scenes.CompoundCreator);
-// export const current_scene = writable(possible_scenes.BalanceEquation);
+export const current_scene = writable(possible_scenes.BalanceEquation);
 
 
 export const global_updates_queue = writable([]);
@@ -185,10 +185,10 @@ export const sides = Object.freeze({
 })
 
 
-let initial_element_counts = {}
+export const initial_element_counts = {}
 initial_element_counts[sides.LEFT] = {}
 initial_element_counts[sides.RIGHT] = {}
-export const element_counts = writable(initial_element_counts)
+export const element_counts = writable(window.structuredClone(initial_element_counts))
 
 export const balance_rotations = derived(
 	element_counts,
@@ -222,7 +222,7 @@ let initial_compounds_in_scene = {};
 // medium/hard
 initial_compounds_in_scene[sides.LEFT] = ['ammonia', 'oxygen gas'];
 initial_compounds_in_scene[sides.RIGHT] = ['nitrogen gas', 'water'];
-export const compounds_in_scene = writable(initial_compounds_in_scene);
+export const compounds_in_scene = writable(window.structuredClone(initial_compounds_in_scene));
 
 
 

@@ -1,14 +1,26 @@
 <script>
-    import { creator_moves_remaining, atoms, selected_atom } from '../../stores.js';
+    import { onMount } from 'svelte';
+    import { creator_moves_remaining, atoms, selected_atom, current_scene, possible_scenes } from '../../stores.js';
+    import { dispose } from './compound_creator_3.js';
+
+    onMount(async () => {
+        $selected_atom = Object.keys($atoms)[0];  // C
+    })
+
 
     function set_selected_atom(symbol) {
         $selected_atom = symbol;
     }
 
+    function go_back_to_timeline() {
+        dispose()
+        $current_scene = possible_scenes.Timeline;
+    }
+
 </script>
 
 <div id='sidebar-right'>
-    <div on:click|stopPropagation={_=>console.log('yo')} id='spacer'></div>
+    <div id='back-button' on:click|stopPropagation={go_back_to_timeline}><p>Back</p></div>
     {#each Object.keys($atoms) as atom_symbol (atom_symbol)}
         <div class={$selected_atom === atom_symbol ? 'select-atom-button highlighted' : 'select-atom-button'}
                 on:click|stopPropagation={_ => set_selected_atom(atom_symbol)}>
@@ -24,10 +36,6 @@
 
 
 <style>
-    #spacer {
-        width: 100%;
-        height: 300px;
-    }
     #sidebar-right {
 		height: 100vh;
 		width: 150px;
@@ -55,5 +63,16 @@
         color: green;
         border: 1px solid green;
         box-shadow: 0 0 5px 5px green;
+    }
+    #back-button {
+        width: 100%;
+        height: 30px;
+        margin-bottom: 200px;
+        background-color: #ff6666;
+        border-radius: 5px;
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
 </style>

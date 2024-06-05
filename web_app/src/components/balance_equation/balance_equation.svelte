@@ -1,12 +1,14 @@
 <script>
     import { onMount } from 'svelte';
     import { expoOut } from 'svelte/easing';
-    import { BalanceEquationScene} from './balance_equation.js';
-    import {current_scene, possible_scenes, balance_rotations, compounds_in_scene, sides, need_to_delete} from '../../stores.js';
+    import { BalanceEquationScene, end_scene } from './balance_equation.js';
+    import {current_scene, possible_scenes, balance_rotations, compounds_in_scene, sides, need_to_delete, element_counts} from '../../stores.js';
     
     let balance_equation_scene;
     onMount(async () => {
         balance_equation_scene = new BalanceEquationScene();
+        console.log($balance_rotations)
+        console.log($element_counts)
     })
 
     let balanced = false;
@@ -74,15 +76,15 @@
     }
 
     function go_to_timeline(event) {
-        console.log('timeline', $current_scene)
         if (balanced) {
+            end_scene()
             $current_scene = possible_scenes.Timeline;
         }
-        console.log('timeline', $current_scene)
     }
 </script>
 
 <div id='outer'>
+    <div id='back-button' on:click|stopPropagation={_ => {balanced = true; go_to_timeline()}}><p>Back</p></div>
     <div id='canvas-container'>
         <canvas></canvas>
     </div>
@@ -114,6 +116,20 @@
 </div>
 
 <style>
+    #back-button {
+        position: absolute;
+        left: 30px;
+        top: 30px;
+        z-index: 2;
+        width: 50px;
+        height: 30px;
+        background-color: #ff6666;
+        border-radius: 5px;
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
 
     #outer {
         background-color: #050505;
