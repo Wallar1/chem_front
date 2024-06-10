@@ -42989,14 +42989,74 @@ var app = (function () {
 
             const text = new Mesh( geometry, matLite );
 
-            parent.add(text);
-            text.position.set(position.x, position.y, position.z);
-            // console.log(text)
-            // text.position.y += 60  // to put it over the mine
-            // text.position.x -= 2  // to center it
-            // render();
-            return text
+            const text_parent = new Object3D();
+            const text_container = new Object3D(); // this is what we rotate. Allows us to center the text inside
+            text_container.add(text);
+            text_parent.add(text_container);
+            text_parent.position.set(position.x, position.y, position.z);
+            // we later move the text further in order to account for its size (from the bounding box). But we need
+            // to move the parent and not the text so the rotation isnt messed up. See keepTextRotatedWithCamera
+            text.centered_text = false;
+            parent.add(text_parent);
+            parent.text = text;
         } );
+    }
+
+
+    function text_look_at(text_container, world_position_to_look_at) {
+        const _world_pos_to_look_at = world_position_to_look_at.clone();
+        text_container.updateWorldMatrix(true, false);
+
+        const text_world_position = new Vector3();
+        text_world_position.setFromMatrixPosition(text_container.matrixWorld);
+
+        // TODO: we should probably pass in the world position so this is variable
+        const up = text_world_position;
+
+        const forward = new Vector3().subVectors(_world_pos_to_look_at, text_world_position).normalize();
+        if (forward.lengthSq() === 0) {
+            // If the target is the same as the position, don't change rotation
+            console.warn('THREE.Object3D.lookAt: target is the same as the position.');
+            return;
+        }
+
+        const right = new Vector3().crossVectors(up, forward).normalize();
+        // if (right.lengthSq() === 0) {
+        //     // If the up vector is parallel to the forward vector, choose an arbitrary up
+        //     // TODO: validate this code
+        //     if (Math.abs(this.up.z) === 1) {
+        //         right.set(1, 0, 0);
+        //     } else {
+        //         right.set(0, 0, 1);
+        //     }
+        //     right.crossVectors(this.up, forward).normalize();
+        // }
+
+        const new_up = new Vector3().crossVectors(forward, right);
+
+        const new_matrix = new Matrix4();
+
+        // if (text.isCamera || text.isLight) {
+        //     new_matrix.lookAt(text_world_position, _world_pos_to_look_at, text.up);
+        // }
+
+        new_matrix.makeBasis(right, new_up, forward);
+        text_container.quaternion.setFromRotationMatrix(new_matrix);
+
+        // TODO: we kind of know that the text will have a parent, but Im leaving the if statement just in case
+        if (text_container.parent) {
+            /* we just subtract out the effect of all of the previous rotations, so that only the new rotation applies.
+             this just uses the matrix to store and manipulate the rotations, im not sure why we dont do it on quaternions
+             Note it is equivalent to:
+                if (parent) {
+                    new_matrix.extractRotation(text.parent.matrixWorld);
+                    _q1.setFromRotationMatrix(new_matrix);
+                    text.quaternion.premultiply(_q1.invert());
+                }
+            */
+            const inverted_parent_rotation = text_container.parent.getWorldQuaternion(new Quaternion()).invert();
+            text_container.quaternion.premultiply(inverted_parent_rotation);
+        }
     }
 
 
@@ -43140,8 +43200,8 @@ var app = (function () {
         'Story': Symbol('story'),
     });
     // export const current_scene = writable(possible_scenes.Story);
-    // export const current_scene = writable(possible_scenes.Battle);
-    const current_scene = writable(possible_scenes.Timeline);
+    const current_scene = writable(possible_scenes.Battle);
+    // export const current_scene = writable(possible_scenes.Timeline);
     // export const current_scene = writable(possible_scenes.CompoundCreator);
     // export const current_scene = writable(possible_scenes.BalanceEquation);
 
@@ -45084,6 +45144,23 @@ var app = (function () {
             this.collider = null;
             this.mesh.remove(this.label);
         }
+
+        keepTextRotatedWithCamera(camera) {
+            const self = this;
+            const look_at_camera_helper = (state, time_delta) => {
+                if (!self.mesh.text) return {finished: true}
+                if (!self.mesh.text.centered_text) {
+                    // centers the text
+                    self.mesh.text.position.x = -1 * self.mesh.text.geometry.boundingSphere.radius;
+                    self.mesh.text.centered_text = true;
+                }
+                const cameraWorldPosition = camera.getWorldPosition(new Vector3());
+                text_look_at(self.mesh.text.parent, cameraWorldPosition);
+                return {finished: false}
+            };
+            let updater = new Updater(look_at_camera_helper, {finished: false});
+            add_to_global_updates_queue(updater);
+        }
     }
 
 
@@ -45217,7 +45294,7 @@ var app = (function () {
     };
     const mine_geometry = new ConeGeometry( 50, 100, 32 );
     const mine_piece_geometry = new SphereGeometry( 2, 10, 10 );
-    const mine_text_position = new Vector3(-2, 60, 0);
+    const mine_text_position = new Vector3(0, 60, 0);
 
     function mine_or_cloud_onclick(element) {
         return () => {
@@ -45351,7 +45428,7 @@ var app = (function () {
 
     const cloud_material = new MeshStandardMaterial({color: 0xffffff,});
     const cloud_geometry = new SphereGeometry( 50, 20, 20 );
-    const cloud_text_position = new Vector3(-2, -90, 0);
+    const cloud_text_position = new Vector3(0, -90, 0);
 
     class Cloud extends GameObj {
         constructor() { 
@@ -45389,42 +45466,46 @@ var app = (function () {
     }
 
 
-    const lab_power_ups = {
-        // 'nuclear': {
+    const energy_power_ups = [
+        // {   
+        //     'type': 'nuclear',
         //     'material': new THREE.MeshBasicMaterial( { color: 0x67d686 } ),
         //     'power': 'chain reaction',
         // },
-        'electrical': {
+        {
+            'type': 'electrical',
             'material': new MeshBasicMaterial( { color: 0xffeb36 } ),
             'power': 'stun',
         },
-        'kinetic': {
+        {
+            'type': 'kinetic',
             'material': new MeshBasicMaterial( { color: 0x858585 } ),
             'power': 'speed boost',
         },
-        // 'thermal': {
-        //     'material': new THREE.MeshBasicMaterial( { color: 0xff5c5c } ),
-        //     'power': 'burn over time',
-        // },
-        // 'chemical': {
-        //     'material': new THREE.MeshBasicMaterial( { color: 0x58e6e8 } ),
-        //     'power': 'damage boost',
-        // },
-        // 'sound': {
+        {
+            'type': 'thermal',
+            'material': new MeshBasicMaterial( { color: 0xff5c5c } ),
+            'power': 'burn over time',
+        },
+        {
+            'type': 'chemical',
+            'material': new MeshBasicMaterial( { color: 0x58e6e8 } ),
+            'power': 'damage boost',
+        },
+        // {
+        //     'type': 'sound',
         //     'material': new THREE.MeshBasicMaterial( { color: 0xe388e0 } ),
         //     'power': 'aoe pulses',
         // }
-    };
+    ];
     const torus_geometry = new TorusKnotGeometry( 50, 5, 100, 16 );
-    const lab_text_position = new Vector3(-2, 90, 0);
+    const lab_text_position = new Vector3(0, 90, 0);
     class Lab extends GameObj {
         constructor({camera}) {
             super();
-            let possible_effects = Object.keys(lab_power_ups);
-            let effect_name = possible_effects[Math.floor(Math.random() * possible_effects.length)];
-            this.effect = lab_power_ups[effect_name];
+            this.effect = energy_power_ups[Math.floor(Math.random() * energy_power_ups.length)];
             this.mesh = new Mesh( torus_geometry, this.effect['material'] );
-            get_font_text_mesh(this.effect['power'], this.mesh, lab_text_position);
+            get_font_text_mesh(`${this.effect['type']}: ${this.effect['power']}`, this.mesh, lab_text_position);
         }
 
         initial_rotation() {
@@ -46020,11 +46101,12 @@ var app = (function () {
         labs,
         mines,
         stats,
-        max_movement_speed,
-        max_stun_time,
-        stun_enemies;
+        lab_effects;
 
-    const original_max_movement_speed = 5;
+    const max_movement_speed = 5;
+    const stun_time = 1;
+    const burn_duration = 5;
+    const burn_pulse_damage = 15;
 
     function initialize_vars$1(){
         global_clock$1 = new Clock();
@@ -46043,9 +46125,7 @@ var app = (function () {
         stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
         document.body.appendChild( stats.dom );
         invincible_until = 0;
-        max_movement_speed = original_max_movement_speed;
-        stun_enemies = false;
-        max_stun_time = 1;
+        lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
     }
 
     class BattleScene {
@@ -46254,10 +46334,12 @@ var app = (function () {
         // initialize_in_random_position(object_type_details['cloud'])
         // initialize_in_random_position(object_type_details['mine'])
         // initialize_in_random_position(object_type_details['enemy'])
+        // initialize_in_random_position(object_type_details['lab'])
     }
 
 
     function add_enemy_movement_updater(enemy) {
+        // TODO: make it so the enemies dont move in a perfectly straight line, they zig zag. Also they jump
         function move_enemy(state, time_delta) {
             /*
             The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
@@ -46327,6 +46409,7 @@ var app = (function () {
 
     function initialize_in_random_position(type_of_obj) {
         let obj = type_of_obj['create_function']({camera: camera$2});
+        obj.keepTextRotatedWithCamera(camera$2);
         let parent = new Object3D();
         obj.add_to(parent);
         earth.add(parent);
@@ -46347,7 +46430,7 @@ var app = (function () {
             clouds.push(obj);
         } else if (type_of_obj['create_function'] === create_lab) {
             labs.push(obj);
-            add_lab_effect_updater(obj);
+            add_energy_effect_updater(obj);
         } 
         parent.updateMatrixWorld(true);
     }
@@ -46560,7 +46643,8 @@ var app = (function () {
         } else {
             current_direction_vector.set(0, 0, 0);
         }
-        let movement_speed = Math.min(current_direction_vector.length(), max_movement_speed);
+        let _max_movement_speed = lab_effects['kinetic'] > 0 ? max_movement_speed * 2 : max_movement_speed;
+        let movement_speed = Math.min(current_direction_vector.length(), _max_movement_speed);
 
         // TODO: use slerp somehow
         let radians = Math.PI * movement_speed * time_delta / 180;
@@ -46662,6 +46746,9 @@ var app = (function () {
         let weapon_will_fire = check_if_weapon_can_fire_and_get_new_counts(compound);
         if (!weapon_will_fire) return;
         let projectile = create_compound(compound, params);
+        if (lab_effects['chemical'] > 0) {
+            projectile.damage *= 2;
+        }
         scene$2.add(projectile.mesh);
         let initial_time = global_clock$1.elapsedTime;
         let direction = camera$2.getWorldDirection(new Vector3());
@@ -46691,11 +46778,11 @@ var app = (function () {
         let collisions = projectile.check_collisions(enemies);
         collisions.forEach(collided_obj => {
             collided_obj.collide(projectile);
-            if (stun_enemies) {
+            if (lab_effects['electrical'] > 0) {
                 const stun_update_helper = (state, time_delta) => {
                     let {total_time} = state;
                     total_time += time_delta;
-                    if (total_time >= max_stun_time) {
+                    if (total_time >= stun_time) {
                         collided_obj.movement_updater.state.stunned = false;
                         return {finished: true}
                     }
@@ -46704,6 +46791,25 @@ var app = (function () {
                 };
                 let stun_updater = new Updater(stun_update_helper, {finished: false, total_time: 0});
                 add_to_global_updates_queue(stun_updater);
+            }
+            if (lab_effects['thermal'] > 0) {
+                const burn_update_helper = (state, time_delta) => {
+                    let {pulses_remaining, total_time} = state;
+                    total_time += time_delta;
+                    let damage_pulses = pulses_remaining.filter(pulse => total_time >= pulse);
+                    pulses_remaining = pulses_remaining.filter(pulse => total_time < pulse);
+                    for (let i=0; i<damage_pulses.length; i++) {
+                        collided_obj.take_damage(burn_pulse_damage);
+                    }
+
+                    if (pulses_remaining.length === 0) {
+                        return {finished: true}
+                    }
+                    return {finished: false, total_time: total_time, pulses_remaining: pulses_remaining}
+                };
+                const pulses_remaining = Array.from({ length: burn_duration }, (val, idx) => idx + 1);
+                let burn_updater = new Updater(burn_update_helper, {finished: false, total_time: 0, pulses_remaining: pulses_remaining});
+                add_to_global_updates_queue(burn_updater);
             }
         });
 
@@ -46728,45 +46834,33 @@ var app = (function () {
         }
     }
 
-    function create_speed_boost_updater() {
-        let time_limit_of_speed_boost = 5; // seconds
-        let speed_helper = (state, time_delta) => {
-            let {total_time} = state;
-            if (total_time > time_limit_of_speed_boost) {
-                max_movement_speed = original_max_movement_speed;
-                return {finished: true}
-            }
-            max_movement_speed = original_max_movement_speed * 2;
-            total_time += time_delta;
-            return {finished: false, total_time: total_time}
-        };
-        return new Updater(speed_helper, {finished: false, total_time: 0});
-    }
 
-    function create_stun_updater() {
-        let time_limit_of_stun_boost = 10;
-        let stun_helper = (state, time_delta) => {
-            let {total_time} = state;
-            if (total_time > time_limit_of_stun_boost) {
-                stun_enemies = false;
-                return {finished: true}
-            }
-            stun_enemies = true;
-            total_time += time_delta;
-            return {finished: false, total_time: total_time}
-        };
-        return new Updater(stun_helper, {finished: false, total_time: 0})
-    }
-
-    const lab_power_to_updater = {
-        'speed boost': create_speed_boost_updater,
-        'stun': create_stun_updater,
-    };
-
-    function add_lab_effect_updater(lab) {
+    // For now, all of the effects will last 10 seconds. This can be changed later
+    /*
+    Im setting this up so that each time you add an energy effect, it bumps the time up by 10, but also adds
+    an updater to decrement the time. Im hoping that makes it so you can only bump into an energy effect so
+    many times before it doesnt help any more. Like for the first hit, you get 10 seconds and then with 5 seconds
+    remaining you get a second hit, so it adds 10 seconds, but now there are 2 updaters to decrement the time. So each second,
+    it decrements 2 seconds, for 5 seconds. So you get 5 seconds, then 5 seconds with 2, then 5 seconds with one and it completes,
+    for a total of 15 seconds. Im sure there is a math equation for this. But if you got 2 right away, you would only get 10 seconds
+    */
+    const ENERGY_EFFECT_DURATION = 10;
+    function add_energy_effect_updater(lab) {
         lab.collide = () => {
-            let power = lab.effect.power;
-            let updater = lab_power_to_updater[power]();
+            let energy_type = lab.effect.type;
+            lab_effects[energy_type] += ENERGY_EFFECT_DURATION;
+            let energy_effect_decrementer = (state, time_delta) => {
+                let { energy_type } = state;
+                let time_remaining = Math.max(0, lab_effects[energy_type] - time_delta);
+                lab_effects[energy_type] = time_remaining;
+                if (time_remaining <= 0) {
+                    console.log(`removing ${energy_type} effect`);
+                    return {finished: true}
+                }
+                return {finished: false, energy_type: energy_type}
+            };   
+            console.log(`adding ${energy_type} effect`);
+            let updater = new Updater(energy_effect_decrementer, {finished: false, energy_type: energy_type});
             add_to_global_updates_queue(updater);
         };
     }
@@ -47599,7 +47693,7 @@ var app = (function () {
 
     /* src/components/battle_scene/battle.svelte generated by Svelte v3.50.0 */
 
-    const { console: console_1$1 } = globals;
+    const { console: console_1 } = globals;
 
     const file$5 = "src/components/battle_scene/battle.svelte";
 
@@ -47938,7 +48032,7 @@ var app = (function () {
     	const writable_props = [];
 
     	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1$1.warn(`<Battle> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<Battle> was created with unknown prop '${key}'`);
     	});
 
     	$$self.$capture_state = () => ({
@@ -49965,6 +50059,10 @@ var app = (function () {
         constructor() {
             element_counts.set(window.structuredClone(initial_element_counts));
             initialize_vars();
+            game_state.update(state => {
+                state['state'] = GameStates.STARTING;
+                return state;
+            });
             renderer = create_renderer();
             // this.orbit_controls = new OrbitControls( camera, renderer.domElement );
 
@@ -50164,7 +50262,11 @@ var app = (function () {
     }
 
 
-    function end_scene(){
+    function end_scene(GameState){
+        game_state.update(state => {
+            state['state'] = GameState;
+            return state;
+        });
         dispose_group(scene);
         dispose_renderer(renderer);
     }
@@ -50191,34 +50293,34 @@ var app = (function () {
 
     /* src/components/balance_equation/balance_equation.svelte generated by Svelte v3.50.0 */
 
-    const { Object: Object_1, console: console_1 } = globals;
+    const { Object: Object_1 } = globals;
 
     const file$2 = "src/components/balance_equation/balance_equation.svelte";
 
     function get_each_context(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[14] = list[i];
+    	child_ctx[13] = list[i];
     	return child_ctx;
     }
 
     function get_each_context_1(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[17] = list[i];
+    	child_ctx[16] = list[i];
     	return child_ctx;
     }
 
     function get_each_context_2(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[20] = list[i][0];
-    	child_ctx[21] = list[i][1];
+    	child_ctx[19] = list[i][0];
+    	child_ctx[20] = list[i][1];
     	return child_ctx;
     }
 
-    // (93:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
+    // (92:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
     function create_each_block_2(key_1, ctx) {
     	let div;
     	let p0;
-    	let t0_value = /*el*/ ctx[20] + "";
+    	let t0_value = /*el*/ ctx[19] + "";
     	let t0;
     	let t1;
     	let p1;
@@ -50238,13 +50340,13 @@ var app = (function () {
     			t2 = text("↑");
     			t3 = space$1();
     			attr_dev(p0, "class", "spaced-p svelte-x0h5l9");
-    			add_location(p0, file$2, 94, 20, 3452);
+    			add_location(p0, file$2, 93, 20, 3429);
     			attr_dev(p1, "class", "spaced-p svelte-x0h5l9");
-    			set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[21] + "deg)");
-    			set_style(p1, "color", calc_color(/*rotation*/ ctx[21]));
-    			add_location(p1, file$2, 95, 20, 3501);
+    			set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[20] + "deg)");
+    			set_style(p1, "color", calc_color(/*rotation*/ ctx[20]));
+    			add_location(p1, file$2, 94, 20, 3478);
     			attr_dev(div, "class", "p-cont svelte-x0h5l9");
-    			add_location(div, file$2, 93, 16, 3411);
+    			add_location(div, file$2, 92, 16, 3388);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -50258,14 +50360,14 @@ var app = (function () {
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if (dirty & /*$balance_rotations*/ 1 && t0_value !== (t0_value = /*el*/ ctx[20] + "")) set_data_dev(t0, t0_value);
+    			if (dirty & /*$balance_rotations*/ 1 && t0_value !== (t0_value = /*el*/ ctx[19] + "")) set_data_dev(t0, t0_value);
 
     			if (dirty & /*$balance_rotations*/ 1) {
-    				set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[21] + "deg)");
+    				set_style(p1, "transform", "rotate(" + /*rotation*/ ctx[20] + "deg)");
     			}
 
     			if (dirty & /*$balance_rotations*/ 1) {
-    				set_style(p1, "color", calc_color(/*rotation*/ ctx[21]));
+    				set_style(p1, "color", calc_color(/*rotation*/ ctx[20]));
     			}
     		},
     		i: function intro(local) {
@@ -50273,7 +50375,7 @@ var app = (function () {
     				add_render_callback(() => {
     					p1_intro = create_in_transition(p1, /*custom_rotate*/ ctx[4], {
     						duration: 1000,
-    						rotation: /*rotation*/ ctx[21]
+    						rotation: /*rotation*/ ctx[20]
     					});
 
     					p1_intro.start();
@@ -50290,24 +50392,24 @@ var app = (function () {
     		block,
     		id: create_each_block_2.name,
     		type: "each",
-    		source: "(93:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}",
+    		source: "(92:12) {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (107:16) {#each $compounds_in_scene[side] as compound (compound)}
+    // (106:16) {#each $compounds_in_scene[side] as compound (compound)}
     function create_each_block_1(key_1, ctx) {
     	let div;
     	let p;
-    	let t_value = /*compound*/ ctx[17] + "";
+    	let t_value = /*compound*/ ctx[16] + "";
     	let t;
     	let mounted;
     	let dispose;
 
     	function click_handler_1() {
-    		return /*click_handler_1*/ ctx[9](/*compound*/ ctx[17], /*side*/ ctx[14]);
+    		return /*click_handler_1*/ ctx[9](/*compound*/ ctx[16], /*side*/ ctx[13]);
     	}
 
     	const block = {
@@ -50318,9 +50420,9 @@ var app = (function () {
     			p = element("p");
     			t = text(t_value);
     			attr_dev(p, "class", "svelte-x0h5l9");
-    			add_location(p, file$2, 108, 24, 4278);
+    			add_location(p, file$2, 107, 24, 4255);
     			attr_dev(div, "class", "add-molecule-button svelte-x0h5l9");
-    			add_location(div, file$2, 107, 20, 4149);
+    			add_location(div, file$2, 106, 20, 4126);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -50335,7 +50437,7 @@ var app = (function () {
     		},
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
-    			if (dirty & /*$compounds_in_scene*/ 8 && t_value !== (t_value = /*compound*/ ctx[17] + "")) set_data_dev(t, t_value);
+    			if (dirty & /*$compounds_in_scene*/ 8 && t_value !== (t_value = /*compound*/ ctx[16] + "")) set_data_dev(t, t_value);
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
@@ -50348,21 +50450,21 @@ var app = (function () {
     		block,
     		id: create_each_block_1.name,
     		type: "each",
-    		source: "(107:16) {#each $compounds_in_scene[side] as compound (compound)}",
+    		source: "(106:16) {#each $compounds_in_scene[side] as compound (compound)}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (105:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}
+    // (104:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}
     function create_each_block(key_1, ctx) {
     	let div;
     	let each_blocks = [];
     	let each_1_lookup = new Map();
-    	let each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[14]];
+    	let each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[13]];
     	validate_each_argument(each_value_1);
-    	const get_key = ctx => /*compound*/ ctx[17];
+    	const get_key = ctx => /*compound*/ ctx[16];
     	validate_each_keys(ctx, each_value_1, get_each_context_1, get_key);
 
     	for (let i = 0; i < each_value_1.length; i += 1) {
@@ -50381,8 +50483,8 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(div, "class", "" + (/*side*/ ctx[14] + " add-molecules" + " svelte-x0h5l9"));
-    			add_location(div, file$2, 105, 12, 4021);
+    			attr_dev(div, "class", "" + (/*side*/ ctx[13] + " add-molecules" + " svelte-x0h5l9"));
+    			add_location(div, file$2, 104, 12, 3998);
     			this.first = div;
     		},
     		m: function mount(target, anchor) {
@@ -50396,7 +50498,7 @@ var app = (function () {
     			ctx = new_ctx;
 
     			if (dirty & /*add_molecule_to_scene, $compounds_in_scene, sides*/ 40) {
-    				each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[14]];
+    				each_value_1 = /*$compounds_in_scene*/ ctx[3][/*side*/ ctx[13]];
     				validate_each_argument(each_value_1);
     				validate_each_keys(ctx, each_value_1, get_each_context_1, get_key);
     				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value_1, each_1_lookup, div, destroy_block, create_each_block_1, null, get_each_context_1);
@@ -50415,7 +50517,7 @@ var app = (function () {
     		block,
     		id: create_each_block.name,
     		type: "each",
-    		source: "(105:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}",
+    		source: "(104:8) {#each [sides.LEFT, sides.RIGHT] as side (side)}",
     		ctx
     	});
 
@@ -50454,7 +50556,7 @@ var app = (function () {
     	let dispose;
     	let each_value_2 = Object.entries(/*$balance_rotations*/ ctx[0]);
     	validate_each_argument(each_value_2);
-    	const get_key = ctx => /*el*/ ctx[20] + /*rotation*/ ctx[21];
+    	const get_key = ctx => /*el*/ ctx[19] + /*rotation*/ ctx[20];
     	validate_each_keys(ctx, each_value_2, get_each_context_2, get_key);
 
     	for (let i = 0; i < each_value_2.length; i += 1) {
@@ -50465,7 +50567,7 @@ var app = (function () {
 
     	let each_value = [sides.LEFT, sides.RIGHT];
     	validate_each_argument(each_value);
-    	const get_key_1 = ctx => /*side*/ ctx[14];
+    	const get_key_1 = ctx => /*side*/ ctx[13];
     	validate_each_keys(ctx, each_value, get_each_context, get_key_1);
 
     	for (let i = 0; i < 2; i += 1) {
@@ -50509,36 +50611,36 @@ var app = (function () {
     			t9 = space$1();
     			div5 = element("div");
     			t10 = text("🗑️");
-    			add_location(p, file$2, 86, 94, 3154);
+    			add_location(p, file$2, 85, 94, 3131);
     			attr_dev(div0, "id", "back-button");
     			attr_dev(div0, "class", "svelte-x0h5l9");
-    			add_location(div0, file$2, 86, 4, 3064);
+    			add_location(div0, file$2, 85, 4, 3041);
     			attr_dev(canvas, "class", "svelte-x0h5l9");
-    			add_location(canvas, file$2, 88, 8, 3212);
+    			add_location(canvas, file$2, 87, 8, 3189);
     			attr_dev(div1, "id", "canvas-container");
     			attr_dev(div1, "class", "svelte-x0h5l9");
-    			add_location(div1, file$2, 87, 4, 3176);
+    			add_location(div1, file$2, 86, 4, 3153);
     			attr_dev(div2, "id", "balance-arrows");
     			attr_dev(div2, "class", "svelte-x0h5l9");
-    			add_location(div2, file$2, 91, 8, 3280);
+    			add_location(div2, file$2, 90, 8, 3257);
     			attr_dev(h1, "class", "center-arrow svelte-x0h5l9");
-    			add_location(h1, file$2, 99, 8, 3721);
+    			add_location(h1, file$2, 98, 8, 3698);
     			attr_dev(hr, "class", "middle-divider svelte-x0h5l9");
-    			add_location(hr, file$2, 100, 8, 3761);
+    			add_location(hr, file$2, 99, 8, 3738);
     			attr_dev(div3, "id", "arrow-container");
     			attr_dev(div3, "class", "svelte-x0h5l9");
-    			add_location(div3, file$2, 90, 4, 3245);
+    			add_location(div3, file$2, 89, 4, 3222);
     			attr_dev(div4, "class", div4_class_value = "" + (null_to_empty(/*balanced*/ ctx[1] ? "jiggle" : "") + " svelte-x0h5l9"));
     			attr_dev(div4, "id", "submit");
-    			add_location(div4, file$2, 102, 4, 3804);
+    			add_location(div4, file$2, 101, 4, 3781);
     			attr_dev(div5, "class", div5_class_value = "" + (null_to_empty(/*$need_to_delete*/ ctx[2] ? 'red' : 'gray') + " svelte-x0h5l9"));
     			attr_dev(div5, "id", "trash");
-    			add_location(div5, file$2, 113, 8, 4390);
+    			add_location(div5, file$2, 112, 8, 4367);
     			attr_dev(div6, "class", "add-molecules-container svelte-x0h5l9");
-    			add_location(div6, file$2, 103, 4, 3914);
+    			add_location(div6, file$2, 102, 4, 3891);
     			attr_dev(div7, "id", "outer");
     			attr_dev(div7, "class", "svelte-x0h5l9");
-    			add_location(div7, file$2, 85, 0, 3043);
+    			add_location(div7, file$2, 84, 0, 3020);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -50677,7 +50779,6 @@ var app = (function () {
     	let $current_scene;
     	let $need_to_delete;
     	let $balance_rotations;
-    	let $element_counts;
     	let $compounds_in_scene;
     	validate_store(current_scene, 'current_scene');
     	component_subscribe($$self, current_scene, $$value => $$invalidate(12, $current_scene = $$value));
@@ -50685,8 +50786,6 @@ var app = (function () {
     	component_subscribe($$self, need_to_delete, $$value => $$invalidate(2, $need_to_delete = $$value));
     	validate_store(balance_rotations, 'balance_rotations');
     	component_subscribe($$self, balance_rotations, $$value => $$invalidate(0, $balance_rotations = $$value));
-    	validate_store(element_counts, 'element_counts');
-    	component_subscribe($$self, element_counts, $$value => $$invalidate(13, $element_counts = $$value));
     	validate_store(compounds_in_scene, 'compounds_in_scene');
     	component_subscribe($$self, compounds_in_scene, $$value => $$invalidate(3, $compounds_in_scene = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
@@ -50695,8 +50794,6 @@ var app = (function () {
 
     	onMount(async () => {
     		balance_equation_scene = new BalanceEquationScene();
-    		console.log($balance_rotations);
-    		console.log($element_counts);
     	});
 
     	let balanced = false;
@@ -50732,15 +50829,18 @@ var app = (function () {
 
     	function go_to_timeline(event) {
     		if (balanced) {
-    			end_scene();
-    			set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
+    			end_scene(GameStates.GAMEWON);
+    		} else {
+    			end_scene(GameStates.GAMELOST);
     		}
+
+    		set_store_value(current_scene, $current_scene = possible_scenes.Timeline, $current_scene);
     	}
 
     	const writable_props = [];
 
     	Object_1.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console_1.warn(`<Balance_equation> was created with unknown prop '${key}'`);
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== '$$' && key !== 'slot') console.warn(`<Balance_equation> was created with unknown prop '${key}'`);
     	});
 
     	const click_handler = _ => {
@@ -50763,6 +50863,8 @@ var app = (function () {
     		sides,
     		need_to_delete,
     		element_counts,
+    		game_state,
+    		GameStates,
     		balance_equation_scene,
     		balanced,
     		calc_color,
@@ -50774,7 +50876,6 @@ var app = (function () {
     		$current_scene,
     		$need_to_delete,
     		$balance_rotations,
-    		$element_counts,
     		$compounds_in_scene
     	});
 
@@ -50791,7 +50892,6 @@ var app = (function () {
     		if ($$self.$$.dirty & /*$balance_rotations*/ 1) {
     			{
     				let counts = Object.values($balance_rotations);
-    				console.log(JSON.stringify(counts));
 
     				$$invalidate(1, balanced = !counts.length || counts.filter(k => k !== 0).length
     				? false

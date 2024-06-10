@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { get } from 'svelte/store';
 
-import { get_random_solid_element, get_random_gas_element, get_font_text_mesh, dispose_material } from './helper_functions';
+import { get_random_solid_element, get_random_gas_element, get_font_text_mesh, text_look_at, dispose_material } from './helper_functions';
 import { 
     current_element_counts,
     global_updates_queue,
@@ -100,6 +100,23 @@ class GameObj {
         this.parent.remove(this.mesh);
         this.collider = null;
         this.mesh.remove(this.label)
+    }
+
+    keepTextRotatedWithCamera(camera) {
+        const self = this;
+        const look_at_camera_helper = (state, time_delta) => {
+            if (!self.mesh.text) return {finished: true}
+            if (!self.mesh.text.centered_text) {
+                // centers the text
+                self.mesh.text.position.x = -1 * self.mesh.text.geometry.boundingSphere.radius;
+                self.mesh.text.centered_text = true;
+            }
+            const cameraWorldPosition = camera.getWorldPosition(new THREE.Vector3())
+            text_look_at(self.mesh.text.parent, cameraWorldPosition);
+            return {finished: false}
+        }
+        let updater = new Updater(look_at_camera_helper, {finished: false});
+        add_to_global_updates_queue(updater);
     }
 }
 
@@ -234,7 +251,7 @@ const element_to_material = {
 }
 const mine_geometry = new THREE.ConeGeometry( 50, 100, 32 );
 const mine_piece_geometry = new THREE.SphereGeometry( 2, 10, 10 );
-const mine_text_position = new THREE.Vector3(-2, 60, 0)
+const mine_text_position = new THREE.Vector3(0, 60, 0)
 
 function mine_or_cloud_onclick(element) {
     return () => {
@@ -369,7 +386,7 @@ function create_mine(arg_dict) {
 
 const cloud_material = new THREE.MeshStandardMaterial({color: 0xffffff,});
 const cloud_geometry = new THREE.SphereGeometry( 50, 20, 20 );
-const cloud_text_position = new THREE.Vector3(-2, -90, 0)
+const cloud_text_position = new THREE.Vector3(0, -90, 0)
 
 class Cloud extends GameObj {
     constructor() { 
@@ -408,42 +425,46 @@ function create_cloud(arg_dict) {
 }
 
 
-const lab_power_ups = {
-    // 'nuclear': {
+const energy_power_ups = [
+    // {   
+    //     'type': 'nuclear',
     //     'material': new THREE.MeshBasicMaterial( { color: 0x67d686 } ),
     //     'power': 'chain reaction',
     // },
-    'electrical': {
+    {
+        'type': 'electrical',
         'material': new THREE.MeshBasicMaterial( { color: 0xffeb36 } ),
         'power': 'stun',
     },
-    'kinetic': {
+    {
+        'type': 'kinetic',
         'material': new THREE.MeshBasicMaterial( { color: 0x858585 } ),
         'power': 'speed boost',
     },
-    // 'thermal': {
-    //     'material': new THREE.MeshBasicMaterial( { color: 0xff5c5c } ),
-    //     'power': 'burn over time',
-    // },
-    // 'chemical': {
-    //     'material': new THREE.MeshBasicMaterial( { color: 0x58e6e8 } ),
-    //     'power': 'damage boost',
-    // },
-    // 'sound': {
+    {
+        'type': 'thermal',
+        'material': new THREE.MeshBasicMaterial( { color: 0xff5c5c } ),
+        'power': 'burn over time',
+    },
+    {
+        'type': 'chemical',
+        'material': new THREE.MeshBasicMaterial( { color: 0x58e6e8 } ),
+        'power': 'damage boost',
+    },
+    // {
+    //     'type': 'sound',
     //     'material': new THREE.MeshBasicMaterial( { color: 0xe388e0 } ),
     //     'power': 'aoe pulses',
     // }
-}
+]
 const torus_geometry = new THREE.TorusKnotGeometry( 50, 5, 100, 16 );
-const lab_text_position = new THREE.Vector3(-2, 90, 0)
+const lab_text_position = new THREE.Vector3(0, 90, 0)
 class Lab extends GameObj {
     constructor({camera}) {
         super();
-        let possible_effects = Object.keys(lab_power_ups)
-        let effect_name = possible_effects[Math.floor(Math.random() * possible_effects.length)]
-        this.effect = lab_power_ups[effect_name]
+        this.effect = energy_power_ups[Math.floor(Math.random() * energy_power_ups.length)]
         this.mesh = new THREE.Mesh( torus_geometry, this.effect['material'] );
-        get_font_text_mesh(this.effect['power'], this.mesh, lab_text_position)
+        get_font_text_mesh(`${this.effect['type']}: ${this.effect['power']}`, this.mesh, lab_text_position)
     }
 
     initial_rotation() {
@@ -623,7 +644,7 @@ export {
     create_mine,
     create_cloud,
     create_lab,
-    lab_power_ups,
+    energy_power_ups,
     Axe,
     Compound,
 };

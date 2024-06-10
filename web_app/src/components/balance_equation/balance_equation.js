@@ -30,6 +30,10 @@ export class BalanceEquationScene {
     constructor() {
         element_counts.set(window.structuredClone(initial_element_counts))
         initialize_vars();
+        game_state.update(state => {
+            state['state'] = GameStates.STARTING;
+            return state;
+        });
         renderer = create_renderer();
         // this.orbit_controls = new OrbitControls( camera, renderer.domElement );
 
@@ -229,7 +233,11 @@ function create_molecule_group(molecule_name, position) {
 }
 
 
-export function end_scene(){
+export function end_scene(GameState){
+    game_state.update(state => {
+        state['state'] = GameState;
+        return state;
+    });
     dispose_group(scene);
     dispose_renderer(renderer);
 }

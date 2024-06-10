@@ -44,11 +44,12 @@ var global_clock,
     labs,
     mines,
     stats,
-    max_movement_speed,
-    max_stun_time,
-    stun_enemies;
+    lab_effects;
 
-const original_max_movement_speed = 5;
+const max_movement_speed = 5;
+const stun_time = 1;
+const burn_duration = 5;
+const burn_pulse_damage = 15;
 
 function initialize_vars(){
     global_clock = new THREE.Clock();
@@ -67,9 +68,7 @@ function initialize_vars(){
     stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
     document.body.appendChild( stats.dom );
     invincible_until = 0;
-    max_movement_speed = original_max_movement_speed;
-    stun_enemies = false;
-    max_stun_time = 1;
+    lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
 }
 
 export class BattleScene {
@@ -278,10 +277,12 @@ function spawn_objects() {
     // initialize_in_random_position(object_type_details['cloud'])
     // initialize_in_random_position(object_type_details['mine'])
     // initialize_in_random_position(object_type_details['enemy'])
+    // initialize_in_random_position(object_type_details['lab'])
 }
 
 
 function add_enemy_movement_updater(enemy) {
+    // TODO: make it so the enemies dont move in a perfectly straight line, they zig zag. Also they jump
     function move_enemy(state, time_delta) {
         /*
         The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
@@ -351,6 +352,7 @@ function add_enemy_movement_updater(enemy) {
 
 function initialize_in_random_position(type_of_obj) {
     let obj = type_of_obj['create_function']({camera})
+    obj.keepTextRotatedWithCamera(camera)
     let parent = new THREE.Object3D();
     obj.add_to(parent)
     earth.add(parent)
@@ -371,7 +373,7 @@ function initialize_in_random_position(type_of_obj) {
         clouds.push(obj)
     } else if (type_of_obj['create_function'] === create_lab) {
         labs.push(obj)
-        add_lab_effect_updater(obj)
+        add_energy_effect_updater(obj)
     } 
     parent.updateMatrixWorld(true)
 }
@@ -596,7 +598,8 @@ function move_camera(state, time_delta) {
     } else {
         current_direction_vector.set(0, 0, 0)
     }
-    let movement_speed = Math.min(current_direction_vector.length(), max_movement_speed)
+    let _max_movement_speed = lab_effects['kinetic'] > 0 ? max_movement_speed * 2 : max_movement_speed;
+    let movement_speed = Math.min(current_direction_vector.length(), _max_movement_speed)
 
     // TODO: use slerp somehow
     let radians = Math.PI * movement_speed * time_delta / 180;
@@ -698,6 +701,9 @@ function try_to_fire_player_weapon(compound){
     let weapon_will_fire = check_if_weapon_can_fire_and_get_new_counts(compound);
     if (!weapon_will_fire) return;
     let projectile = create_compound(compound, params)
+    if (lab_effects['chemical'] > 0) {
+        projectile.damage *= 2;
+    }
     scene.add(projectile.mesh)
     let initial_time = global_clock.elapsedTime
     let direction = camera.getWorldDirection(new THREE.Vector3())
@@ -739,11 +745,11 @@ function blast_projectile(state, time_delta){
     let collisions = projectile.check_collisions(enemies);
     collisions.forEach(collided_obj => {
         collided_obj.collide(projectile);
-        if (stun_enemies) {
+        if (lab_effects['electrical'] > 0) {
             const stun_update_helper = (state, time_delta) => {
                 let {total_time} = state;
                 total_time += time_delta;
-                if (total_time >= max_stun_time) {
+                if (total_time >= stun_time) {
                     collided_obj.movement_updater.state.stunned = false;
                     return {finished: true}
                 }
@@ -752,6 +758,25 @@ function blast_projectile(state, time_delta){
             }
             let stun_updater = new Updater(stun_update_helper, {finished: false, total_time: 0})
             add_to_global_updates_queue(stun_updater)
+        }
+        if (lab_effects['thermal'] > 0) {
+            const burn_update_helper = (state, time_delta) => {
+                let {pulses_remaining, total_time} = state;
+                total_time += time_delta;
+                let damage_pulses = pulses_remaining.filter(pulse => total_time >= pulse)
+                pulses_remaining = pulses_remaining.filter(pulse => total_time < pulse)
+                for (let i=0; i<damage_pulses.length; i++) {
+                    collided_obj.take_damage(burn_pulse_damage);
+                }
+
+                if (pulses_remaining.length === 0) {
+                    return {finished: true}
+                }
+                return {finished: false, total_time: total_time, pulses_remaining: pulses_remaining}
+            }
+            const pulses_remaining = Array.from({ length: burn_duration }, (val, idx) => idx + 1);
+            let burn_updater = new Updater(burn_update_helper, {finished: false, total_time: 0, pulses_remaining: pulses_remaining})
+            add_to_global_updates_queue(burn_updater)
         }
     });
 
@@ -776,45 +801,33 @@ function damage_player(damage = 10){
     }
 }
 
-function create_speed_boost_updater() {
-    let time_limit_of_speed_boost = 5; // seconds
-    let speed_helper = (state, time_delta) => {
-        let {total_time} = state;
-        if (total_time > time_limit_of_speed_boost) {
-            max_movement_speed = original_max_movement_speed;
-            return {finished: true}
-        }
-        max_movement_speed = original_max_movement_speed * 2;
-        total_time += time_delta;
-        return {finished: false, total_time: total_time}
-    }
-    return new Updater(speed_helper, {finished: false, total_time: 0});
-}
 
-function create_stun_updater() {
-    let time_limit_of_stun_boost = 10;
-    let stun_helper = (state, time_delta) => {
-        let {total_time} = state;
-        if (total_time > time_limit_of_stun_boost) {
-            stun_enemies = false;
-            return {finished: true}
-        }
-        stun_enemies = true;
-        total_time += time_delta;
-        return {finished: false, total_time: total_time}
-    }
-    return new Updater(stun_helper, {finished: false, total_time: 0})
-}
-
-const lab_power_to_updater = {
-    'speed boost': create_speed_boost_updater,
-    'stun': create_stun_updater,
-}
-
-function add_lab_effect_updater(lab) {
+// For now, all of the effects will last 10 seconds. This can be changed later
+/*
+Im setting this up so that each time you add an energy effect, it bumps the time up by 10, but also adds
+an updater to decrement the time. Im hoping that makes it so you can only bump into an energy effect so
+many times before it doesnt help any more. Like for the first hit, you get 10 seconds and then with 5 seconds
+remaining you get a second hit, so it adds 10 seconds, but now there are 2 updaters to decrement the time. So each second,
+it decrements 2 seconds, for 5 seconds. So you get 5 seconds, then 5 seconds with 2, then 5 seconds with one and it completes,
+for a total of 15 seconds. Im sure there is a math equation for this. But if you got 2 right away, you would only get 10 seconds
+*/
+const ENERGY_EFFECT_DURATION = 10
+function add_energy_effect_updater(lab) {
     lab.collide = () => {
-        let power = lab.effect.power
-        let updater = lab_power_to_updater[power]()
+        let energy_type = lab.effect.type;
+        lab_effects[energy_type] += ENERGY_EFFECT_DURATION;
+        let energy_effect_decrementer = (state, time_delta) => {
+            let { energy_type } = state;
+            let time_remaining = Math.max(0, lab_effects[energy_type] - time_delta);
+            lab_effects[energy_type] = time_remaining;
+            if (time_remaining <= 0) {
+                console.log(`removing ${energy_type} effect`)
+                return {finished: true}
+            }
+            return {finished: false, energy_type: energy_type}
+        }   
+        console.log(`adding ${energy_type} effect`)
+        let updater = new Updater(energy_effect_decrementer, {finished: false, energy_type: energy_type})
         add_to_global_updates_queue(updater)
     };
 }
