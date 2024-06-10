@@ -2,19 +2,16 @@
     import { onMount } from 'svelte';
     import { expoOut } from 'svelte/easing';
     import { BalanceEquationScene, end_scene } from './balance_equation.js';
-    import {current_scene, possible_scenes, balance_rotations, compounds_in_scene, sides, need_to_delete, element_counts} from '../../stores.js';
+    import {current_scene, possible_scenes, balance_rotations, compounds_in_scene, sides, need_to_delete, element_counts, game_state, GameStates} from '../../stores.js';
     
     let balance_equation_scene;
     onMount(async () => {
         balance_equation_scene = new BalanceEquationScene();
-        console.log($balance_rotations)
-        console.log($element_counts)
     })
 
     let balanced = false;
     $: {
         let counts = Object.values($balance_rotations);
-        console.log(JSON.stringify(counts))
         balanced = !counts.length || counts.filter(k => k !== 0).length ? false : true;
     }
 
@@ -77,9 +74,11 @@
 
     function go_to_timeline(event) {
         if (balanced) {
-            end_scene()
-            $current_scene = possible_scenes.Timeline;
+            end_scene(GameStates.GAMEWON)
+        } else {
+            end_scene(GameStates.GAMELOST)
         }
+        $current_scene = possible_scenes.Timeline;
     }
 </script>
 
