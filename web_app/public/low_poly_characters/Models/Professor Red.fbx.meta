@@ -1,0 +1,215 @@
+fileFormatVersion: 2
+guid: 3bd2742a1c0c0f24abcc9940eaf98a19
+ModelImporter:
+  serializedVersion: 23
+  fileIDToRecycleName:
+    100000: Body Professor Red
+    100002: Buttons Professor Red
+    100004: Clothes Professor Red
+    100006: Glasses Professor Red
+    100008: Hair Professor Red
+    100010: Head
+    100012: Head_end
+    100014: Hips
+    100016: LeftArm
+    100018: LeftFoot
+    100020: LeftForeArm
+    100022: LeftHand
+    100024: LeftHandIndex1
+    100026: LeftHandIndex2
+    100028: LeftHandIndex3
+    100030: LeftHandIndex4
+    100032: LeftHandIndex4_end
+    100034: LeftHandThumb1
+    100036: LeftHandThumb2
+    100038: LeftHandThumb3
+    100040: LeftHandThumb4
+    100042: LeftHandThumb4_end
+    100044: LeftHandThumb4_end_end
+    100046: LeftLeg
+    100048: LeftShoulder
+    100050: LeftToeBase
+    100052: LeftToeBase_end
+    100054: LeftUpLeg
+    100056: Neck
+    100058: Professor Red
+    100060: //RootNode
+    100062: RightArm
+    100064: RightFoot
+    100066: RightForeArm
+    100068: RightHand
+    100070: RightHandIndex1
+    100072: RightHandIndex2
+    100074: RightHandIndex3
+    100076: RightHandIndex4
+    100078: RightHandIndex4_end
+    100080: RightHandThumb1
+    100082: RightHandThumb2
+    100084: RightHandThumb3
+    100086: RightHandThumb4
+    100088: RightHandThumb4_end
+    100090: RightHandThumb4_end_end
+    100092: RightLeg
+    100094: RightShoulder
+    100096: RightToeBase
+    100098: RightToeBase_end
+    100100: RightUpLeg
+    100102: Spine
+    100104: Spine1
+    100106: Spine2
+    400000: Body Professor Red
+    400002: Buttons Professor Red
+    400004: Clothes Professor Red
+    400006: Glasses Professor Red
+    400008: Hair Professor Red
+    400010: Head
+    400012: Head_end
+    400014: Hips
+    400016: LeftArm
+    400018: LeftFoot
+    400020: LeftForeArm
+    400022: LeftHand
+    400024: LeftHandIndex1
+    400026: LeftHandIndex2
+    400028: LeftHandIndex3
+    400030: LeftHandIndex4
+    400032: LeftHandIndex4_end
+    400034: LeftHandThumb1
+    400036: LeftHandThumb2
+    400038: LeftHandThumb3
+    400040: LeftHandThumb4
+    400042: LeftHandThumb4_end
+    400044: LeftHandThumb4_end_end
+    400046: LeftLeg
+    400048: LeftShoulder
+    400050: LeftToeBase
+    400052: LeftToeBase_end
+    400054: LeftUpLeg
+    400056: Neck
+    400058: //RootNode
+    400060: Professor Red
+    400062: RightArm
+    400064: RightFoot
+    400066: RightForeArm
+    400068: RightHand
+    400070: RightHandIndex1
+    400072: RightHandIndex2
+    400074: RightHandIndex3
+    400076: RightHandIndex4
+    400078: RightHandIndex4_end
+    400080: RightHandThumb1
+    400082: RightHandThumb2
+    400084: RightHandThumb3
+    400086: RightHandThumb4
+    400088: RightHandThumb4_end
+    400090: RightHandThumb4_end_end
+    400092: RightLeg
+    400094: RightShoulder
+    400096: RightToeBase
+    400098: RightToeBase_end
+    400100: RightUpLeg
+    400102: Spine
+    400104: Spine1
+    400106: Spine2
+    4300000: Clothes Professor Red
+    4300002: Body Professor Red
+    4300004: Buttons Professor Red
+    4300006: Hair Professor Red
+    4300008: Glasses Professor Red
+    9500000: //RootNode
+    13700000: Body Professor Red
+    13700002: Buttons Professor Red
+    13700004: Clothes Professor Red
+    13700006: Glasses Professor Red
+    13700008: Hair Professor Red
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material
+    second: {fileID: 2100000, guid: b8d152fe369986f49b8d267cf4e5a74e, type: 2}
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    preserveHierarchy: 0
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    previousCalculatedGlobalScale: 0.01
+    hasPreviousCalculatedGlobalScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    serializedVersion: 2
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

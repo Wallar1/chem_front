@@ -1,0 +1,176 @@
+fileFormatVersion: 2
+guid: f95bc9eed99aa5745997c929222b8229
+ModelImporter:
+  serializedVersion: 23
+  fileIDToRecycleName:
+    100000: :LeftHand
+    100002: :LeftHand_end
+    100004: Female Body Red
+    100006: Female Clothes Red
+    100008: Female Glasses Red
+    100010: Female Hair Red
+    100012: //RootNode
+    100014: Female Scientist Red
+    100016: Head
+    100018: Head_end
+    100020: Hips
+    100022: LeftArm
+    100024: LeftFoot
+    100026: LeftForeArm
+    100028: LeftLeg
+    100030: LeftShoulder
+    100032: LeftToeBase
+    100034: LeftToeBase_end
+    100036: LeftUpLeg
+    100038: Neck
+    100040: RightArm
+    100042: RightFoot
+    100044: RightForeArm
+    100046: RightHand
+    100048: RightHand_end
+    100050: RightLeg
+    100052: RightShoulder
+    100054: RightToeBase
+    100056: RightToeBase_end
+    100058: RightUpLeg
+    100060: Spine
+    100062: Spine1
+    100064: Spine2
+    400000: :LeftHand
+    400002: :LeftHand_end
+    400004: Female Body Red
+    400006: Female Clothes Red
+    400008: Female Glasses Red
+    400010: Female Hair Red
+    400012: //RootNode
+    400014: Female Scientist Red
+    400016: Head
+    400018: Head_end
+    400020: Hips
+    400022: LeftArm
+    400024: LeftFoot
+    400026: LeftForeArm
+    400028: LeftLeg
+    400030: LeftShoulder
+    400032: LeftToeBase
+    400034: LeftToeBase_end
+    400036: LeftUpLeg
+    400038: Neck
+    400040: RightArm
+    400042: RightFoot
+    400044: RightForeArm
+    400046: RightHand
+    400048: RightHand_end
+    400050: RightLeg
+    400052: RightShoulder
+    400054: RightToeBase
+    400056: RightToeBase_end
+    400058: RightUpLeg
+    400060: Spine
+    400062: Spine1
+    400064: Spine2
+    4300000: Female Body Red
+    4300002: Female Clothes Red
+    4300004: Female Glasses Red
+    4300006: Female Hair Red
+    9500000: //RootNode
+    13700000: Female Body Red
+    13700002: Female Clothes Red
+    13700004: Female Glasses Red
+    13700006: Female Hair Red
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material
+    second: {fileID: 2100000, guid: b8d152fe369986f49b8d267cf4e5a74e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material.001
+    second: {fileID: 2100000, guid: b8d152fe369986f49b8d267cf4e5a74e, type: 2}
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    preserveHierarchy: 0
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    previousCalculatedGlobalScale: 0.01
+    hasPreviousCalculatedGlobalScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    serializedVersion: 2
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

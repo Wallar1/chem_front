@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { get } from 'svelte/store';
 
 import { get_random_solid_element, get_random_gas_element, get_font_text_mesh, text_look_at, dispose_material } from './helper_functions';
@@ -178,32 +179,100 @@ class Projectile extends GameObj {
 }
 
 
+
+var fbx_loader = new FBXLoader();
+
+var loaded_models = {
+    'texture': undefined,
+    'material': undefined,
+    'female_blue': undefined, 
+}
+
+function load_model(model_name) {
+    // fbx_loader.setPath('./low_poly_characters/Models/');
+    return new Promise((resolve, reject) => {
+        fbx_loader.load(`low_poly_characters/Models/${model_name}.fbx`, (fbx_model) => resolve(fbx_model))
+    })
+}
+
+function update_texture(fbx_model) {
+    return new Promise((resolve, reject) => {
+        fbx_model.scale.setScalar(.5);
+        if (!loaded_models['texture']) {
+            loaded_models['texture'] = new THREE.TextureLoader().load('low_poly_characters/Textures/texture.png');
+            loaded_models['material'] = new THREE.MeshStandardMaterial({map: loaded_models['texture']})
+        }
+
+        const material = loaded_models['material'];
+        fbx_model.traverse(c => {
+            c.castShadow = true;
+            if (c.isMesh) {
+                c.material = material;
+            }
+        });
+        resolve(fbx_model)
+    })
+}
+
+function load_animation(file_path) {
+    return new Promise((resolve, reject) => fbx_loader.load(file_path, (anim) => resolve(anim)))
+}
+
+function update_animation(fbx_model) {
+    return new Promise((resolve, reject) => {
+        let mixer = new THREE.AnimationMixer(fbx_model);
+        // add_animation('capoeira.fbx', mixer, fbx_model)
+        load_animation('walking.fbx').then(anim => {
+            let action = mixer.clipAction(anim.animations[0])
+            fbx_model.animations.push(action)
+            action.play()
+        })
+
+        const update_mixer = (state, time_delta) => {
+            let {mixer, finished} = state;
+            mixer.update(time_delta)
+            return {mixer, finished}
+        }
+        let updater = new Updater(update_mixer, {mixer, finished: false})
+        add_to_global_updates_queue(updater)
+        resolve(fbx_model)
+    })
+}
+
 const health_bar_material = new THREE.MeshToonMaterial( {color: 0x00ff00} );
-let enemy_geometry = new THREE.BoxGeometry( 100, 100, 100 );
-let enemy_material = new THREE.MeshStandardMaterial({color: 0xeb4034,});
 
 class Enemy extends GameObj {
     constructor() {
         super();
         this.should_delete = false;
-        this.mesh = new THREE.Mesh(enemy_geometry, enemy_material);
-        let r = Math.ceil(Math.max(enemy_geometry.parameters.height, enemy_geometry.parameters.width) / 2);
-        // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
 
-        this.full_health = 100;
-        this.health = 100;
+        // We need a parent because the animations are relative to position 0, and move the model to the origin,
+        // unless you give the model a parent. Then it can be relative to the parent, and you can move the parent around
+        this.mesh = new THREE.Object3D()
+        load_model('female_blue')
+            .then(fbx_model => {
+                return update_texture(fbx_model)
+            }).then(fbx_model => {
+                return update_animation(fbx_model)
+            }).then(fbx_model => {
+                this.mesh.add(fbx_model)
+                this.fbx_model = fbx_model
+                this.fbx_model.rotateX(-Math.PI/2)
 
-        // we cant have a global health bar geometry because we need to scale it
-        let health_bar_geometry = new THREE.CylinderGeometry( 10, 10, 100, 10 );
-        this.health_bar = new THREE.Mesh( health_bar_geometry, health_bar_material );
-        this.mesh.add(this.health_bar)
-        this.health_bar.rotateZ(Math.PI/2)
-        this.health_bar.position.z = -55;
+                this.full_health = 100;
+                this.health = 100;
+                // we cant have a global health bar geometry because we need to scale it
+                let health_bar_geometry = new THREE.CylinderGeometry( 5, 5, 100, 10 );
+                this.health_bar = new THREE.Mesh( health_bar_geometry, health_bar_material );
+                this.mesh.add(this.health_bar)
+                this.health_bar.rotateZ(Math.PI/2)
+                this.health_bar.position.z = -120;
+            })
     }
 
     initial_rotation() {
         // Otherwise the health bar is upside down
-        this.rotateX(Math.PI);
+        this.mesh.rotateX(Math.PI);
         // this.forward = new THREE.Vector3(-1, 0, 0);
     }
 

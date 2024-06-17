@@ -1,0 +1,23 @@
+Collection of 44 low poly characters. Perfect for low poly games. Rigged and mobile friendly!
+
+44 low poly, game-ready characters: 
+
+Soldiers
+Robots
+Scientists
+Professors
+Tanks 
+Rifle
+Bomb
+
+11 unique models, each coming in 4 color variations, giving you 44 unique characters!
+
+Ideal for low poly games.
+Mobile friendly.
+
+Animations are not included but alll models are rigged and compatible with Mixamo animations: https://www.mixamo.com/
+
+Number of textures: 1
+Texture dimensions: 512 X 512
+Number of meshes/prefabs: 47
+Rigging: Yes

@@ -222,7 +222,7 @@ function create_earth(){
         // new THREE.MeshStandardMaterial({
         //     color: 0x086100,
         // })
-        new THREE.MeshNormalMaterial()
+        new THREE.MeshToonMaterial({color: 0x086100,})
     );
     earth.position.copy(earth_initial_position)
     earth.castShadow = false;
@@ -248,7 +248,7 @@ const object_type_details = {
     },
     'enemy': {
         'probability': get(game_state)['level'],
-        'extra_z_distance': 40,
+        'extra_z_distance': 0,
         'create_function': create_enemy,
     },
     'lab': {
@@ -554,6 +554,8 @@ const left = new THREE.Vector3(-1, 0, 0);
 
 const movement_keys = ['w', 's', 'a', 'd']
 const space = ' '
+const tab = 'Tab'
+const meta_key = 'Meta'
 const pressed_keys = {
     'w': {
         'pressed': 0,
@@ -663,6 +665,9 @@ function handle_keydown(e) {
             pressed_keys[space]['pressed'] = 1;
             jump();
         }
+    } else if (e.key === tab || e.key === meta_key) {
+        // TODO: iterate through max_number_possible_for_each_compound. If it is above 0, then it is possible.
+        // Keep them in an array and select the next one
     }
 }
 

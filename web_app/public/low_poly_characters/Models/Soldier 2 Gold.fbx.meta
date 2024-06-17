@@ -1,0 +1,203 @@
+fileFormatVersion: 2
+guid: a9625e913d3480643918bce2067e3fd5
+ModelImporter:
+  serializedVersion: 23
+  fileIDToRecycleName:
+    100000: Body Soldier 2 Gold
+    100002: Clothes Soldier 2 Gold
+    100004: Head
+    100006: Head_end
+    100008: Helmet Soldier 2 Gold
+    100010: Hips
+    100012: LeftArm
+    100014: LeftFoot
+    100016: LeftForeArm
+    100018: LeftHand
+    100020: LeftHandIndex1
+    100022: LeftHandIndex2
+    100024: LeftHandIndex3
+    100026: LeftHandIndex4
+    100028: LeftHandIndex4_end
+    100030: LeftHandThumb1
+    100032: LeftHandThumb2
+    100034: LeftHandThumb3
+    100036: LeftHandThumb4
+    100038: LeftHandThumb4_end
+    100040: LeftLeg
+    100042: LeftShoulder
+    100044: LeftToeBase
+    100046: LeftToeBase_end
+    100048: LeftUpLeg
+    100050: Neck
+    100052: RightArm
+    100054: RightFoot
+    100056: RightForeArm
+    100058: RightHand
+    100060: RightHandIndex1
+    100062: RightHandIndex2
+    100064: RightHandIndex3
+    100066: RightHandIndex4
+    100068: RightHandIndex4_end
+    100070: RightHandThumb1
+    100072: RightHandThumb2
+    100074: RightHandThumb3
+    100076: RightHandThumb4
+    100078: RightHandThumb4_end
+    100080: RightLeg
+    100082: RightShoulder
+    100084: RightToeBase
+    100086: RightToeBase_end
+    100088: RightUpLeg
+    100090: //RootNode
+    100092: Soldier 2 Gold
+    100094: Spine
+    100096: Spine1
+    100098: Spine2
+    400000: Body Soldier 2 Gold
+    400002: Clothes Soldier 2 Gold
+    400004: Head
+    400006: Head_end
+    400008: Helmet Soldier 2 Gold
+    400010: Hips
+    400012: LeftArm
+    400014: LeftFoot
+    400016: LeftForeArm
+    400018: LeftHand
+    400020: LeftHandIndex1
+    400022: LeftHandIndex2
+    400024: LeftHandIndex3
+    400026: LeftHandIndex4
+    400028: LeftHandIndex4_end
+    400030: LeftHandThumb1
+    400032: LeftHandThumb2
+    400034: LeftHandThumb3
+    400036: LeftHandThumb4
+    400038: LeftHandThumb4_end
+    400040: LeftLeg
+    400042: LeftShoulder
+    400044: LeftToeBase
+    400046: LeftToeBase_end
+    400048: LeftUpLeg
+    400050: Neck
+    400052: RightArm
+    400054: RightFoot
+    400056: RightForeArm
+    400058: RightHand
+    400060: RightHandIndex1
+    400062: RightHandIndex2
+    400064: RightHandIndex3
+    400066: RightHandIndex4
+    400068: RightHandIndex4_end
+    400070: RightHandThumb1
+    400072: RightHandThumb2
+    400074: RightHandThumb3
+    400076: RightHandThumb4
+    400078: RightHandThumb4_end
+    400080: RightLeg
+    400082: RightShoulder
+    400084: RightToeBase
+    400086: RightToeBase_end
+    400088: RightUpLeg
+    400090: Soldier 2 Gold
+    400092: //RootNode
+    400094: Spine
+    400096: Spine1
+    400098: Spine2
+    4300000: Body Soldier 2 Gold
+    4300002: Clothes Soldier 2 Gold
+    4300004: Helmet Soldier 2 Gold
+    9500000: //RootNode
+    13700000: Body Soldier 2 Gold
+    13700002: Clothes Soldier 2 Gold
+    13700004: Helmet Soldier 2 Gold
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material.010
+    second: {fileID: 2100000, guid: b8d152fe369986f49b8d267cf4e5a74e, type: 2}
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    preserveHierarchy: 0
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    previousCalculatedGlobalScale: 0.01
+    hasPreviousCalculatedGlobalScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    serializedVersion: 2
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

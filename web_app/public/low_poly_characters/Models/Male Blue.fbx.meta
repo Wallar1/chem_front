@@ -1,0 +1,207 @@
+fileFormatVersion: 2
+guid: b6f87f0a70126e14ca6dc6a274636fbd
+ModelImporter:
+  serializedVersion: 23
+  fileIDToRecycleName:
+    100000: Body Male Blue
+    100002: Buttons Male Blue
+    100004: Clothes Male Blue
+    100006: Glasses Male Blue
+    100008: Head
+    100010: Head_end
+    100012: Hips
+    100014: LeftArm
+    100016: LeftFoot
+    100018: LeftForeArm
+    100020: LeftHand
+    100022: LeftHandIndex1
+    100024: LeftHandIndex2
+    100026: LeftHandIndex3
+    100028: LeftHandIndex4
+    100030: LeftHandIndex4_end
+    100032: LeftHandThumb1
+    100034: LeftHandThumb2
+    100036: LeftHandThumb3
+    100038: LeftHandThumb4
+    100040: LeftHandThumb4_end
+    100042: LeftLeg
+    100044: LeftShoulder
+    100046: LeftToeBase
+    100048: LeftToeBase_end
+    100050: LeftUpLeg
+    100052: //RootNode
+    100054: Male Scientist Blue
+    100056: Neck
+    100058: RightArm
+    100060: RightFoot
+    100062: RightForeArm
+    100064: RightHand
+    100066: RightHandIndex1
+    100068: RightHandIndex2
+    100070: RightHandIndex3
+    100072: RightHandIndex4
+    100074: RightHandIndex4_end
+    100076: RightHandThumb1
+    100078: RightHandThumb2
+    100080: RightHandThumb3
+    100082: RightHandThumb4
+    100084: RightHandThumb4_end
+    100086: RightLeg
+    100088: RightShoulder
+    100090: RightToeBase
+    100092: RightToeBase_end
+    100094: RightUpLeg
+    100096: Spine
+    100098: Spine1
+    100100: Spine2
+    400000: Body Male Blue
+    400002: Buttons Male Blue
+    400004: Clothes Male Blue
+    400006: Glasses Male Blue
+    400008: Head
+    400010: Head_end
+    400012: Hips
+    400014: LeftArm
+    400016: LeftFoot
+    400018: LeftForeArm
+    400020: LeftHand
+    400022: LeftHandIndex1
+    400024: LeftHandIndex2
+    400026: LeftHandIndex3
+    400028: LeftHandIndex4
+    400030: LeftHandIndex4_end
+    400032: LeftHandThumb1
+    400034: LeftHandThumb2
+    400036: LeftHandThumb3
+    400038: LeftHandThumb4
+    400040: LeftHandThumb4_end
+    400042: LeftLeg
+    400044: LeftShoulder
+    400046: LeftToeBase
+    400048: LeftToeBase_end
+    400050: LeftUpLeg
+    400052: //RootNode
+    400054: Male Scientist Blue
+    400056: Neck
+    400058: RightArm
+    400060: RightFoot
+    400062: RightForeArm
+    400064: RightHand
+    400066: RightHandIndex1
+    400068: RightHandIndex2
+    400070: RightHandIndex3
+    400072: RightHandIndex4
+    400074: RightHandIndex4_end
+    400076: RightHandThumb1
+    400078: RightHandThumb2
+    400080: RightHandThumb3
+    400082: RightHandThumb4
+    400084: RightHandThumb4_end
+    400086: RightLeg
+    400088: RightShoulder
+    400090: RightToeBase
+    400092: RightToeBase_end
+    400094: RightUpLeg
+    400096: Spine
+    400098: Spine1
+    400100: Spine2
+    4300000: Body Male Blue
+    4300002: Buttons Male Blue
+    4300004: Clothes Male Blue
+    4300006: Glasses Male Blue
+    9500000: //RootNode
+    13700000: Body Male Blue
+    13700002: Buttons Male Blue
+    13700004: Clothes Male Blue
+    13700006: Glasses Male Blue
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material.010
+    second: {fileID: 2100000, guid: b8d152fe369986f49b8d267cf4e5a74e, type: 2}
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    preserveHierarchy: 0
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    previousCalculatedGlobalScale: 0.01
+    hasPreviousCalculatedGlobalScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    serializedVersion: 2
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
