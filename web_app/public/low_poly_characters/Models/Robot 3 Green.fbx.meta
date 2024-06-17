@@ -1,0 +1,203 @@
+fileFormatVersion: 2
+guid: 2473e609de8c87441993090aca5e8269
+ModelImporter:
+  serializedVersion: 23
+  fileIDToRecycleName:
+    100000: Body Robot 3 Green
+    100002: Head
+    100004: Head_end
+    100006: Hips
+    100008: Knees Robot 3 Green
+    100010: LeftArm
+    100012: LeftFoot
+    100014: LeftForeArm
+    100016: LeftHand
+    100018: LeftHandIndex1
+    100020: LeftHandIndex2
+    100022: LeftHandIndex3
+    100024: LeftHandIndex4
+    100026: LeftHandIndex4_end
+    100028: LeftHandThumb1
+    100030: LeftHandThumb2
+    100032: LeftHandThumb3
+    100034: LeftHandThumb4
+    100036: LeftHandThumb4_end
+    100038: LeftLeg
+    100040: LeftShoulder
+    100042: LeftToeBase
+    100044: LeftToeBase_end
+    100046: LeftUpLeg
+    100048: Neck
+    100050: RightArm
+    100052: RightFoot
+    100054: RightForeArm
+    100056: RightHand
+    100058: RightHandIndex1
+    100060: RightHandIndex2
+    100062: RightHandIndex3
+    100064: RightHandIndex4
+    100066: RightHandIndex4_end
+    100068: RightHandThumb1
+    100070: RightHandThumb2
+    100072: RightHandThumb3
+    100074: RightHandThumb4
+    100076: RightHandThumb4_end
+    100078: RightLeg
+    100080: RightShoulder
+    100082: RightToeBase
+    100084: RightToeBase_end
+    100086: RightUpLeg
+    100088: Robot 3 Green
+    100090: //RootNode
+    100092: Shoulders Robot 3 Green
+    100094: Spine
+    100096: Spine1
+    100098: Spine2
+    400000: Body Robot 3 Green
+    400002: Head
+    400004: Head_end
+    400006: Hips
+    400008: Knees Robot 3 Green
+    400010: LeftArm
+    400012: LeftFoot
+    400014: LeftForeArm
+    400016: LeftHand
+    400018: LeftHandIndex1
+    400020: LeftHandIndex2
+    400022: LeftHandIndex3
+    400024: LeftHandIndex4
+    400026: LeftHandIndex4_end
+    400028: LeftHandThumb1
+    400030: LeftHandThumb2
+    400032: LeftHandThumb3
+    400034: LeftHandThumb4
+    400036: LeftHandThumb4_end
+    400038: LeftLeg
+    400040: LeftShoulder
+    400042: LeftToeBase
+    400044: LeftToeBase_end
+    400046: LeftUpLeg
+    400048: Neck
+    400050: RightArm
+    400052: RightFoot
+    400054: RightForeArm
+    400056: RightHand
+    400058: RightHandIndex1
+    400060: RightHandIndex2
+    400062: RightHandIndex3
+    400064: RightHandIndex4
+    400066: RightHandIndex4_end
+    400068: RightHandThumb1
+    400070: RightHandThumb2
+    400072: RightHandThumb3
+    400074: RightHandThumb4
+    400076: RightHandThumb4_end
+    400078: RightLeg
+    400080: RightShoulder
+    400082: RightToeBase
+    400084: RightToeBase_end
+    400086: RightUpLeg
+    400088: Robot 3 Green
+    400090: //RootNode
+    400092: Shoulders Robot 3 Green
+    400094: Spine
+    400096: Spine1
+    400098: Spine2
+    4300000: Body Robot 3 Green
+    4300002: Knees Robot 3 Green
+    4300004: Shoulders Robot 3 Green
+    9500000: //RootNode
+    13700000: Body Robot 3 Green
+    13700002: Knees Robot 3 Green
+    13700004: Shoulders Robot 3 Green
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Material.010
+    second: {fileID: 2100000, guid: b8d152fe369986f49b8d267cf4e5a74e, type: 2}
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    preserveHierarchy: 0
+    indexFormat: 0
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+    previousCalculatedGlobalScale: 0.01
+    hasPreviousCalculatedGlobalScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    serializedVersion: 2
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
