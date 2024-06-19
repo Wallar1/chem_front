@@ -106,7 +106,7 @@ class GameObj {
     keepTextRotatedWithCamera(camera) {
         const self = this;
         const look_at_camera_helper = (state, time_delta) => {
-            if (!self.mesh.text) return {finished: true}
+            if (!self.mesh.text) return {finished: false}
             if (!self.mesh.text.centered_text) {
                 // centers the text
                 self.mesh.text.position.x = -1 * self.mesh.text.geometry.boundingSphere.radius;
@@ -346,6 +346,10 @@ class Mine extends GameObj {
         // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
         // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
         get_font_text_mesh(this.element, this.mesh, mine_text_position)
+
+        this.hits_taken = 0;
+        this.hits_possible = 3;
+        this.max_atoms_added_per_hit = 10;
     }
 
     initial_rotation() {
@@ -355,7 +359,6 @@ class Mine extends GameObj {
 
     collide() {
         // let added_amount = Math.floor(collided_obj.damage / 10);
-        const added_amount = 5;
         // let mine_world_position = this.mesh.getWorldPosition(new THREE.Vector3());
         // for (let i = 0; i < added_amount; i++) {
         //     let piece = new CollectableMinePiece(this.camera, this.element, mine_world_position.clone());
@@ -371,7 +374,12 @@ class Mine extends GameObj {
         // } else {
         //     curr_el_cnts[this.element] = {'count': added_amount};
         // }
-        current_element_counts.update(this.element, added_amount)
+        let atoms_added = Math.ceil(Math.random() * this.max_atoms_added_per_hit)
+        current_element_counts.update(this.element, atoms_added)
+        this.hits_taken += 1;
+        if (this.hits_taken >= this.hits_possible) {
+            this.should_delete = true;
+        }
     }
 
     create_collision_particle() {
@@ -471,7 +479,7 @@ class Cloud extends GameObj {
 
     collide(collided_obj) {
         // let added_amount = Math.floor(collided_obj.damage / 10);
-        let added_amount = 10;
+        let added_amount = 20;
         // let curr_el_cnts = get(current_element_counts)
         // if (curr_el_cnts[this.element]) {
         //     curr_el_cnts[this.element]['count'] += added_amount;
