@@ -52790,7 +52790,7 @@ var app = (function () {
         keepTextRotatedWithCamera(camera) {
             const self = this;
             const look_at_camera_helper = (state, time_delta) => {
-                if (!self.mesh.text) return {finished: true}
+                if (!self.mesh.text) return {finished: false}
                 if (!self.mesh.text.centered_text) {
                     // centers the text
                     self.mesh.text.position.x = -1 * self.mesh.text.geometry.boundingSphere.radius;
@@ -53029,6 +53029,10 @@ var app = (function () {
             // let r = Math.ceil(Math.max(mine_geometry.parameters.height, mine_geometry.parameters.width));
             // this.collider = new THREE.Box3(new THREE.Vector3(-r, -r, -r), new THREE.Vector3(r, r, r));
             get_font_text_mesh(this.element, this.mesh, mine_text_position);
+
+            this.hits_taken = 0;
+            this.hits_possible = 3;
+            this.max_atoms_added_per_hit = 10;
         }
 
         initial_rotation() {
@@ -53038,7 +53042,6 @@ var app = (function () {
 
         collide() {
             // let added_amount = Math.floor(collided_obj.damage / 10);
-            const added_amount = 5;
             // let mine_world_position = this.mesh.getWorldPosition(new THREE.Vector3());
             // for (let i = 0; i < added_amount; i++) {
             //     let piece = new CollectableMinePiece(this.camera, this.element, mine_world_position.clone());
@@ -53054,7 +53057,12 @@ var app = (function () {
             // } else {
             //     curr_el_cnts[this.element] = {'count': added_amount};
             // }
-            current_element_counts.update(this.element, added_amount);
+            let atoms_added = Math.ceil(Math.random() * this.max_atoms_added_per_hit);
+            current_element_counts.update(this.element, atoms_added);
+            this.hits_taken += 1;
+            if (this.hits_taken >= this.hits_possible) {
+                this.should_delete = true;
+            }
         }
 
         create_collision_particle() {
@@ -53153,7 +53161,7 @@ var app = (function () {
 
         collide(collided_obj) {
             // let added_amount = Math.floor(collided_obj.damage / 10);
-            let added_amount = 10;
+            let added_amount = 20;
             // let curr_el_cnts = get(current_element_counts)
             // if (curr_el_cnts[this.element]) {
             //     curr_el_cnts[this.element]['count'] += added_amount;
@@ -53864,7 +53872,12 @@ var app = (function () {
             let move_camera_updater = new Updater(move_camera, {});
             add_to_global_updates_queue(move_camera_updater);
 
-            spawn_objects();
+            const initial_object_count = 100;
+            const include_enemies = true;
+            spawn_objects(initial_object_count, include_enemies);
+            const seconds_between_spawns = 1;
+            const count_to_spawn = 1;
+            continue_spawning_objects(count_to_spawn, seconds_between_spawns);
         }
 
         add_event_listeners(){
@@ -54024,9 +54037,13 @@ var app = (function () {
             'create_function': create_lab,
         }
     };
-    function get_random_type() {
+    function get_random_type(include_enemies) {
         let object_probabilities = {};
         let entries = Object.entries(object_type_details);
+        if (!include_enemies) {
+            // the entry[0] is the key, and entry[1] is the val
+            entries = entries.filter(entry => entry[0] !== 'enemy');
+        }
         for (let i=0; i<entries.length; i++) {
             let [key, entry] = entries[i];
             object_probabilities[key] = entry['probability'];
@@ -54036,15 +54053,29 @@ var app = (function () {
     }
 
 
-    function spawn_objects() {
-        for (let i=0; i<100; i++) {
-            initialize_in_random_position(get_random_type());
+    function spawn_objects(count, include_enemies) {
+        for (let i=0; i<count; i++) {
+            initialize_in_random_position(get_random_type(include_enemies));
             // initialize_in_random_position(object_type_details['mine'])
         }
         // initialize_in_random_position(object_type_details['cloud'])
         // initialize_in_random_position(object_type_details['mine'])
         // initialize_in_random_position(object_type_details['enemy'])
         // initialize_in_random_position(object_type_details['lab'])
+    }
+
+    function continue_spawning_objects(count, every_x_seconds) {
+        const helper = (state, time_delta) => {
+            let {time_since_last_spawn} = state;
+            time_since_last_spawn += time_delta;
+            if (time_since_last_spawn > every_x_seconds) {
+                time_since_last_spawn = 0;
+                const include_enemies = false;
+                spawn_objects(count, include_enemies);
+            }
+            return {finished: false, time_since_last_spawn}
+        };
+        add_to_global_updates_queue(new Updater(helper, {finished: false, time_since_last_spawn: 0}));
     }
 
 
@@ -54221,7 +54252,7 @@ var app = (function () {
 
         mouse_ray$2.setFromCamera( mouse$2, camera$2 );
     }
-    new Audio('sound.mov');
+    var audio = new Audio('sound.mov');
     var axe_is_swinging = false;
     function on_mouse_click$1(event) {
         // this next line helps debug. Previously we were getting different positions because the renderer was expecting
@@ -54270,9 +54301,13 @@ var app = (function () {
             if (!has_collided) {
                 let collisions = axe.check_collisions(mines);
                 for (let i=0; i<collisions.length; i++) {
-                    
-                    collisions[i].collide(axe);
+                    let mine = collisions[i];
+                    mine.collide(axe);
                     has_collided = true;
+                    audio.play();
+                    if (mine.should_delete) {
+                        delete_mine(mine);
+                    }
                 }
             }
 
@@ -54288,6 +54323,21 @@ var app = (function () {
             let swing_axe_updater = new Updater(swing_axe, {finished: false, total_radians: 0, direction: -1, has_collided: false});
             add_to_global_updates_queue(swing_axe_updater);
         }
+    }
+
+    function delete_mine(mine) {
+        mines = mines.filter(m => m != mine);
+        mine.dispose();
+    }
+
+    function delete_cloud(cloud) {
+        clouds = clouds.filter(c => c != cloud);
+        cloud.dispose();
+    }
+
+    function delete_lab(lab) {
+        labs = labs.filter(l => l != lab);
+        lab.dispose();
     }
 
     function movement_curve(x) {
@@ -54373,7 +54423,7 @@ var app = (function () {
         return Math.sin(3*x)
     }
 
-    function check_camera_intersects(array_of_possible_intersections) {
+    function check_camera_intersects(array_of_possible_intersections, type_of_obj) {
         let camera_world_position = camera$2.getWorldPosition(new Vector3());
         const camera_box = new Box3().setFromCenterAndSize(camera_world_position, new Vector3(100, 100, 100));
         const box = new Box3();
@@ -54384,6 +54434,11 @@ var app = (function () {
             if (camera_box.intersectsBox(box)) {
                 possible_intersected_obj.collide();
                 has_collided = true;
+                if (type_of_obj === 'lab') {
+                    delete_lab(possible_intersected_obj);
+                } else if (type_of_obj === 'cloud') {
+                    delete_cloud(possible_intersected_obj);
+                }
             }
         }
         return has_collided;
@@ -54394,7 +54449,7 @@ var app = (function () {
             let {finished, initial_time, has_collided} = func_state;
             camera$2.position.z = earth_radius + camera_offset + jump_curve(global_clock$1.elapsedTime - initial_time) * 150;
             if (!has_collided) {
-                has_collided = check_camera_intersects(clouds) | check_camera_intersects(labs);
+                has_collided = check_camera_intersects(clouds, 'cloud') | check_camera_intersects(labs, 'lab');
             }
 
             if (global_clock$1.elapsedTime - initial_time > Math.PI/3) {
@@ -54514,7 +54569,7 @@ var app = (function () {
                         collided_obj.take_damage(burn_pulse_damage);
                     }
 
-                    if (pulses_remaining.length === 0) {
+                    if (pulses_remaining.length === 0 | collided_obj.should_delete) {
                         return {finished: true}
                     }
                     return {finished: false, total_time: total_time, pulses_remaining: pulses_remaining}

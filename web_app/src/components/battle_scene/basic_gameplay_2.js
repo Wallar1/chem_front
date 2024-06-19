@@ -97,7 +97,12 @@ export class BattleScene {
         let move_camera_updater = new Updater(move_camera, {})
         add_to_global_updates_queue(move_camera_updater)
 
-        spawn_objects()
+        const initial_object_count = 100;
+        const include_enemies = true;
+        spawn_objects(initial_object_count, include_enemies)
+        const seconds_between_spawns = 1;
+        const count_to_spawn = 1;
+        continue_spawning_objects(count_to_spawn, seconds_between_spawns)
     }
 
     add_event_listeners(){
@@ -257,9 +262,13 @@ const object_type_details = {
         'create_function': create_lab,
     }
 }
-function get_random_type() {
+function get_random_type(include_enemies) {
     let object_probabilities = {}
     let entries = Object.entries(object_type_details)
+    if (!include_enemies) {
+        // the entry[0] is the key, and entry[1] is the val
+        entries = entries.filter(entry => entry[0] !== 'enemy')
+    }
     for (let i=0; i<entries.length; i++) {
         let [key, entry] = entries[i]
         object_probabilities[key] = entry['probability']
@@ -269,15 +278,29 @@ function get_random_type() {
 }
 
 
-function spawn_objects() {
-    for (let i=0; i<100; i++) {
-        initialize_in_random_position(get_random_type())
+function spawn_objects(count, include_enemies) {
+    for (let i=0; i<count; i++) {
+        initialize_in_random_position(get_random_type(include_enemies))
         // initialize_in_random_position(object_type_details['mine'])
     }
     // initialize_in_random_position(object_type_details['cloud'])
     // initialize_in_random_position(object_type_details['mine'])
     // initialize_in_random_position(object_type_details['enemy'])
     // initialize_in_random_position(object_type_details['lab'])
+}
+
+function continue_spawning_objects(count, every_x_seconds) {
+    const helper = (state, time_delta) => {
+        let {time_since_last_spawn} = state;
+        time_since_last_spawn += time_delta;
+        if (time_since_last_spawn > every_x_seconds) {
+            time_since_last_spawn = 0;
+            const include_enemies = false;
+            spawn_objects(count, include_enemies)
+        }
+        return {finished: false, time_since_last_spawn}
+    }
+    add_to_global_updates_queue(new Updater(helper, {finished: false, time_since_last_spawn: 0}))
 }
 
 
@@ -515,9 +538,13 @@ function on_mouse_click(event) {
         if (!has_collided) {
             let collisions = axe.check_collisions(mines);
             for (let i=0; i<collisions.length; i++) {
-                
-                collisions[i].collide(axe);
+                let mine = collisions[i];
+                mine.collide(axe);
                 has_collided = true;
+                audio.play();
+                if (mine.should_delete) {
+                    delete_mine(mine);
+                }
             }
         }
 
@@ -533,6 +560,21 @@ function on_mouse_click(event) {
         let swing_axe_updater = new Updater(swing_axe, {finished: false, total_radians: 0, direction: -1, has_collided: false})
         add_to_global_updates_queue(swing_axe_updater)
     }
+}
+
+function delete_mine(mine) {
+    mines = mines.filter(m => m != mine)
+    mine.dispose()
+}
+
+function delete_cloud(cloud) {
+    clouds = clouds.filter(c => c != cloud)
+    cloud.dispose();
+}
+
+function delete_lab(lab) {
+    labs = labs.filter(l => l != lab);
+    lab.dispose();
 }
 
 function movement_curve(x) {
@@ -618,7 +660,7 @@ function jump_curve(x) {
     return Math.sin(3*x)
 }
 
-function check_camera_intersects(array_of_possible_intersections) {
+function check_camera_intersects(array_of_possible_intersections, type_of_obj) {
     let camera_world_position = camera.getWorldPosition(new THREE.Vector3())
     const camera_box = new THREE.Box3().setFromCenterAndSize(camera_world_position, new THREE.Vector3(100, 100, 100))
     const box = new THREE.Box3()
@@ -629,6 +671,11 @@ function check_camera_intersects(array_of_possible_intersections) {
         if (camera_box.intersectsBox(box)) {
             possible_intersected_obj.collide()
             has_collided = true;
+            if (type_of_obj === 'lab') {
+                delete_lab(possible_intersected_obj)
+            } else if (type_of_obj === 'cloud') {
+                delete_cloud(possible_intersected_obj)
+            }
         }
     }
     return has_collided;
@@ -639,7 +686,7 @@ function jump(state, time_delta) {
         let {finished, initial_time, has_collided} = func_state
         camera.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - initial_time) * 150;
         if (!has_collided) {
-            has_collided = check_camera_intersects(clouds) | check_camera_intersects(labs);
+            has_collided = check_camera_intersects(clouds, 'cloud') | check_camera_intersects(labs, 'lab');
         }
 
         if (global_clock.elapsedTime - initial_time > Math.PI/3) {
@@ -774,7 +821,7 @@ function blast_projectile(state, time_delta){
                     collided_obj.take_damage(burn_pulse_damage);
                 }
 
-                if (pulses_remaining.length === 0) {
+                if (pulses_remaining.length === 0 | collided_obj.should_delete) {
                     return {finished: true}
                 }
                 return {finished: false, total_time: total_time, pulses_remaining: pulses_remaining}
