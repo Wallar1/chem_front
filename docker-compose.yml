@@ -2,36 +2,41 @@
 
 services:
     chem:
-        image: 627023082830.dkr.ecr.us-west-1.amazonaws.com/chem:latest
+        # image: 627023082830.dkr.ecr.us-west-1.amazonaws.com/chem:latest
         build:
             # you need to have the context outside of web_app so you can copy ./scripts
             context: ~/toyprojs/chem_front/web_app
         # binding this volume should make changes in the container appear outside of it
+        # volumes:
+        #     - type: bind
+        #       source: ./web_app
+        #       target: /web_app
         volumes:
-          - type: bind
-            source: ./web_app
-            target: /web_app
+            - ./web_app:/web_app:delegated
+            - ./web_app/src:/web_app/src:delegated
         command: npm run dev
         ports:
-            - "8080:8080"
+            - "8082:8082"
+            - "35729:35729"  # Expose livereload port
         environment:
             - NODE_ENV=development
+            - CHOKIDAR_USEPOLLING=true
             # - PORT=8080
             # - HOST=0.0.0.0
         networks:
             mynet:
 
-    nginx_rev:
-        container_name: nginx_rev
-        hostname: nginx_rev
-        build:
-            context: ~/toyprojs/chem_front/nginx
-        ports:
-            - "80:80"
-            - "443:443"
-        volumes:
-            - ./nginx/config:/etc/nginx
-            - ./nginx/certs:/etc/ssl/private
+    # nginx_rev:
+    #     container_name: nginx_rev
+    #     hostname: nginx_rev
+    #     build:
+    #         context: ~/toyprojs/chem_front/nginx
+    #     ports:
+    #         - "80:80"
+    #         - "443:443"
+    #     volumes:
+    #         - ./nginx/config:/etc/nginx
+    #         - ./nginx/certs:/etc/ssl/private
 
 
 networks:

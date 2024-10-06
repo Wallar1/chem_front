@@ -13,25 +13,16 @@ import { get } from 'svelte/store';
 
 import { Updater, add_to_global_updates_queue } from './objects.js';
 import { have_same_sign, dispose_group } from './helper_functions.js';
-import { need_to_delete } from './stores.js';
-
-
-function default_on_mouse_down_callback(selected) {
-    return;
-}
-
-function default_on_mouse_up_callback(selected) {
-    return;
-}
+import { need_to_delete, draggable_objects, non_deletable_objs } from './stores.js';
 
 
 export class CraigDragControls {
-    constructor(renderer, camera, draggable_objects, on_mouse_down_callback, on_mouse_up_callback) {
+    constructor(renderer, camera, on_mouse_down_callback, on_mouse_up_callback, non_deletable_objs) {
         this.renderer = renderer;
         this.camera = camera;
-        this.draggable_objects = draggable_objects;
-        this.on_mouse_down_callback = on_mouse_down_callback ? on_mouse_down_callback : default_on_mouse_down_callback;
-        this.on_mouse_up_callback = on_mouse_up_callback ? on_mouse_up_callback : default_on_mouse_up_callback;
+        this.on_mouse_down_callback = on_mouse_down_callback;
+        this.on_mouse_up_callback = on_mouse_up_callback;
+        this.non_deletable_objs = non_deletable_objs;
 
         this.plane = new THREE.Plane();
         this.raycaster = new THREE.Raycaster();
@@ -49,6 +40,8 @@ export class CraigDragControls {
         this.onPointerCancel = this.onPointerCancel.bind(this);
 
         this.add_event_listeners();
+
+        this.delete_sound = new Audio('https://chem-game.s3.amazonaws.com/sounds/delete.mp3')
 
         this.selected = null;
     }
@@ -87,6 +80,7 @@ export class CraigDragControls {
         let new_pos = intersection_point.sub( offset ).applyMatrix4( inverseMatrix )
         // Dont allow the object to cross over the center line. Idk if this should be hardcoded, but maybe it
         // can be a flag in the future
+        // Also, maybe there should be a little buffer
         if (have_same_sign(new_pos.x, selected.position.x)) {
             selected.position.copy(new_pos);
         }
@@ -121,21 +115,31 @@ export class CraigDragControls {
         this.update_pointer( event );
         this.raycaster.setFromCamera( this.mouse, this.camera );
         const recursive = true;
-        let intersections = this.raycaster.intersectObjects( this.draggable_objects, recursive );
+        let intersections = this.raycaster.intersectObjects( get(draggable_objects), recursive );
 
         if ( intersections.length > 0 ) {
             this.selected = this.findGroup(intersections[0].object);
 
-            if (get(need_to_delete)) {
+            if (get(need_to_delete) && get(non_deletable_objs).indexOf(this.selected) < 0) {
                 this.on_mouse_down_callback(this.selected)
                 dispose_group(this.selected);
-                // need to share "draggable_objects" with the scene, so dont overwrite it
-                for (let i=0;i<this.draggable_objects.length;i++) {
-                    if (this.draggable_objects[i] === this.selected) {
-                        this.draggable_objects.splice(i, 1);
-                        break;
-                    }
-                }
+                
+                console.log('playing')
+                this.delete_sound.addEventListener('canplaythrough', () => {
+                    this.delete_sound.fastSeek(0);
+                    console.log('playing2')
+                    this.delete_sound.play().catch((error) => {
+                        console.error('Error playing sound:', error);
+                    })
+                })
+                let new_draggable_objs = get(draggable_objects).filter(obj => obj !== this.selected)
+                draggable_objects.set(new_draggable_objs)
+                // for (let i=0;i<this.draggable_objects.length;i++) {
+                //     if (this.draggable_objects[i] === this.selected) {
+                //         this.draggable_objects.splice(i, 1);
+                //         break;
+                //     }
+                // }
                 this.selected = null;
                 need_to_delete.set(false);
                 return;

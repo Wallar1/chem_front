@@ -6,7 +6,7 @@
 // import {create_enemy, create_mine, create_cloud} from '../../objects.js';
 // import {create_compound} from '../../compounds.js';
 // import { key_to_compound, current_element_counts, watched_keys } from '../../stores.js';
-// import { parse_formula_to_dict, get_random_element } from '../../helper_functions.js';
+// import { parse_formula_to_dict, get_random_from_probilities } from '../../helper_functions.js';
 
 // import { Stats } from '../../../public/lib/stats.js'
 
@@ -221,7 +221,7 @@
 //         let [key, entry] = entries[i]
 //         object_probabilities[key] = entry['probability']
 //     }
-//     let object_type = get_random_element(object_probabilities)
+//     let object_type = get_random_from_probilities(object_probabilities)
 //     return object_type_details[object_type]
 // }
 
@@ -361,7 +361,7 @@
 //     })
 //     return ret_arr;
 // }
-// var audio = new Audio('sound.mov');
+// var audio = new Audio('https://chem-game.s3.amazonaws.com/sound.mov');
 // function on_mouse_click(event) {
 //     // this next line helps debug. Previously we were getting different positions because the renderer was expecting
 //     // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller

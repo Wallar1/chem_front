@@ -14,10 +14,10 @@ export const possible_scenes = Object.freeze({
     'Story': Symbol('story'),
 });
 // export const current_scene = writable(possible_scenes.Story);
-export const current_scene = writable(possible_scenes.Battle);
+// export const current_scene = writable(possible_scenes.Battle);
 // export const current_scene = writable(possible_scenes.Timeline);
 // export const current_scene = writable(possible_scenes.CompoundCreator);
-// export const current_scene = writable(possible_scenes.BalanceEquation);
+export const current_scene = writable(possible_scenes.BalanceEquation);
 
 
 export const global_updates_queue = writable([]);
@@ -35,7 +35,10 @@ export const current_scientist = writable(scientists.RobertBoyle);
 
 export const initial_player_health = 100;
 export const player_health = writable(initial_player_health);
+export const player_is_invincible = writable(false);
 export const player_score = writable(0);
+
+export const enemies = writable([]);
 
 export const key_to_compound = writable({
     '1': 'H2',
@@ -241,4 +244,12 @@ function left_vs_right_to_degrees_of_rotation(left_count, right_count) {
     return ((right_count) / (right_count + left_count)) * 180 - 90
 }
 
+
+
+
+
+
+// DRAG STATE
 export const need_to_delete = writable(false);
+export const draggable_objects = writable([]);
+export const non_deletable_objs = writable([]);

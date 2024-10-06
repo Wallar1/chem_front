@@ -9,10 +9,17 @@
         balance_equation_scene = new BalanceEquationScene();
     })
 
+    var game_won_audio = new Audio('https://chem-game.s3.amazonaws.com/sounds/marimba-bloop-2-188149.mp3');
+    var leave_scene_audio = new Audio('https://chem-game.s3.amazonaws.com/sounds/marimba-bloop-3-188151.mp3');
+
     let balanced = false;
     $: {
         let counts = Object.values($balance_rotations);
         balanced = !counts.length || counts.filter(k => k !== 0).length ? false : true;
+        if (balanced){
+            game_won_audio.fastSeek(0);
+            game_won_audio.play();
+        }
     }
 
     function calc_color(rotation) {
@@ -73,6 +80,8 @@
     }
 
     function go_to_timeline(event) {
+        leave_scene_audio.fastSeek(0);
+        leave_scene_audio.play();
         if (balanced) {
             end_scene(GameStates.GAMEWON)
         } else {
