@@ -3,10 +3,19 @@ import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 // import * as AmmoLib from '../lib/ammo.js';
-import {Updater, add_to_global_updates_queue, create_enemy, create_mine, create_cloud, Axe, create_lab} from '../../objects.js';
+import { Updater, add_to_global_updates_queue, create_mine, create_cloud, Axe, create_lab } from '../../objects.js';
+import { create_enemy } from '../../enemies.js';
 import {create_compound} from '../../compounds.js';
-import { key_to_compound, current_element_counts, game_state, GameStates, global_updates_queue, player_health, initial_player_health, player_score } from '../../stores.js';
-import { parse_formula_to_dict, get_random_element, dispose_renderer, dispose_group } from '../../helper_functions.js';
+import { 
+    key_to_compound,
+    current_element_counts,
+    game_state, GameStates,
+    global_updates_queue,
+    enemies, player_score,
+    player_health,
+    initial_player_health,
+} from '../../stores.js';
+import { parse_formula_to_dict, get_random_from_probilities, dispose_group, dispose_renderer } from '../../helper_functions.js';
 
 import { Stats } from '../../../public/lib/stats.js'
 
@@ -39,7 +48,6 @@ var global_clock,
     gun,
     mouse_ray,
     mouse,
-    enemies,
     clouds,
     labs,
     mines,
@@ -60,14 +68,13 @@ function initialize_vars(){
     create_gun();
     mouse_ray = new THREE.Raycaster();
     mouse = new THREE.Vector2();
-    enemies = [];
+    enemies.set([])
     clouds = [];
     mines = [];
     labs = [];
     stats = new Stats();
     stats.showPanel( 0 ); // 0: fps, 1: ms, 2: mb, 3+: custom
     document.body.appendChild( stats.dom );
-    invincible_until = 0;
     lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
 }
 
@@ -103,6 +110,8 @@ export class BattleScene {
         const seconds_between_spawns = 1;
         const count_to_spawn = 1;
         continue_spawning_objects(count_to_spawn, seconds_between_spawns)
+
+        music.play();
     }
 
     add_event_listeners(){
@@ -151,6 +160,21 @@ export class BattleScene {
             stats.end();
             global_updates_queue.set(next_updates)
         });
+    }
+
+    
+    game_lost(){
+        player_score.set(0);
+        player_health.set(initial_player_health)
+        current_element_counts.reset();
+
+        dispose_group(scene);
+        dispose_renderer(renderer);
+    }
+
+    game_won(){
+        dispose_group(scene);
+        dispose_renderer(renderer);
     }
 }
 
@@ -273,8 +297,8 @@ function get_random_type(include_enemies) {
         let [key, entry] = entries[i]
         object_probabilities[key] = entry['probability']
     }
-    let object_type = get_random_element(object_probabilities)
-    return object_type_details[object_type]
+    let object_type = get_random_from_probilities(object_probabilities)
+    return object_type
 }
 
 
@@ -283,10 +307,10 @@ function spawn_objects(count, include_enemies) {
         initialize_in_random_position(get_random_type(include_enemies))
         // initialize_in_random_position(object_type_details['mine'])
     }
-    // initialize_in_random_position(object_type_details['cloud'])
-    // initialize_in_random_position(object_type_details['mine'])
-    // initialize_in_random_position(object_type_details['enemy'])
-    // initialize_in_random_position(object_type_details['lab'])
+    // initialize_in_random_position('cloud')
+    // initialize_in_random_position('mine')
+    // initialize_in_random_position('enemy')
+    // initialize_in_random_position('lab')
 }
 
 function continue_spawning_objects(count, every_x_seconds) {
@@ -303,83 +327,14 @@ function continue_spawning_objects(count, every_x_seconds) {
     add_to_global_updates_queue(new Updater(helper, {finished: false, time_since_last_spawn: 0}))
 }
 
-
-function add_enemy_movement_updater(enemy) {
-    // TODO: make it so the enemies dont move in a perfectly straight line, they zig zag. Also they jump
-    function move_enemy(state, time_delta) {
-        /*
-        The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
-        We get the direction to the player and then project it onto the plane, and then move one step in that direction
-        */
-        let {enemy, stunned} = state
-        if (enemy.should_delete) {
-            enemies = enemies.filter(e => e !== enemy)
-            if (!enemies.length) {
-                game_won();
-            }
-            return {finished: true, to_delete: [enemy]}
-        }
-
-        // cant move or hurt player when stunned
-        if (stunned) return state;
-
-        let camera_world_pos = camera.getWorldPosition(new THREE.Vector3())
-        let enemy_world_pos = enemy.getWorldPosition(new THREE.Vector3())
-        // rotate the enemy parent to move the enemy close to the camera
-        let up_local_parent = new THREE.Vector3(0, 0, earth_radius + object_type_details['enemy']['extra_z_distance'])
-        let dir_to_camera_world = new THREE.Vector3().subVectors(camera_world_pos, enemy_world_pos)
-        let dir_to_camera_local_parent = enemy.parent.worldToLocal(dir_to_camera_world.clone()).normalize()
-        let axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, dir_to_camera_local_parent).normalize()
-        let movement_multiplier = 1;
-        let radians = movement_multiplier * Math.PI * time_delta/ 100;
-        let quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians)
-        enemy.parent.quaternion.multiply(quaternion);
-        enemy.parent.updateMatrixWorld(true)
-
-
-        // rotate the enemy to face the camera
-        // Forward direction relative to the enemy (not their local space, but literally from the enemy)
-        const enemy_forward = new THREE.Vector3(0, 1, 0);
-        // Apply the object's rotation to the forward vector
-        const forward_relative_to_world = enemy.localToWorld(enemy_forward.clone())
-        // Get the angle between the forward vector and the direction to the camera
-        const up = new THREE.Vector3(0, 0, -1);
-        const up_in_world = enemy.localToWorld(up.clone())
-        const project_dir_in_world = dir_to_camera_world.clone().projectOnPlane(up_in_world.normalize())
-        const added = enemy.getWorldPosition(new THREE.Vector3()).add(project_dir_in_world)
-
-        const local_added = enemy.worldToLocal(added)
-        const local_forward = enemy.worldToLocal(forward_relative_to_world)
-        const angle = local_added.angleTo(local_forward)
-        
-        const cross = new THREE.Vector3().crossVectors(local_forward, local_added)
-
-        if (angle > 0.01 ) {
-            // let quaternion2 = new THREE.Quaternion().setFromAxisAngle(enemy.localToWorld(up.clone()), .01)
-            // enemy.quaternion.premultiply(quaternion2);
-            enemy.rotateZ(Math.sign(cross.z) * .02)
-            enemy.updateMatrixWorld(true);
-        }
-        let collisions = enemy.check_collisions([camera]);
-        if (collisions.length) {
-            damage_player(10);
-        }
-
-        return state
-    }
-    let updater = new Updater(move_enemy, {enemy, stunned: false})
-    add_to_global_updates_queue(updater)
-    enemy.movement_updater = updater;
-}
-
-
 function initialize_in_random_position(type_of_obj) {
-    let obj = type_of_obj['create_function']({camera})
+    const type_details = object_type_details[type_of_obj]
+    let obj = type_details['create_function']({camera})
     obj.keepTextRotatedWithCamera(camera)
     let parent = new THREE.Object3D();
     obj.add_to(parent)
     earth.add(parent)
-    obj.position.set(0, 0, earth_radius + type_of_obj['extra_z_distance'])
+    obj.position.set(0, 0, earth_radius + type_details['extra_z_distance'])
     // let random_rotation_axis = new THREE.Vector3(1,0,0)
     // let radians = 0;
     let random_rotation_axis = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize()
@@ -387,17 +342,21 @@ function initialize_in_random_position(type_of_obj) {
     let quaternion = new THREE.Quaternion().setFromAxisAngle(random_rotation_axis, radians)
     parent.quaternion.multiply(quaternion);
     obj.initial_rotation();
-    if (type_of_obj['create_function'] === create_enemy) {
-        add_enemy_movement_updater(obj)
-        enemies.push(obj)
-    } else if (type_of_obj['create_function'] === create_mine) {
+    if (type_of_obj === 'enemy') {
+        obj.start_moving(camera, earth_radius)
+        let _enemies = get(enemies)
+        _enemies.push(obj)
+        enemies.set(_enemies)
+    } else if (type_of_obj === 'mine') {
         mines.push(obj)
-    } else if (type_of_obj['create_function'] === create_cloud) {
+    } else if (type_of_obj === 'cloud') {
         clouds.push(obj)
-    } else if (type_of_obj['create_function'] === create_lab) {
+    } else if (type_of_obj === 'lab') {
         labs.push(obj)
         add_energy_effect_updater(obj)
-    } 
+    } else {
+        console.log(type_of_obj)
+    }
     parent.updateMatrixWorld(true)
 }
 
@@ -489,7 +448,11 @@ function unique(arr, key_func) {
     })
     return ret_arr;
 }
-var audio = new Audio('sound.mov');
+var audio1 = new Audio('https://chem-game.s3.amazonaws.com/sounds/Digging A 10.wav');
+var audio2 = new Audio('https://chem-game.s3.amazonaws.com/sounds/Digging A 04.wav')
+var last_played_axe_hit = audio2;
+var music = new Audio('https://chem-game.s3.amazonaws.com/sounds/05 Taurus.wav')
+music.volume = .1
 var axe_is_swinging = false;
 function on_mouse_click(event) {
     // this next line helps debug. Previously we were getting different positions because the renderer was expecting
@@ -507,7 +470,6 @@ function on_mouse_click(event) {
     // let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
     // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
     // if (intersects_with_click.length) {
-    //     // audio.play();
     //     intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
     // }
     function swing_axe(state, time_delta) {
@@ -541,7 +503,16 @@ function on_mouse_click(event) {
                 let mine = collisions[i];
                 mine.collide(axe);
                 has_collided = true;
-                audio.play();
+                // alternate the axe hit sounds
+                if (last_played_axe_hit === audio2) {
+                    audio1.fastSeek(0)
+                    audio1.play()
+                    last_played_axe_hit = audio1;
+                } else {
+                    audio2.fastSeek(0)
+                    audio2.play()
+                    last_played_axe_hit = audio2;
+                }
                 if (mine.should_delete) {
                     delete_mine(mine);
                 }
@@ -685,9 +656,10 @@ function jump(state, time_delta) {
     function jump_helper(func_state, func_time_delta){
         let {finished, initial_time, has_collided} = func_state
         camera.position.z = earth_radius + camera_offset + jump_curve(global_clock.elapsedTime - initial_time) * 150;
-        if (!has_collided) {
-            has_collided = check_camera_intersects(clouds, 'cloud') | check_camera_intersects(labs, 'lab');
-        }
+        // if (!has_collided) {
+        //     has_collided = check_camera_intersects(clouds, 'cloud') | check_camera_intersects(labs, 'lab');
+        // }
+        has_collided = check_camera_intersects(clouds, 'cloud') | check_camera_intersects(labs, 'lab');
 
         if (global_clock.elapsedTime - initial_time > Math.PI/3) {
             finished = true
@@ -761,6 +733,18 @@ function try_to_fire_player_weapon(compound){
     let direction = camera.getWorldDirection(new THREE.Vector3())
     let updater = new Updater(blast_projectile, {projectile: projectile, initial_time, direction})
     add_to_global_updates_queue(updater)
+
+    play_gun_animation()
+}
+
+
+const gun_sound = new Audio('https://chem-game.s3.amazonaws.com/sounds/bloop.mp3')
+function play_gun_animation() {
+    gun_sound.fastSeek(0);
+    gun_sound.play();
+    // const gun_recoil_helper = (state, time_delta) => {
+        
+    // }
 }
 
 function fire_enemy_projectile(){
@@ -794,7 +778,7 @@ function blast_projectile(state, time_delta){
     direction = direction.normalize().multiplyScalar(time_delta * 100 * Math.pow(total_time, 5) + 20).add(gravity)
     mesh.position.add(direction)
 
-    let collisions = projectile.check_collisions(enemies);
+    let collisions = projectile.check_collisions(get(enemies));
     collisions.forEach(collided_obj => {
         collided_obj.collide(projectile);
         if (lab_effects['electrical'] > 0) {
@@ -806,7 +790,7 @@ function blast_projectile(state, time_delta){
                     return {finished: true}
                 }
                 collided_obj.movement_updater.state.stunned = true;
-                return {finished: false, total_time: total_time}
+                return {finished: false, projectile, total_time: total_time}
             }
             let stun_updater = new Updater(stun_update_helper, {finished: false, total_time: 0})
             add_to_global_updates_queue(stun_updater)
@@ -824,7 +808,7 @@ function blast_projectile(state, time_delta){
                 if (pulses_remaining.length === 0 | collided_obj.should_delete) {
                     return {finished: true}
                 }
-                return {finished: false, total_time: total_time, pulses_remaining: pulses_remaining}
+                return {finished: false, projectile, total_time: total_time, pulses_remaining: pulses_remaining}
             }
             const pulses_remaining = Array.from({ length: burn_duration }, (val, idx) => idx + 1);
             let burn_updater = new Updater(burn_update_helper, {finished: false, total_time: 0, pulses_remaining: pulses_remaining})
@@ -836,21 +820,6 @@ function blast_projectile(state, time_delta){
         return {finished: true, to_delete: [projectile]}
     }
     return {projectile, total_time, finished: false, initial_time, direction}
-}
-
-
-var invincible_until = 0;  // prevents you from taking too much damage
-function damage_player(damage = 10){
-    if (global_clock.elapsedTime < invincible_until) {
-        return;
-    }
-    invincible_until = global_clock.elapsedTime + 1;
-    let health = get(player_health);
-    health = Math.max(0, health - damage);
-    player_health.set(health)
-    if (health <= 0) {
-        game_lost();
-    }
 }
 
 
@@ -882,27 +851,6 @@ function add_energy_effect_updater(lab) {
         let updater = new Updater(energy_effect_decrementer, {finished: false, energy_type: energy_type})
         add_to_global_updates_queue(updater)
     };
-}
-
-function game_lost(){
-    let current_game_state = get(game_state)
-    current_game_state['state'] = GameStates.GAMELOST;
-    game_state.set(current_game_state)
-
-    player_score.set(0);
-    player_health.set(initial_player_health)
-    current_element_counts.reset();
-
-    dispose_group(scene);
-    dispose_renderer(renderer);
-}
-
-function game_won(){
-    let current_game_state = get(game_state)
-    current_game_state['state'] = GameStates.GAMEWON;
-    game_state.set(current_game_state)
-    dispose_group(scene);
-    dispose_renderer(renderer);
 }
 
 // TODO: should I get rid of the Date.now() calls, and use the global clock?

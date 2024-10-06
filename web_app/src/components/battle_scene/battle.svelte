@@ -34,6 +34,14 @@
         battle_scene?.remove_event_listeners();
     }
 
+    $: {
+        if ($game_state.state === GameStates.GAMELOST) {
+            battle_scene.game_lost()
+        } else if ($game_state.state === GameStates.GAMEWON) {
+            battle_scene.game_won();
+        }
+    }
+
     function handle_click() {
         console.log('clicked')
         let canvas = document.getElementById('canvas-container').firstChild;

@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { get } from 'svelte/store';
 
 import { Compound } from '../../objects.js';
-import { game_state, GameStates, global_updates_queue, element_counts, initial_element_counts, sides, compounds_in_scene } from '../../stores.js';
+import { 
+    game_state, GameStates, global_updates_queue, element_counts, initial_element_counts, sides, compounds_in_scene,
+    draggable_objects, non_deletable_objs
+} from '../../stores.js';
 import { dispose_renderer, dispose_group } from '../../helper_functions.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CraigDragControls } from '../../craig_drag_controls.js';
@@ -14,17 +17,19 @@ var global_clock,
     renderer,
     camera,
     mouse_ray,
-    mouse,
-    draggable_objects;
+    mouse;
 
 
 function initialize_vars(){
-    draggable_objects = [];
+    draggable_objects.set([]);
     global_clock = new THREE.Clock();
     create_camera();
     mouse_ray = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 }
+
+var moving_audio = new Audio('https://chem-game.s3.amazonaws.com/sounds/bloop.mp3');
+var add_molecule_audio = new Audio('https://chem-game.s3.amazonaws.com/sounds/punchy-taps-ui-4-183899.mp3');
 
 export class BalanceEquationScene {
     constructor() {
@@ -50,7 +55,10 @@ export class BalanceEquationScene {
         renderer.render(scene, camera);
         spawn_initial_objects();
         this.drag_controls = new CraigDragControls(
-            renderer, camera, draggable_objects, on_mouse_down_callback, on_mouse_up_callback
+            renderer,
+            camera,
+            on_mouse_down_callback,
+            on_mouse_up_callback
         );
         this.animate();
     }
@@ -88,8 +96,17 @@ export class BalanceEquationScene {
     }
 
     add_molecule_in_play(molecule_name, x, y) {
+        add_molecule_audio.fastSeek(0)
+        add_molecule_audio.play()
         let pos = screen_pos_to_world_pos(x, y)
-        create_molecule_group(molecule_name, pos);
+        let molecule_group = create_molecule_group(molecule_name, pos);
+        draggable_objects.update(
+            (current_draggable_objs) => {
+                current_draggable_objs.push(molecule_group);
+                console.log(current_draggable_objs)
+                return current_draggable_objs
+            }
+        );
     }
 }
 
@@ -127,6 +144,8 @@ function update_element_counts(selected, add_or_subtract) {
 }
 
 function on_mouse_down_callback(selected) {
+    moving_audio.fastSeek(0)
+    moving_audio.play()
     update_element_counts(selected, -1)
 }
 
@@ -214,7 +233,12 @@ function spawn_initial_objects(){
                 }
                 
                 pos = screen_pos_to_world_pos(x, y)
-                create_molecule_group(compound, pos);
+                let molecule_group = create_molecule_group(compound, pos);
+                non_deletable_objs.update(current_non_deletable_objs => {
+                    console.log(current_non_deletable_objs)
+                    current_non_deletable_objs.push(molecule_group)
+                    return current_non_deletable_objs
+                })
             })
         }
     }
@@ -226,10 +250,10 @@ function create_molecule_group(molecule_name, position) {
     let molecule_group = new THREE.Group();
     molecule_group.name = molecule_name;
     new Compound(molecule_group, atoms, bonds);
-    draggable_objects.push(molecule_group);
     scene.add(molecule_group);
     molecule_group.position.set(position.x, position.y, position.z);
     update_element_counts(molecule_group, 1)
+    return molecule_group;
 }
 
 
