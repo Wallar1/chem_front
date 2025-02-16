@@ -26,6 +26,7 @@ export function get_font_text_mesh(characters, parent, position, scale) {
         // we later move the text further in order to account for its size (from the bounding box). But we need
         // to move the parent and not the text so the rotation isnt messed up. See keepTextRotatedWithCamera
         text.centered_text = false;
+        text.geometry.computeBoundingSphere()
         parent.add(text_parent);
         parent.text = text;
     } );

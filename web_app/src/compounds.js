@@ -12,7 +12,7 @@ Copper: electric shock that jumps from enemy to enemy
 */
 
 import * as THREE from 'three';
-import {Projectile, proxy_handler} from './objects.js';
+import { get_font_text_mesh } from './helper_functions.js';
 
 
 
@@ -77,7 +77,7 @@ const formula_to_name_dict = {
     'NaCl': 'Sodium Chloride (table salt)'
 }
 
-const projectile_material_map = {
+export const projectile_material_map = {
     'H2': {
         'geometry': new THREE.SphereGeometry( 2, 10, 10 ),
         'material': new THREE.MeshToonMaterial({color: 0x10c42e})
@@ -101,145 +101,107 @@ const projectile_material_map = {
 }
 
 
-export class Compound extends Projectile {
-    constructor({formula, initial_pos, velocity, onclick}) {
-        let geometry = projectile_material_map[formula]['geometry']
-        let material = projectile_material_map[formula]['material']
-        super({geometry, material, initial_pos, velocity, onclick})
-        this.formula = formula
-    }
+// TODO: maybe also map to a geometry and z position, so we can make the water, mine, or cloud
+export const element_to_material = {
+    'H': new THREE.MeshStandardMaterial({color: 0xffffff,}),
+    'C': new THREE.MeshStandardMaterial({color: 0x876a45,}),  // 000000
+    'N': new THREE.MeshStandardMaterial({color: 0x00cde8,}),
+    'O': new THREE.MeshStandardMaterial({color: 0x0000aa,}),
+    'AU': new THREE.MeshStandardMaterial({color: 0xebd834,}),
+    'NA': new THREE.MeshStandardMaterial({color: 0x575757,}),
+    'CL': new THREE.MeshStandardMaterial({color: 0x00ff00,}),
+}
 
-    toString () {
-        string = `${this.name} (${this.formula}): ${this.damage} damage. \n\tEffects: `
-        for (effect in this.effects) {
-            string += "\n\t\t"
-            string += effect.toString()
+
+
+
+
+const SPACING = 75;
+const ATOM_SIZE = 25;
+const normal_material = new THREE.MeshNormalMaterial();
+const label_scale = new THREE.Vector3(5/ATOM_SIZE, 5/ATOM_SIZE, 5/ATOM_SIZE)
+const label_position = new THREE.Vector3(-0.5, 0, 1)
+
+export class Compound {
+    constructor(root, csv_atoms, csv_bonds, use_normal=false, show_label=true) {
+        this.root = root;
+        this.name = 'compound name';
+        this.element_counts = {};
+
+        const bondGeometry = new THREE.BoxGeometry( 1, 1, 1 );
+        const atomGeometry = new THREE.IcosahedronGeometry( 1, 3 );
+        const materials = {}
+        for (let i = 1; i < csv_atoms.length; i++) {
+            const csv_atom = csv_atoms[i];
+            const element = csv_atom.element
+            if (!materials[element.toLowerCase()]) {
+                let color_info = get(atoms)[element]['color']
+                let color = new THREE.Color(`rgb(${color_info[0]}, ${color_info[1]}, ${color_info[2]})`);
+                materials[element.toLowerCase()] = new THREE.MeshToonMaterial( { color: color } );
+            }
+            let atom_material;
+            if (use_normal) {
+                atom_material = normal_material;
+            } else {
+                atom_material = element_to_material[element]
+            }
+            const atom_obj = new THREE.Mesh( atomGeometry, atom_material );
+            atom_obj.is_atom = true;
+            atom_obj.position.set( ...csv_atom.coordinates );
+            atom_obj.position.multiplyScalar(SPACING);
+            if (show_label){
+                get_font_text_mesh(element, atom_obj, label_position, label_scale)
+            }
+            atom_obj.scale.set( ATOM_SIZE, ATOM_SIZE, ATOM_SIZE );
+            atom_obj.onclick = () => {
+                if (element === get(selected_atom)) {
+                    atom_obj.material = materials[element.toLowerCase()];
+                    atom_obj.correct_material = true;
+                }
+            }
+            root.add( atom_obj );
         }
-        return string
+        const start = new THREE.Vector3();
+        const end = new THREE.Vector3();
+        const bondMaterial = new THREE.MeshToonMaterial( { color: 0xffffff } );
+        for (let i = 0; i < csv_bonds.length; i++) {
+            const csv_bond = csv_bonds[i];
+            start.set(...csv_atoms[csv_bond.atoms[0]].coordinates);
+            start.multiplyScalar(SPACING);
+            end.set(...csv_atoms[csv_bond.atoms[1]].coordinates);
+            end.multiplyScalar(SPACING)
+            const parent_object = new THREE.Object3D();
+            parent_object.position.copy( start );
+            parent_object.position.lerp( end, 0.5 );
+            parent_object.scale.set( 5, 5, start.distanceTo( end ) );
+            parent_object.lookAt( end );
+            parent_object.scale.set( 5, 5, start.distanceTo( end ) );
+            root.add( parent_object );
+            if (csv_bond.count === 1) {
+                const object = new THREE.Mesh( bondGeometry, bondMaterial );
+                parent_object.add( object );
+            } else if (csv_bond.count === 2) {
+                const object = new THREE.Mesh( bondGeometry, bondMaterial );
+                object.position.y = 1;
+                parent_object.add( object );
+                const object2 = new THREE.Mesh( bondGeometry, bondMaterial );
+                object2.position.y = -1;
+                parent_object.add( object2 );
+            } else if (csv_bond.count === 3) {
+                const object = new THREE.Mesh( bondGeometry, bondMaterial );
+                object.position.y = 2;
+                parent_object.add( object );
+                const object2 = new THREE.Mesh( bondGeometry, bondMaterial );
+                parent_object.add( object2 );
+                const object3 = new THREE.Mesh( bondGeometry, bondMaterial );
+                object3.position.y = -2;
+                parent_object.add( object3 );
+            } else {
+                throw new Error('Too many bonds!');
+            }
+        }
     }
 }
-
-{/* <div class='button'>H2</div>
-		<div class='button'>CH4</div>
-		<div class='button'>NH3</div>
-		<div class='button'>CN</div>
-		<div class='button'>H2O</div> */}
-
-
-class HydrogenGas extends Compound {
-    constructor({initial_pos, velocity, onclick}) {
-        let formula = 'H2'
-        super({formula, initial_pos, velocity, onclick})
-        this.name = 'Hydrogen Gas'
-        this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
-    }
-}
-
-class Methane extends Compound {
-    constructor({initial_pos, velocity, onclick}) {
-        let formula = 'CH4'
-        super({formula, initial_pos, velocity, onclick})
-        this.name = 'Methane'
-        this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
-    }
-}
-
-class Ammonia extends Compound {
-    constructor({initial_pos, velocity, onclick}) {
-        let formula = 'NH3'
-        super({formula, initial_pos, velocity, onclick})
-        this.name = 'Ammonia'
-        this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
-    }
-}
-
-class Cyanide extends Compound {
-    constructor({initial_pos, velocity, onclick}) {
-        let formula = 'CN'
-        super({formula, initial_pos, velocity, onclick})
-        this.name = 'Cyanide'
-        this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
-    }
-}
-
-class Water extends Compound {
-    constructor({initial_pos, velocity, onclick}) {
-        let formula = 'H2O'
-        super({formula, initial_pos, velocity, onclick})
-        this.name = 'Water'
-        this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
-    }
-}
-
-const compound_name_to_class = {
-    'H2': HydrogenGas,
-    'CH4': Methane,
-    'NH3': Ammonia,
-    'CN': Cyanide,
-    'H2O': Water,
-}
-
-export function create_compound(compound_name, arg_dict) {
-    let klass = compound_name_to_class[compound_name]
-    let projectile = new klass(arg_dict)
-    let proxy = new Proxy(projectile, proxy_handler('mesh'))
-    proxy.position.copy(arg_dict['initial_pos'])
-    return proxy
-}
-
-function poison({dmg, enemy, framerate, initial_time, total_time, seconds_between_poison, number_of_ticks}) {
-    if (!initial_time) initial_time = global_clock.elapsedTime
-    if (!total_time) total_time = 0;
-    total_time += global_clock.elapsedTime - initial_time;
-    let half_frame_rate = framerate / 2
-    let should_tick = Math.round((total_time * half_frame_rate) % (seconds_between_poison * half_frame_rate)) === 0
-    if (should_tick) {
-        enemy.take_damage(dmg)
-        number_of_ticks -= 1
-        initial_time = total_time
-    }
-    let finished = false;
-    if (number_of_ticks <= 0) {
-        finished = true
-        return {finished}
-    }
-    return {dmg, enemy, framerate, initial_time, total_time, seconds_between_poison, number_of_ticks}
-}
-
-// class Cyanide extends Compound {
-//     constructor(enemy){
-//         this.formula = 'CN'
-//         this.name = 'Cyanide'
-//         this.effects = [Poison(compound=self, enemy=enemy, damage=2)]
-//         this.damage = 20
-//     }
-// }
-
-
-// class Lead extends Compound {
-//     constructor(enemy){
-//         this.formula = 'Pb'
-//         this.name = 'Lead'
-//         this.effects = [Doom(compound=self, enemy=enemy, damage=20)]
-//         this.damage = 30
-//     }
-// }
-
-
-// class Chlorine extends Compound {
-//     constructor(enemy){
-//         this.formula = 'Cl'
-//         this.name = 'Chlorine'
-//         this.effects = []
-//         this.damage = 10
-//     }
-// }
-
 
 
 

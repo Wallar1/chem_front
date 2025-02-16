@@ -1,11 +1,13 @@
 <script>
-    import { onMount, tick } from 'svelte';
+    import { get } from 'svelte/store';
+    import { onMount } from 'svelte';
     import { BattleScene } from './basic_gameplay_2.js';
     import BottomCompoundBar from './bottom_compound_bar.svelte';
     import RightSideBar from './right_element_bar.svelte';
     import HealthBar from './health_bar.svelte';
     import Score from './score.svelte';
-    import { GameStates, game_state, current_scene, possible_scenes } from '../../stores.js';
+    import { store } from './store.js';
+    import { global_store } from '../../global_store.js';
     
     var battle_scene;
     onMount(async () => {
@@ -17,27 +19,28 @@
     }
 
     function start_game() {
-        game_state.update(currentState => {
-            currentState.state = GameStates.PLAYING;
+        store.game_state.update(currentState => {
+            currentState.state = store.GameStates.PLAYING;
             return currentState;
         });
         battle_scene.add_event_listeners();
         battle_scene.animate();
     }
 
-    $: show_overlay = ($game_state.state === GameStates.STARTING || 
-                       $game_state.state === GameStates.GAMELOST ||
-                       $game_state.state === GameStates.GAMEWON);
+
+    $: show_overlay = (get(store.game_state).state === store.GameStates.STARTING || 
+                       get(store.game_state).state === store.GameStates.GAMELOST ||
+                       get(store.game_state).state === store.GameStates.GAMEWON);
     $: if (show_overlay) {
-        console.log(show_overlay, $game_state.state)
+        console.log(show_overlay, get(store.game_state).state)
         document.exitPointerLock();
         battle_scene?.remove_event_listeners();
     }
 
     $: {
-        if ($game_state.state === GameStates.GAMELOST) {
+        if (get(store.game_state).state === store.GameStates.GAMELOST) {
             battle_scene.game_lost()
-        } else if ($game_state.state === GameStates.GAMEWON) {
+        } else if (get(store.game_state).state === store.GameStates.GAMEWON) {
             battle_scene.game_won();
         }
     }
@@ -47,27 +50,26 @@
         let canvas = document.getElementById('canvas-container').firstChild;
         canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
         canvas.requestPointerLock({unadjustedMovement: true,})
-        console.log($game_state.state)
-        if ($game_state.state === GameStates.GAMELOST) {
+        show_overlay = false;
+        if (get(store.game_state).state === store.GameStates.GAMELOST) {
             new_game();
         }
         start_game();
-        console.log($game_state.state)
     }
 
     function go_back_to_timeline() {
-        $current_scene = possible_scenes.Story;
+        global_store.current_scene = possible_scenes.Story;
     }
 </script>
 
 <div>
     <div id='overlay-to-start' style={show_overlay ? 'display: flex;' : 'display: none;'}>
-        {#if $game_state.state === GameStates.STARTING}
+        {#if get(store.game_state).state === store.GameStates.STARTING}
             <div class='button' on:click|stopPropagation={handle_click}>Start</div>
-        {:else if $game_state.state === GameStates.GAMELOST}
+        {:else if get(store.game_state).state === store.GameStates.GAMELOST}
             <h3>Game Over</h3>
             <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
-        {:else if $game_state.state === GameStates.GAMEWON}
+        {:else if get(store.game_state).state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
             <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
         {/if}

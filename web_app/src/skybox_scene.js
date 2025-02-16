@@ -156,12 +156,12 @@ export function skyboxScene() {
         render()
     }
     // window.addEventListener( 'mousemove', onMouseMove, false );
-    var initial_time = Date.now()
+    var initial_time = performance.now()
     const clock = new THREE.Clock()
 
     let y = 0
     const animate = function () {
-        // if (Date.now() < initial_time + 3000) {
+        // if (performance.now() < initial_time + 3000) {
         //     requestAnimationFrame( animate );
         // }
         // if (camera.position.x > 400) {

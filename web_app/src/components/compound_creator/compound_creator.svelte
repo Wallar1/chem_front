@@ -3,26 +3,27 @@
     import { onMount } from 'svelte';
     import { CompoundCreator, dispose } from './compound_creator_3.js';
     import RightSideBar from './right_element_bar.svelte';
-    import { game_state, GameStates, current_scene, possible_scenes } from '../../stores.js';
+    import { store } from './store.js';
+    import { global_store } from '../../global_store.js';
     onMount(async () => {
         new CompoundCreator();
     })
 
-    $: show_overlay = ($game_state.state === GameStates.GAMELOST ||
-                       $game_state.state === GameStates.GAMEWON);
+    $: show_overlay = (store.game_state.state === store.GameStates.GAMELOST ||
+                       store.game_state.state === store.GameStates.GAMEWON);
 
     function go_back_to_timeline() {
         dispose()
-        $current_scene = possible_scenes.Timeline;
+        global_store.current_scene = global_store.possible_scenes.Timeline;
     }
 </script>
 
 <div id='outer'>
     <div id='overlay-to-start' style={show_overlay ? 'display: flex;' : 'display: none;'}>
-        {#if $game_state.state === GameStates.GAMELOST}
+        {#if store.game_state.state === store.GameStates.GAMELOST}
             <h3>You ran out of moves, and the molecule disappeared</h3>
             <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</div>
-        {:else if $game_state.state === GameStates.GAMEWON}
+        {:else if store.game_state.state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
             <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</div>
         {/if}

@@ -11,18 +11,17 @@ To do this I need to listen for the drag event, and if an object is selected, dr
 import * as THREE from 'three';
 import { get } from 'svelte/store';
 
-import { Updater, add_to_global_updates_queue } from './objects.js';
-import { have_same_sign, dispose_group } from './helper_functions.js';
-import { need_to_delete, draggable_objects, non_deletable_objs } from './stores.js';
+import { Updater } from '../battle_scene/objects.js';
+import { store } from './store.js';
+import { have_same_sign, dispose_group } from '../../helper_functions.js';
 
 
 export class CraigDragControls {
-    constructor(renderer, camera, on_mouse_down_callback, on_mouse_up_callback, non_deletable_objs) {
+    constructor(renderer, camera, on_mouse_down_callback, on_mouse_up_callback) {
         this.renderer = renderer;
         this.camera = camera;
         this.on_mouse_down_callback = on_mouse_down_callback;
         this.on_mouse_up_callback = on_mouse_up_callback;
-        this.non_deletable_objs = non_deletable_objs;
 
         this.plane = new THREE.Plane();
         this.raycaster = new THREE.Raycaster();
@@ -106,7 +105,7 @@ export class CraigDragControls {
                     inverseMatrix: this.inverseMatrix,
                 }
                 let move_object_updater = new Updater(this.move_object, state)
-                add_to_global_updates_queue(move_object_updater)
+                store.global_updates_queue(move_object_updater)
             }
         }
     }
@@ -115,12 +114,12 @@ export class CraigDragControls {
         this.update_pointer( event );
         this.raycaster.setFromCamera( this.mouse, this.camera );
         const recursive = true;
-        let intersections = this.raycaster.intersectObjects( get(draggable_objects), recursive );
+        let intersections = this.raycaster.intersectObjects( get(store.draggable_objects), recursive );
 
         if ( intersections.length > 0 ) {
             this.selected = this.findGroup(intersections[0].object);
 
-            if (get(need_to_delete) && get(non_deletable_objs).indexOf(this.selected) < 0) {
+            if (get(store.need_to_delete) && get(store.non_deletable_objs).indexOf(this.selected) < 0) {
                 this.on_mouse_down_callback(this.selected)
                 dispose_group(this.selected);
                 
@@ -132,8 +131,8 @@ export class CraigDragControls {
                         console.error('Error playing sound:', error);
                     })
                 })
-                let new_draggable_objs = get(draggable_objects).filter(obj => obj !== this.selected)
-                draggable_objects.set(new_draggable_objs)
+                let new_draggable_objs = get(store.draggable_objects).filter(obj => obj !== this.selected)
+                store.draggable_objects.set(new_draggable_objs)
                 // for (let i=0;i<this.draggable_objects.length;i++) {
                 //     if (this.draggable_objects[i] === this.selected) {
                 //         this.draggable_objects.splice(i, 1);
@@ -141,7 +140,7 @@ export class CraigDragControls {
                 //     }
                 // }
                 this.selected = null;
-                need_to_delete.set(false);
+                store.need_to_delete.set(false);
                 return;
             }
 

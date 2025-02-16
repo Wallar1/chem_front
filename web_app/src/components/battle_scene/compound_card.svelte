@@ -2,12 +2,18 @@
     export let el_name;
     export let damage;
     export let count_available;
-    export let key;
+    export let is_selected;
+
+    function get_classes() {
+        let classes = 'card'
+        classes += count_available ? ' high_opac' : ' low_opac'
+        classes += is_selected ? ' red-border' : ''
+        return classes
+    }
 </script>
 
-<div class={count_available ? 'card high_opac' : 'card low_opac'}>
+<div class={get_classes()}>
     <div class='stats'>
-        <p>{key === ' ' ? 'Space' : key.toUpperCase()}</p>
         <p>Count Available: {count_available}</p>
         <p>Damage: {damage}</p>
     </div>
@@ -32,6 +38,10 @@
 
     .low_opac {
         opacity: 0.4;
+    }
+
+    .red-border {
+        border: 2px solid red;
     }
 
     .stats {

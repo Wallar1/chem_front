@@ -2,7 +2,8 @@
     import { onMount } from 'svelte';
     import { expoOut } from 'svelte/easing';
     import { BalanceEquationScene, end_scene } from './balance_equation.js';
-    import {current_scene, possible_scenes, balance_rotations, compounds_in_scene, sides, need_to_delete, element_counts, game_state, GameStates} from '../../stores.js';
+    import { store } from './store.js';
+    import { global_store } from '../../global_store.js';
     
     let balance_equation_scene;
     onMount(async () => {
@@ -14,7 +15,7 @@
 
     let balanced = false;
     $: {
-        let counts = Object.values($balance_rotations);
+        let counts = Object.values(store.balance_rotations);
         balanced = !counts.length || counts.filter(k => k !== 0).length ? false : true;
         if (balanced){
             game_won_audio.fastSeek(0);
@@ -70,24 +71,24 @@
 
     function add_molecule_to_scene(compound, side) {
         let y = getRandomBetween(-.4, -.8);
-        let x_multiplier = side === sides.LEFT ? -1 : 1;
+        let x_multiplier = side === store.sides.LEFT ? -1 : 1;
         let x = x_multiplier * getRandomBetween(.2, .8);
         balance_equation_scene.add_molecule_in_play(compound, x, y);
     }
 
     function toggle_delete_molecule_from_scene() {
-        $need_to_delete = !$need_to_delete;
+        store.need_to_delete = !store.need_to_delete;
     }
 
     function go_to_timeline(event) {
         leave_scene_audio.fastSeek(0);
         leave_scene_audio.play();
         if (balanced) {
-            end_scene(GameStates.GAMEWON)
+            end_scene(store.GameStates.GAMEWON)
         } else {
-            end_scene(GameStates.GAMELOST)
+            end_scene(store.GameStates.GAMELOST)
         }
-        $current_scene = possible_scenes.Timeline;
+        global_store.current_scene = global_store.possible_scenes.Timeline;
     }
 </script>
 
@@ -98,7 +99,7 @@
     </div>
     <div id='arrow-container'>
         <div id='balance-arrows'>
-            {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
+            {#each Object.entries(store.balance_rotations) as [el, rotation] (el + rotation)}
                 <div class="p-cont">
                     <p class="spaced-p">{el}</p>
                     <p class="spaced-p" in:custom_rotate={{duration: 1000, rotation: rotation}} style="transform: rotate({rotation}deg); color: {calc_color(rotation)}">↑</p>
@@ -110,16 +111,16 @@
     </div>
     <div class={balanced ? "jiggle" : ""} id='submit' on:click|stopPropagation={go_to_timeline}>Submit!</div>
     <div class="add-molecules-container">
-        {#each [sides.LEFT, sides.RIGHT] as side (side)}
+        {#each [store.sides.LEFT, store.sides.RIGHT] as side (side)}
             <div class="{side} add-molecules">
-                {#each $compounds_in_scene[side] as compound (compound)}
+                {#each store.compounds_in_scene[side] as compound (compound)}
                     <div class="add-molecule-button" on:click|stopPropagation={() => add_molecule_to_scene(compound, side)}>
                         <p>{compound}</p>
                     </div>
                 {/each}
             </div>
         {/each}
-        <div class={$need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</div>
+        <div class={store.need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</div>
     </div>
 </div>
 
