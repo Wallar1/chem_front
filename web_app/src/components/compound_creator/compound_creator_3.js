@@ -5,8 +5,8 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { CSVLoader } from '../../../public/lib/csv_molecule_loader.js';
 
 import {get} from 'svelte/store';
-import { creator_moves_remaining, game_state, GameStates } from '../../stores.js';
-import { Compound } from '../../objects.js';
+import { store } from './store.js';
+import { Compound } from '../../compounds.js';
 import { dispose_renderer, dispose_group } from '../../helper_functions.js';
 
 
@@ -62,8 +62,8 @@ function animate() {
 }
 
 function init() {
-    game_state.update(state => {
-        state['state'] = GameStates.STARTING;
+    store.game_state.update(state => {
+        state['state'] = store.GameStates.STARTING;
         return state;
     });
 
@@ -177,8 +177,8 @@ function on_mouse_click(event) {
     let intersects = mouse_ray.intersectObjects( all_scene_objects, false );
     let intersects_with_click = intersects.filter(intersect => intersect.object.onclick) || [];
     if (intersects_with_click.length) {
-        let moves_remaining = get(creator_moves_remaining) - 1
-        creator_moves_remaining.set(moves_remaining)
+        let moves_remaining = get(store.creator_moves_remaining) - 1
+        store.creator_moves_remaining.set(moves_remaining)
         if (moves_remaining <= 0) {
             lose_game()
         }
@@ -208,7 +208,7 @@ function loadMolecule( model ) {
         let csv_atoms = csv.atoms
         let csv_bonds = csv.bonds
         let errors_allowed = Math.ceil(csv_atoms.length / 4)
-        creator_moves_remaining.set(csv_atoms.length + errors_allowed)
+        store.creator_moves_remaining.set(csv_atoms.length + errors_allowed)
 
         const use_normal = true;
         const show_label = false;
@@ -222,8 +222,8 @@ function loadMolecule( model ) {
 }
 
 function win_game() {
-    game_state.update(state => {
-        state['state'] = GameStates.GAMEWON;
+    store.game_state.update(state => {
+        state['state'] = store.GameStates.GAMEWON;
         return state;
     });
 
@@ -232,8 +232,8 @@ function win_game() {
 }
 
 function lose_game() {
-    game_state.update(state => {
-        state['state'] = GameStates.GAMELOST;
+    store.game_state.update(state => {
+        state['state'] = store.GameStates.GAMELOST;
         return state;
     });
 }

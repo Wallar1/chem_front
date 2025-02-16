@@ -3,10 +3,14 @@
     import ScientistCard from './scientist_card.svelte';
 
 
-    import {current_scene, possible_scenes} from '../../stores.js';
+    import { global_store } from '../../global_store.js';
 
     function set_random_lab_scene(e) {
-        $current_scene = Math.random() < 0.5 ? possible_scenes.CompoundCreator : possible_scenes.BalanceEquation;
+        if (Math.random() < 0.5) {
+            global_store.current_scene = global_store.possible_scenes.CompoundCreator;
+        } else {
+            global_store.current_scene = global_store.possible_scenes.BalanceEquation;
+        }
     }
 
     const click_sound = new Audio('https://chem-game.s3.amazonaws.com/sounds/bubble_pop.mp3');

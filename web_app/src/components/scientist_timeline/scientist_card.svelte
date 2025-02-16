@@ -1,16 +1,17 @@
 <script>
-    import {current_scene, possible_scenes, current_scientist, GameStates, game_state} from '../../stores.js';
+    import { store } from './store.js';
+    import { global_store } from '../../global_store.js';
 
     export let scientist;
 
     function start_battle(scientist) {
-        $current_scientist = scientist.name
-        $current_scene = possible_scenes.Battle
+        store.current_scientist = scientist.name
+        global_store.current_scene = global_store.possible_scenes.Battle
 
-        game_state.update(currentState => {
-            currentState.state = GameStates.STARTING;
-            return currentState;
-        });
+        // game_state.update(currentState => {
+        //     currentState.state = GameStates.STARTING;
+        //     return currentState;
+        // });
     }
 
     let hide_image = false;

@@ -1,35 +1,36 @@
 <script>
     import { onMount } from 'svelte';
-    import { creator_moves_remaining, atoms, selected_atom, current_scene, possible_scenes } from '../../stores.js';
+    import { store } from './store.js';
+    import { global_store } from '../../global_store.js';
     import { dispose } from './compound_creator_3.js';
 
     onMount(async () => {
-        $selected_atom = Object.keys($atoms)[0];  // C
+        store.selected_atom = Object.keys(global_store.atoms)[0];  // C
     })
 
 
     function set_selected_atom(symbol) {
-        $selected_atom = symbol;
+        store.selected_atom = symbol;
     }
 
     function go_back_to_timeline() {
         dispose()
-        $current_scene = possible_scenes.Timeline;
+        global_store.current_scene = global_store.possible_scenes.Timeline;
     }
 
 </script>
 
 <div id='sidebar-right'>
     <div id='back-button' on:click|stopPropagation={go_back_to_timeline}><p>Back</p></div>
-    {#each Object.keys($atoms) as atom_symbol (atom_symbol)}
-        <div class={$selected_atom === atom_symbol ? 'select-atom-button highlighted' : 'select-atom-button'}
+    {#each Object.keys(global_store.atoms) as atom_symbol (atom_symbol)}
+        <div class={store.selected_atom === atom_symbol ? 'select-atom-button highlighted' : 'select-atom-button'}
                 on:click|stopPropagation={_ => set_selected_atom(atom_symbol)}>
             <h3>{atom_symbol}</h3>
         </div>
     {/each}
     <div>
         <h4>Moves Remaining:</h4>
-        <h4>{$creator_moves_remaining}</h4>
+        <h4>{store.creator_moves_remaining}</h4>
     </div>
 </div>
 

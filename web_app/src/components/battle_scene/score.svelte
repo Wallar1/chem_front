@@ -1,8 +1,8 @@
 <script>
-    import { player_score } from '../../stores.js';
+    import { store } from './store.js';
 </script>
 
-<div id='score'>{$player_score}</div>
+<div id='score'>{store.player_score}</div>
 
 <style>
     #score{

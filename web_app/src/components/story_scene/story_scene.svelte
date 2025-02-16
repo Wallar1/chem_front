@@ -1,6 +1,6 @@
 
 <script>
-    import { current_scene, possible_scenes } from '../../stores.js';
+    import { global_store } from '../../global_store.js';
 
     const base_path = 'story_pics'
     const blasting_off = 'blasting_off'
@@ -19,7 +19,7 @@
             curr_image = entering_lab
             curr_path = entering_lab_path
         } else if (curr_image === entering_lab) {
-            $current_scene = possible_scenes.Timeline;
+            global_store.current_scene = global_store.possible_scenes.Timeline;
         }
         
         // document.body.appendChild(img1);

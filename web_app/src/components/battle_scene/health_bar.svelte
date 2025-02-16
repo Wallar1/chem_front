@@ -1,9 +1,9 @@
 <script>
-    import { player_health } from '../../stores.js';
+    import { store } from './store.js';
 </script>
 
 <div id='health-bar'>
-    <div class='health' style={`width: ${$player_health}%`}></div>
+    <div class='health' style={`width: ${store.player_health}%`}></div>
 </div>
 
 <style>
