@@ -2,13 +2,16 @@ import * as THREE from 'three';
 import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
+import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 // import * as AmmoLib from '../lib/ammo.js';
 import { Updater } from './objects.js';
 import { create_mine, create_cloud } from './mines_and_clouds.js';
 import { inialize_axe } from './axe.js';
 import { create_lab, add_energy_effect_updater } from './lab.js';
 import { create_enemy } from './enemies.js';
-import { ContollerInputHandler, init_pushed_buttons } from './input_handler_for_controllers.js';
+import { ContollerInputHandler, init_pushed_buttons, handleXRControllerSelect, handleXRControllerSqueeze, handleXRControllerMovement } from './input_handler_for_controllers.js';
 import { store } from './store.js';
 import { earth_radius, initial_object_count, include_enemies, count_to_spawn, seconds_between_spawns } from './constants.js';
 import { create_earth } from './earth.js';
@@ -45,6 +48,9 @@ function initialize_vars(){
     store.labs = [];
     store.lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
     store.current_direction_vector = new THREE.Vector3(0, 0, 0);
+    store.xrSession = null;
+    store.controllers = [];
+    store.controllerGrips = [];
 }
 
 export class BattleScene {
@@ -60,6 +66,14 @@ export class BattleScene {
         
         const canvas_container = document.getElementById('canvas-container')
         canvas_container.appendChild(store.renderer.domElement);
+
+        // Add VR/AR buttons
+        canvas_container.appendChild(VRButton.createButton(store.renderer));
+        canvas_container.appendChild(ARButton.createButton(store.renderer, {
+            requiredFeatures: ['hit-test'],
+            optionalFeatures: ['dom-overlay'],
+            domOverlay: { root: document.body }
+        }));
 
         store.scene = new THREE.Scene()
 
@@ -80,8 +94,146 @@ export class BattleScene {
 
         music.play();
 
+        // Listen for XR session start/end
+        store.renderer.xr.addEventListener('sessionstart', this.onXRSessionStart.bind(this));
+        store.renderer.xr.addEventListener('sessionend', this.onXRSessionEnd.bind(this));
+
         // this.input_handler = new InputHandler();
         this.controller_input_handler = new ContollerInputHandler();
+
+        // Set up XR controllers
+        this.initXRControllers();
+    }
+
+    onXRSessionStart(event) {
+        store.xrSession = store.renderer.xr.getSession();
+        console.log('XR session started:', store.xrSession);
+        
+        // In AR mode, remove the skybox background
+        if (store.xrSession.environmentBlendMode === 'additive') {
+            store.scene.background = null;
+        }
+        
+        // Add controller movement updater
+        let xrMovementUpdater = new Updater(handleXRControllerMovement, {});
+        store.global_updates_queue.push(xrMovementUpdater);
+    }
+
+    onXRSessionEnd() {
+        console.log('XR session ended');
+        store.xrSession = null;
+        
+        // Restore the skybox background when exiting AR
+        store.scene.background = create_background();
+        
+        // Remove controller-specific updaters
+        store.global_updates_queue = store.global_updates_queue.filter(updater => 
+            updater.callback !== handleXRControllerMovement
+        );
+    }
+
+    initXRControllers() {
+        // Controller model factory
+        const controllerModelFactory = new XRControllerModelFactory();
+
+        // Controller 0
+        const controller1 = store.renderer.xr.getController(0);
+        controller1.addEventListener('selectstart', this.onSelectStart);
+        controller1.addEventListener('selectend', this.onSelectEnd);
+        controller1.addEventListener('squeezestart', this.onSqueezeStart);
+        controller1.addEventListener('squeezeend', this.onSqueezeEnd);
+        controller1.addEventListener('connected', (event) => {
+            this.setupController(controller1, event.data);
+        });
+        controller1.addEventListener('disconnected', () => {
+            this.removeController(controller1);
+        });
+        store.scene.add(controller1);
+        store.controllers.push(controller1);
+
+        // Controller 1
+        const controller2 = store.renderer.xr.getController(1);
+        controller2.addEventListener('selectstart', this.onSelectStart);
+        controller2.addEventListener('selectend', this.onSelectEnd);
+        controller2.addEventListener('squeezestart', this.onSqueezeStart);
+        controller2.addEventListener('squeezeend', this.onSqueezeEnd);
+        controller2.addEventListener('connected', (event) => {
+            this.setupController(controller2, event.data);
+        });
+        controller2.addEventListener('disconnected', () => {
+            this.removeController(controller2);
+        });
+        store.scene.add(controller2);
+        store.controllers.push(controller2);
+
+        // Controller grips
+        const controllerGrip1 = store.renderer.xr.getControllerGrip(0);
+        controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+        store.scene.add(controllerGrip1);
+        store.controllerGrips.push(controllerGrip1);
+
+        const controllerGrip2 = store.renderer.xr.getControllerGrip(1);
+        controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+        store.scene.add(controllerGrip2);
+        store.controllerGrips.push(controllerGrip2);
+    }
+
+    setupController(controller, data) {
+        let targetRayMode = data.targetRayMode;
+        let handedness = data.handedness;
+
+        // Add visual aid for targeting
+        const geometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, -1)
+        ]);
+        
+        const line = new THREE.Line(geometry);
+        line.scale.z = 5;
+        controller.add(line);
+        controller.userData.targetRayMode = targetRayMode;
+        controller.userData.handedness = handedness;
+    }
+
+    removeController(controller) {
+        if (controller) {
+            const line = controller.children[0];
+            if (line) {
+                line.geometry.dispose();
+                line.material.dispose();
+            }
+            controller.remove(line);
+        }
+    }
+
+    onSelectStart(event) {
+        const controller = event.target;
+        if (controller.userData.handedness) {
+            store.xrControllerState[controller.userData.handedness].selectPressed = true;
+            handleXRControllerSelect(controller);
+        }
+    }
+
+    onSelectEnd(event) {
+        const controller = event.target;
+        if (controller.userData.handedness) {
+            store.xrControllerState[controller.userData.handedness].selectPressed = false;
+        }
+    }
+
+    onSqueezeStart(event) {
+        const controller = event.target;
+        if (controller.userData.handedness) {
+            store.xrControllerState[controller.userData.handedness].squeezePressed = true;
+            handleXRControllerSqueeze(controller);
+        }
+    }
+
+    onSqueezeEnd(event) {
+        const controller = event.target;
+        if (controller.userData.handedness) {
+            store.xrControllerState[controller.userData.handedness].squeezePressed = false;
+        }
     }
 
     add_event_listeners(){
@@ -125,16 +277,17 @@ export class BattleScene {
     }
 
     animate(){
-        requestAnimationFrame(()=>{
+        store.renderer.setAnimationLoop(() => {
             let _game_state = get(store.game_state)
             if (_game_state['state'] === store.GameStates.GAMELOST || _game_state['state'] === store.GameStates.GAMEWON) {
                 store.global_updates_queue = []
+                store.renderer.setAnimationLoop(null);
                 return;
             }
             if (this.controller_input_handler?.connected) {
                 this.controller_input_handler.update();
             }
-            this.animate()
+            
             store.stats.begin();
             const time_delta = store.global_clock.getDelta();
             store.renderer.render(store.scene, store.camera);
@@ -178,12 +331,16 @@ function create_renderer(){
     store.renderer = new THREE.WebGLRenderer({
         antialias: false,
         powerPreference: "high-performance",
+        alpha: true, // Required for AR
     });
     store.renderer.outputEncoding = THREE.sRGBEncoding;
     store.renderer.shadowMap.enabled = false;
     // store.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     store.renderer.setPixelRatio(window.devicePixelRatio);
     store.renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    // Enable XR features
+    store.renderer.xr.enabled = true;
 }
 
 
@@ -316,6 +473,13 @@ function initialize_in_random_position(type_of_obj) {
 
 
 function create_background(){
+    // In AR mode, we don't use the skybox background as the real world becomes the background
+    // Check if in AR session before applying skybox
+    if (store.renderer.xr.isPresenting && store.renderer.xr.getSession().environmentBlendMode === 'additive') {
+        return null; // No background in AR mode
+    }
+    
+    // Regular skybox for non-AR mode
     const loader = new THREE.CubeTextureLoader();
     loader.setPath( '/sky_box_background/' )
     const texture = loader.load([

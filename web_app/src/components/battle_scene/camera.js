@@ -25,6 +25,9 @@ function get_up_direction_rel_camera_parent(camera_parent, camera, earth) {
 
 
 export function rotate_on_mouse_move(event) {
+    // Skip rotation if in XR mode
+    if (store.renderer.xr.isPresenting) return;
+    
     // calculate mouse position in normalized device coordinates
     // (-1 to +1) for both components
     // mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
@@ -43,16 +46,22 @@ export function rotate_on_mouse_move(event) {
 }
 
 export function rotate_on_controller_move(state, time_delta) {
+    // Skip if in XR mode as XR handles rotation directly
+    if (store.renderer.xr.isPresenting) return { finished: false };
+    
     let event = {
         // TODO: make the multipliers settings that the player can adjust
         movementX: store.pushed_buttons['axes'][left_stick_left_right]['value'] * 20,
         movementY: store.pushed_buttons['axes'][left_stick_up_down]['value'] * -5,
     }
     rotate_on_mouse_move(event);
-    return {finshed: false};
+    return {finished: false};
 }
 
 function rotate_camera(x_radians, y_radians) {
+    // Skip rotation if in XR mode since head movement controls camera
+    if (store.renderer.xr.isPresenting) return;
+    
     /*
     Important note: an object's rotation/quaternion is relative to its parent. It is a local rotation.
     So here I get the vectors from the point of view of the camera parent.
@@ -83,8 +92,8 @@ function rotate_camera(x_radians, y_radians) {
 
 export function create_camera(){
     const fov = 60;
-    const aspect = 1920 / 1080;
-    const near = 1.0;
+    const aspect = window.innerWidth / window.innerHeight;
+    const near = 0.1; // Smaller near plane for VR
     const far = 5000.0;
     store.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     store.camera_parent = new THREE.Object3D();
@@ -93,6 +102,14 @@ export function create_camera(){
     store.camera_parent.add(store.camera);
     store.camera.position.set(0, 0, earth_radius + camera_offset);
     store.camera.rotateX(Math.PI/2);
+    
+    // Set camera to be in control of XR camera group
+    store.renderer?.xr.setReferenceSpaceType('local-floor');
+    
+    // Create a camera helper for debugging
+    // Uncomment this for debugging camera positioning
+    // const helper = new THREE.CameraHelper(store.camera);
+    // store.scene.add(helper);
 }
 
 function movement_curve(x) {
@@ -106,6 +123,11 @@ function movement_curve(x) {
 
 
 export function move_camera(state, time_delta) {
+    // Use a different movement approach when in XR mode
+    if (store.renderer.xr.isPresenting) {
+        return move_camera_xr(state, time_delta);
+    }
+    
     let movement_vector_rel_camera = new THREE.Vector3(0, 0, 0);
     for (const axis of [right_stick_left_right, right_stick_up_down]) {
         let value = store.pushed_buttons['axes'][axis]['value'];
@@ -156,6 +178,45 @@ export function move_camera(state, time_delta) {
     return {finished: false}
 }
 
+// Handle camera movement in XR mode
+export function move_camera_xr(state, time_delta) {
+    if (!store.current_direction_vector || store.current_direction_vector.length() === 0) {
+        return {finished: false};
+    }
+    
+    const earth_world_pos = store.earth.getWorldPosition(new THREE.Vector3());
+    const camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3());
+    let up_rel_parent = new THREE.Vector3().subVectors(earth_world_pos, camera_world_pos).normalize();
+    
+    // In XR, the direction is determined by the controller
+    // The current_direction_vector is set by the handleXRControllerMovement() function
+    
+    const current_dir_to_world = store.camera.localToWorld(store.current_direction_vector.clone());
+    let movement_rel_parent = new THREE.Vector3().subVectors(current_dir_to_world, camera_world_pos).normalize();
+    let rotation_axis = movement_rel_parent.clone().cross(up_rel_parent).normalize();
+
+    // Apply drag to the movement
+    let len = store.current_direction_vector.length();
+    if (len > 1) {
+        let drag = store.current_direction_vector.clone().normalize().multiplyScalar(len/5);
+        store.current_direction_vector.sub(drag);
+    } else {
+        store.current_direction_vector.set(0, 0, 0);
+    }
+    
+    let _max_movement_speed = store.lab_effects['kinetic'] > 0 ? max_movement_speed * 2 : max_movement_speed;
+    let movement_speed = Math.min(store.current_direction_vector.length(), _max_movement_speed);
+
+    // Calculate rotation amount
+    let radians = Math.PI * movement_speed * time_delta / 180;
+    if (radians > 0) {
+        let quaternion = new THREE.Quaternion().setFromAxisAngle(rotation_axis, radians);
+        store.camera_parent.quaternion.premultiply(quaternion);
+        store.camera_parent.updateMatrixWorld(true);
+    }
+    
+    return {finished: false};
+}
 
 function jump_curve(x) {
     // A jump will last pi/3 seconds
@@ -163,6 +224,9 @@ function jump_curve(x) {
 }
 
 export function jump(state, time_delta) {
+    // Skip jumps in XR mode - jumping should be handled by physical movement in VR
+    if (store.renderer.xr.isPresenting) return;
+    
     function jump_helper(func_state, func_time_delta){
         let {finished, initial_time, has_collided} = func_state
         store.camera.position.z = earth_radius + camera_offset + jump_curve(store.global_clock.elapsedTime - initial_time) * 150;
