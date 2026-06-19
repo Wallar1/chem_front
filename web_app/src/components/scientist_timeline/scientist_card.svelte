@@ -15,14 +15,21 @@
     }
 
     let hide_image = false;
+
+    function handle_card_keydown(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            hide_image = !hide_image;
+        }
+    }
 </script>
 
-<div class='card' on:click|stopPropagation={_ => hide_image = !hide_image}>
+<div class='card' role="button" tabindex="0" aria-label="Toggle {scientist.name} card" on:click|stopPropagation={_ => hide_image = !hide_image} on:keydown={handle_card_keydown}>
     <img class:hide_image src="{scientist.src}" alt={scientist.name}>
     <div class='text'>
         <div class='story'>
             <p>{scientist.story}</p>
-            <div class='button' on:click|stopPropagation={(e) => start_battle(scientist)}>Battle!</div>
+            <button type="button" class='button' on:click|stopPropagation={(e) => start_battle(scientist)}>Battle!</button>
         </div>
         <p>{scientist.name}</p>
         <p>{scientist.year}</p>
@@ -90,6 +97,9 @@
         background-color: rgb(200, 248, 185);
         padding: 5px;
         margin: 10px;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
     }
     
     p {

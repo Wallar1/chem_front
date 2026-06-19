@@ -5,7 +5,7 @@ services:
         # image: 627023082830.dkr.ecr.us-west-1.amazonaws.com/chem:latest
         build:
             # you need to have the context outside of web_app so you can copy ./scripts
-            context: ~/toyprojs/chem_front/web_app
+            context: ./web_app
         # binding this volume should make changes in the container appear outside of it
         # volumes:
         #     - type: bind
@@ -30,7 +30,7 @@ services:
     #     container_name: nginx_rev
     #     hostname: nginx_rev
     #     build:
-    #         context: ~/toyprojs/chem_front/nginx
+    #         context: ./nginx
     #     ports:
     #         - "80:80"
     #         - "443:443"

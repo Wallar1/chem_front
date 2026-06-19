@@ -65,13 +65,13 @@
 <div>
     <div id='overlay-to-start' style={show_overlay ? 'display: flex;' : 'display: none;'}>
         {#if get(store.game_state).state === store.GameStates.STARTING}
-            <div class='button' on:click|stopPropagation={handle_click}>Start</div>
+            <button type="button" class='button' on:click|stopPropagation={handle_click}>Start</button>
         {:else if get(store.game_state).state === store.GameStates.GAMELOST}
             <h3>Game Over</h3>
-            <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
+            <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</button>
         {:else if get(store.game_state).state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
-            <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</div>
+            <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</button>
         {/if}
     </div>
     <HealthBar/>
@@ -102,6 +102,9 @@
         padding: 10px;
         font-size: 30px;
         cursor: pointer;
+        background: transparent;
+        color: inherit;
+        font: inherit;
     }
     #cursor {
         position: absolute;

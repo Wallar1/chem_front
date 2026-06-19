@@ -1,11 +1,9 @@
 {
     "npm": {
         "degit": "2.8.4",
-        "requirejs": "2.3.6",
+        "requirejs": "2.3.8",
         "rollup-plugin-polyfill-node": "0.10.2",
-        "svelte": "3.38.3",
-        "svelte-loader": "3.1.2",
-        "three": "0.129.0",
-        "webpack": "5.38.1"
+        "svelte": "5.56.3",
+        "three": "0.129.0"
     }
 }

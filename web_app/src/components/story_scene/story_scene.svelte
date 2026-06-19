@@ -24,9 +24,16 @@
         
         // document.body.appendChild(img1);
     }
+
+    function handle_outer_keydown(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            show_next_image();
+        }
+    }
 </script>
 
-<div id='outer' on:click|stopPropagation={show_next_image}>
+<div id='outer' role="button" tabindex="0" aria-label="Continue story" on:click|stopPropagation={show_next_image} on:keydown={handle_outer_keydown}>
     <img src={curr_path} alt={curr_image} />
 </div>
 
