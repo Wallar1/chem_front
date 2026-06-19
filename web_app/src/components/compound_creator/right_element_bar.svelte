@@ -21,12 +21,12 @@
 </script>
 
 <div id='sidebar-right'>
-    <div id='back-button' on:click|stopPropagation={go_back_to_timeline}><p>Back</p></div>
+    <button type="button" id='back-button' on:click|stopPropagation={go_back_to_timeline}><p>Back</p></button>
     {#each Object.keys(global_store.atoms) as atom_symbol (atom_symbol)}
-        <div class={store.selected_atom === atom_symbol ? 'select-atom-button highlighted' : 'select-atom-button'}
+        <button type="button" class={store.selected_atom === atom_symbol ? 'select-atom-button highlighted' : 'select-atom-button'}
                 on:click|stopPropagation={_ => set_selected_atom(atom_symbol)}>
             <h3>{atom_symbol}</h3>
-        </div>
+        </button>
     {/each}
     <div>
         <h4>Moves Remaining:</h4>
@@ -59,6 +59,11 @@
         justify-content: center;
         align-items: center;
         margin: 15px;
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        padding: 0;
     }
     .highlighted {
         color: green;
@@ -70,10 +75,14 @@
         height: 30px;
         margin-bottom: 200px;
         background-color: #ff6666;
+        border: none;
         border-radius: 5px;
         color: white;
         display: flex;
         justify-content: center;
         align-items: center;
+        cursor: pointer;
+        font: inherit;
+        padding: 0;
     }
 </style>

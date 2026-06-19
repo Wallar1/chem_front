@@ -22,10 +22,10 @@
     <div id='overlay-to-start' style={show_overlay ? 'display: flex;' : 'display: none;'}>
         {#if store.game_state.state === store.GameStates.GAMELOST}
             <h3>You ran out of moves, and the molecule disappeared</h3>
-            <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</div>
+            <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</button>
         {:else if store.game_state.state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
-            <div class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</div>
+            <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</button>
         {/if}
     </div>
     <RightSideBar/>
@@ -57,5 +57,8 @@
         padding: 10px;
         font-size: 30px;
         cursor: pointer;
+        background: transparent;
+        color: inherit;
+        font: inherit;
     }
 </style>

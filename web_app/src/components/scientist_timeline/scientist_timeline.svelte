@@ -1,4 +1,5 @@
 <script>
+    import { onMount } from 'svelte';
     import {scientists} from './scientists.js';
     import ScientistCard from './scientist_card.svelte';
 
@@ -19,15 +20,23 @@
         click_sound.fastSeek(0);
         click_sound.play();
     }
+
+    let timeline_el;
+    onMount(() => {
+        timeline_el.addEventListener('click', play_click_sound);
+        return () => timeline_el.removeEventListener('click', play_click_sound);
+    });
 </script>
-<div on:click={_=> play_click_sound()}>
+<div bind:this={timeline_el}>
     <div class='widescreen'>
         {#each Object.values(scientists) as scientist}
             <ScientistCard scientist={scientist}/>
         {/each}
     </div>
     <div class="lab-equipment">
-        <img src="lab_equipment.webp" on:click|stopPropagation={set_random_lab_scene} alt="lab equipment">
+        <button type="button" class="lab-equipment-button" on:click|stopPropagation={set_random_lab_scene}>
+            <img src="lab_equipment.webp" alt="lab equipment">
+        </button>
     </div>
 </div>
 
@@ -43,5 +52,11 @@
     .lab-equipment {
         display: flex;
         justify-content: center;
+    }
+    .lab-equipment-button {
+        border: none;
+        background: none;
+        padding: 0;
+        cursor: pointer;
     }
 </style>

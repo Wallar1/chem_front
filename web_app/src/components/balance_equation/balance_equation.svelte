@@ -93,7 +93,7 @@
 </script>
 
 <div id='outer'>
-    <div id='back-button' on:click|stopPropagation={_ => {balanced = true; go_to_timeline()}}><p>Back</p></div>
+    <button type="button" id='back-button' on:click|stopPropagation={_ => {balanced = true; go_to_timeline()}}><p>Back</p></button>
     <div id='canvas-container'>
         <canvas></canvas>
     </div>
@@ -109,18 +109,18 @@
         <h1 class="center-arrow">↑</h1>
         <hr class='middle-divider'>
     </div>
-    <div class={balanced ? "jiggle" : ""} id='submit' on:click|stopPropagation={go_to_timeline}>Submit!</div>
+    <button type="button" class={balanced ? "jiggle" : ""} id='submit' on:click|stopPropagation={go_to_timeline}>Submit!</button>
     <div class="add-molecules-container">
         {#each [store.sides.LEFT, store.sides.RIGHT] as side (side)}
             <div class="{side} add-molecules">
                 {#each store.compounds_in_scene[side] as compound (compound)}
-                    <div class="add-molecule-button" on:click|stopPropagation={() => add_molecule_to_scene(compound, side)}>
+                    <button type="button" class="add-molecule-button" on:click|stopPropagation={() => add_molecule_to_scene(compound, side)}>
                         <p>{compound}</p>
-                    </div>
+                    </button>
                 {/each}
             </div>
         {/each}
-        <div class={store.need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</div>
+        <button type="button" class={store.need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</button>
     </div>
 </div>
 
@@ -133,11 +133,15 @@
         width: 50px;
         height: 30px;
         background-color: #ff6666;
+        border: none;
         border-radius: 5px;
         color: white;
         display: flex;
         justify-content: center;
         align-items: center;
+        cursor: pointer;
+        font: inherit;
+        padding: 0;
     }
 
     #outer {
@@ -200,6 +204,9 @@
         left: 90%;
         top: 20px;
         z-index: 3;
+        background: transparent;
+        font: inherit;
+        padding: 0;
     }
 
     #balance-arrows {
@@ -300,6 +307,10 @@
         display: flex;
         justify-content: center;
         align-items: center;
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        padding: 0;
     }
     .add-molecule-button p {
         margin: 10px;
@@ -312,6 +323,9 @@
         position: fixed;
         left: 50%;
         align-content: center;
+        background: transparent;
+        border: none;
+        padding: 0;
     }
     .gray {
         border: none;

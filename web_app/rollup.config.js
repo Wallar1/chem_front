@@ -2,7 +2,7 @@ import svelte from 'rollup-plugin-svelte';
 import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
 import livereload from 'rollup-plugin-livereload';
-import { terser } from 'rollup-plugin-terser';
+import terser from '@rollup/plugin-terser';
 import css from 'rollup-plugin-css-only';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
 
@@ -42,7 +42,10 @@ export default {
 		svelte({
 			compilerOptions: {
 				// enable run-time checks when not in production
-				dev: !production
+				dev: !production,
+				compatibility: {
+					componentApi: 4
+				}
 			}
 		}),
 		// we'll extract any component CSS out into
@@ -56,7 +59,16 @@ export default {
 		// https://github.com/rollup/plugins/tree/master/packages/commonjs
 		resolve({
 			browser: true,
-			dedupe: ['svelte']
+			dedupe: (importee) => importee === 'svelte' || importee.startsWith('svelte/'),
+			exportConditions: [
+				'svelte',
+				'browser',
+				production ? 'production' : 'development',
+				'import',
+				'module',
+				'default'
+			],
+			extensions: ['.mjs', '.js', '.json', '.svelte']
 		}),
 		commonjs(),
 
