@@ -4,15 +4,10 @@
     export let count_available;
     export let is_selected;
 
-    function get_classes() {
-        let classes = 'card'
-        classes += count_available ? ' high_opac' : ' low_opac'
-        classes += is_selected ? ' red-border' : ''
-        return classes
-    }
+    $: card_class = `card${count_available > 0 ? ' high_opac' : ' low_opac'}${is_selected ? ' red-border' : ''}`;
 </script>
 
-<div class={get_classes()}>
+<div class={card_class}>
     <div class='stats'>
         <p>Count Available: {count_available}</p>
         <p>Damage: {damage}</p>
@@ -41,7 +36,8 @@
     }
 
     .red-border {
-        border: 2px solid red;
+        border: 5px solid red;
+        box-shadow: 0 0 12px 3px rgba(255, 0, 0, 0.5);
     }
 
     .stats {

@@ -4,6 +4,7 @@ import { store } from './store.js';
 import { 
     max_movement_speed, camera_offset, earth_radius,
     bottom_button,
+    movement_keys,
     left_stick_left_right,
     left_stick_up_down,
     right_stick_left_right,
@@ -120,13 +121,13 @@ export function move_camera(state, time_delta) {
         let added_direction = direction.clone().multiplyScalar(Math.abs(value) * 10);
         movement_vector_rel_camera.add(added_direction)
     }
-    // movement_keys.forEach(key => {
-    //     if (store.pressed_keys[key]['pressed']) {
-    //         let movement_force_scalar = movement_curve(store.pressed_keys[key]['pressed'])
-    //         let added_direction = store.pressed_keys[key]['direction'].clone().multiplyScalar(movement_force_scalar)
-    //         movement_vector_rel_camera.add(added_direction)
-    //     }
-    // })
+    movement_keys.forEach(key => {
+        if (store.pressed_keys[key]['pressed']) {
+            let movement_force_scalar = movement_curve(store.pressed_keys[key]['pressed'])
+            let added_direction = store.pressed_keys[key]['direction'].clone().multiplyScalar(movement_force_scalar)
+            movement_vector_rel_camera.add(added_direction)
+        }
+    })
 
     const earth_world_pos = store.earth.getWorldPosition(new THREE.Vector3())
     const camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3())
@@ -162,17 +163,18 @@ function jump_curve(x) {
     return Math.sin(3*x)
 }
 
-export function jump(state, time_delta) {
+export function jump() {
+    if (store.jump_in_progress) return;
+    store.jump_in_progress = true;
+
     function jump_helper(func_state, func_time_delta){
         let {finished, initial_time, has_collided} = func_state
         store.camera.position.z = earth_radius + camera_offset + jump_curve(store.global_clock.elapsedTime - initial_time) * 150;
-        // if (!has_collided) {
-        //     has_collided = check_camera_intersects(clouds, 'cloud') | check_camera_intersects(labs, 'lab');
-        // }
         has_collided = check_camera_intersects(store.clouds, 'cloud') | check_camera_intersects(store.labs, 'lab');
 
         if (store.global_clock.elapsedTime - initial_time > Math.PI/3) {
             finished = true
+            store.jump_in_progress = false;
             store.pushed_buttons['buttons'][bottom_button]['pressed'] = 0;
         }
         return {finished, initial_time, has_collided}
