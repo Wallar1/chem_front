@@ -116,7 +116,7 @@ export class ContollerInputHandler {
     act_on_pressed_buttons() {
         for (let i = 0; i < Object.keys(store.pushed_buttons['buttons']).length; i++) {
             if (store.pushed_buttons['buttons'][i]['frames_pressed'] === 0) continue;
-            if (i === bottom_button && store.pushed_buttons['buttons'][i]['frames_pressed'] === 1) {
+            if (i === bottom_button && store.pushed_buttons['buttons'][i]['frames_pressed'] === 1 && !store.jump_in_progress) {
                 jump();
             } else if ([right_lower_trigger, right_upper_trigger, left_lower_trigger, left_upper_trigger].indexOf(i) > -1) {
                 let keys_to_compound = get(store.key_to_compound)

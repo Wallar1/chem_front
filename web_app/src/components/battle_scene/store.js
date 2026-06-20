@@ -8,17 +8,23 @@ import {
     right_lower_trigger,
 } from './constants.js';
 const key_to_compound = writable({
+    '1': 'H2',
+    '2': 'CH4',
+    '3': 'NH3',
+    '4': 'CN',
+    '5': 'H2O',
     [right_upper_trigger]: 'CH4',
     [left_lower_trigger]: 'NH3',
     [right_lower_trigger]: 'CN',
     [left_upper_trigger]: 'H2O'
 })
-// const selected_compound_index = writable('1');
+const selected_compound_index = writable('1');
 
 
 const GameStates = Object.freeze({
     'STARTING': Symbol('starting'),
     'PLAYING': Symbol('playing'),
+    'PAUSED': Symbol('paused'),
     'GAMELOST': Symbol('game_over'),
     'GAMEWON': Symbol('game won'),
 });
@@ -47,7 +53,7 @@ function create_current_counts_store() {
                 }
                 counts[element]['count'] += added_amount;
                 counts[element]['last_updated'] = performance.now();
-                return counts;
+                return { ...counts };
             });
         },
         set: (element, new_count) => {
@@ -57,7 +63,7 @@ function create_current_counts_store() {
                 }
                 counts[element]['count'] = new_count;
                 counts[element]['last_updated'] = performance.now();
-                return counts
+                return { ...counts };
             })
         },
         reset: () => {
@@ -131,11 +137,14 @@ let lab_effects = undefined;
 let current_direction_vector = undefined;
 
 let pushed_buttons = undefined;
+let pressed_keys = undefined;
+let jump_in_progress = false;
+let battle_scene = null;
 
 
 
 export const store = {
-    // selected_compound_index,
+    selected_compound_index,
     key_to_compound,
     game_state,
     GameStates,
@@ -167,4 +176,12 @@ export const store = {
     lab_effects,
     current_direction_vector,
     pushed_buttons,
+    pressed_keys,
+    jump_in_progress,
+    get battle_scene() {
+        return battle_scene;
+    },
+    set battle_scene(instance) {
+        battle_scene = instance;
+    },
 }

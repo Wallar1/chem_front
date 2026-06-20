@@ -8,9 +8,10 @@ import { create_mine, create_cloud } from './mines_and_clouds.js';
 import { inialize_axe } from './axe.js';
 import { create_lab, add_energy_effect_updater } from './lab.js';
 import { create_enemy } from './enemies.js';
+import { InputHandler, init_pressed_keys } from './input_handler.js';
 import { ContollerInputHandler, init_pushed_buttons } from './input_handler_for_controllers.js';
 import { store } from './store.js';
-import { earth_radius, initial_object_count, include_enemies, count_to_spawn, seconds_between_spawns } from './constants.js';
+import { earth_radius, initial_object_count, include_enemies, count_to_spawn, seconds_between_spawns, pause_keys } from './constants.js';
 import { create_earth } from './earth.js';
 import { create_camera, move_camera, rotate_on_controller_move } from './camera.js';
 import { create_gun } from './gun.js';
@@ -45,6 +46,7 @@ function initialize_vars(){
     store.labs = [];
     store.lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
     store.current_direction_vector = new THREE.Vector3(0, 0, 0);
+    store.jump_in_progress = false;
 }
 
 export class BattleScene {
@@ -56,6 +58,7 @@ export class BattleScene {
         inialize_axe();
         create_gun();
         init_stats();
+        init_pressed_keys();
         init_pushed_buttons();
         
         const canvas_container = document.getElementById('canvas-container')
@@ -80,48 +83,96 @@ export class BattleScene {
 
         music.play();
 
-        // this.input_handler = new InputHandler();
+        this.input_handler = new InputHandler();
         this.controller_input_handler = new ContollerInputHandler();
+        store.battle_scene = this;
+    }
+
+    pause() {
+        if (get(store.game_state).state !== store.GameStates.PLAYING) return;
+        store.game_state.update(currentState => {
+            currentState.state = store.GameStates.PAUSED;
+            return currentState;
+        });
+        document.exitPointerLock();
+        this.remove_event_listeners();
+        this.add_pause_listener();
+    }
+
+    unpause() {
+        if (get(store.game_state).state !== store.GameStates.PAUSED) return;
+        store.game_state.update(currentState => {
+            currentState.state = store.GameStates.PLAYING;
+            return currentState;
+        });
+        this.remove_pause_listener();
+        this.add_event_listeners();
+        const canvas = document.getElementById('canvas-container')?.firstChild;
+        canvas?.requestPointerLock?.({ unadjustedMovement: true });
+    }
+
+    add_pause_listener() {
+        this._on_pause_keydown = (e) => {
+            if (pause_keys.includes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                this.unpause();
+            }
+        };
+        document.addEventListener('keydown', this._on_pause_keydown);
+    }
+
+    remove_pause_listener() {
+        if (this._on_pause_keydown) {
+            document.removeEventListener('keydown', this._on_pause_keydown);
+            this._on_pause_keydown = null;
+        }
     }
 
     add_event_listeners(){
-        // window.addEventListener('resize', resize_window, false);
-        // window.addEventListener('mousemove', this.input_handler.on_mouse_move, false)
-        // window.addEventListener('click', this.input_handler.on_mouse_click, false)
-        // window.addEventListener('keydown', this.input_handler.on_keydown)
-        // document.addEventListener('keyup', this.input_handler.on_keyup)
+        this._on_mouse_move = this.input_handler.on_mouse_move.bind(this.input_handler);
+        this._on_mouse_click = this.input_handler.on_mouse_click.bind(this.input_handler);
+        this._on_keydown = this.input_handler.on_keydown.bind(this.input_handler);
+        this._on_keyup = this.input_handler.on_keyup.bind(this.input_handler);
 
-        window.addEventListener("gamepadconnected", (e) => {
-            console.log(e)
-            console.log(
-                e.gamepad.index,
-                e.gamepad.id,
-                e.gamepad.buttons,
-                e.gamepad.axes,
-            );
+        window.addEventListener('resize', resize_window, false);
+        window.addEventListener('mousemove', this._on_mouse_move, false);
+        window.addEventListener('click', this._on_mouse_click, false);
+        window.addEventListener('keydown', this._on_keydown, true);
+        document.addEventListener('keyup', this._on_keyup);
+
+        if (!this.move_camera_updater_added) {
+            store.global_updates_queue.push(new Updater(move_camera, {}));
+            this.move_camera_updater_added = true;
+        }
+
+        this._on_gamepad_connected = (e) => {
             this.controller_input_handler.connect(e);
-            let move_camera_updater = new Updater(move_camera, {})
-            store.global_updates_queue.push(move_camera_updater)
-            let rotate_camera_updater = new Updater(rotate_on_controller_move, {})
-            store.global_updates_queue.push(rotate_camera_updater);
-        });
+            if (!this.rotate_camera_updater_added) {
+                store.global_updates_queue.push(new Updater(rotate_on_controller_move, {}));
+                this.rotate_camera_updater_added = true;
+            }
+        };
+        this._on_gamepad_disconnected = () => {
+            this.controller_input_handler.disconnect();
+        };
+        window.addEventListener('gamepadconnected', this._on_gamepad_connected);
+        window.addEventListener('gamepaddisconnected', this._on_gamepad_disconnected);
     }
 
     remove_event_listeners(){
-        // window.removeEventListener('resize', resize_window, false);
-        // window.removeEventListener('mousemove', this.input_handler.on_mouse_move, false)
-        // window.removeEventListener('click', this.input_handler.on_mouse_click, false)
-        // window.removeEventListener('keydown', this.input_handler.on_keydown)
-        // document.removeEventListener('keyup', this.input_handler.on_keyup)
+        window.removeEventListener('resize', resize_window, false);
+        window.removeEventListener('mousemove', this._on_mouse_move, false);
+        window.removeEventListener('click', this._on_mouse_click, false);
+        window.removeEventListener('keydown', this._on_keydown, true);
+        document.removeEventListener('keyup', this._on_keyup);
 
+        window.removeEventListener('gamepadconnected', this._on_gamepad_connected);
+        window.removeEventListener('gamepaddisconnected', this._on_gamepad_disconnected);
+    }
 
-        window.addEventListener("gamepaddisconnected", (e) => {
-            console.log(
-                "Gamepad disconnected from index %d: %s",
-                e.gamepad.index,
-                e.gamepad.id,
-            );
-        });
+    destroy() {
+        this.remove_event_listeners();
+        this.remove_pause_listener();
+        store.battle_scene = null;
     }
 
     animate(){
@@ -129,6 +180,11 @@ export class BattleScene {
             let _game_state = get(store.game_state)
             if (_game_state['state'] === store.GameStates.GAMELOST || _game_state['state'] === store.GameStates.GAMEWON) {
                 store.global_updates_queue = []
+                return;
+            }
+            if (_game_state['state'] === store.GameStates.PAUSED) {
+                store.renderer.render(store.scene, store.camera);
+                this.animate();
                 return;
             }
             if (this.controller_input_handler?.connected) {

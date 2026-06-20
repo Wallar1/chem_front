@@ -1,0 +1,17 @@
+---
+description: Run npm install, build, and tests inside Docker (Node 22), never on host Node
+alwaysApply: true
+---
+
+# Docker for Node/npm
+
+This project uses Svelte 5 and requires Node 22+. The host shell may have Node 10.x.
+
+**Never run `node`, `npm`, or `npx` on the host** for `web_app/`. Always use Docker from the repo root:
+
+- `docker-compose run --rm chem npm install`
+- `docker-compose run --rm chem npm run build`
+- `docker-compose run --rm chem npm run <script>` (including tests when added)
+- `docker-compose up` for dev
+
+See `.cursor/skills/docker-node/SKILL.md` for full workflow and fallback commands.
