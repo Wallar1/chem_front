@@ -19,7 +19,7 @@
             curr_image = entering_lab
             curr_path = entering_lab_path
         } else if (curr_image === entering_lab) {
-            global_store.current_scene = global_store.possible_scenes.Timeline;
+            global_store.current_scene.set(global_store.possible_scenes.Timeline);
         }
         
         // document.body.appendChild(img1);

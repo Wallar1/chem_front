@@ -5,17 +5,26 @@
     "build": "rollup -c",
     "comment on dev": "remember that npm run dev actually calls serve inside rollup.config, which spawns npm start --dev",
     "dev": "rollup -c -w",
-    "start": "sirv public --port 8082"
+    "start": "sirv public --port 8082",
+    "comment on test": "run in Docker from repo root: docker-compose run --rm chem npm test",
+    "test": "vitest run --config vitest.config.mjs",
+    "test:watch": "vitest --config vitest.config.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^16.0.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/svelte": "^5.2.7",
+    "jsdom": "^26.0.0",
     "rollup": "^2.3.4",
     "rollup-plugin-css-only": "^3.1.0",
     "rollup-plugin-livereload": "^2.0.0",
     "rollup-plugin-svelte": "^7.2.0",
     "@rollup/plugin-terser": "^1.0.0",
-    "svelte": "^5.56.3"
+    "svelte": "^5.56.3",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.8"
   },
   "dependencies": {
     "degit": "^2.8.4",

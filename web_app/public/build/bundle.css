@@ -1,69 +1,38 @@
 
+	.battle-preload.svelte-1n46o8q {
+		position: fixed;
+		left: 50%;
+		bottom: 24px;
+		transform: translateX(-50%);
+		width: min(420px, calc(100vw - 32px));
+		padding: 12px 16px;
+		background: rgba(0, 0, 0, 0.82);
+		border: 1px solid #a2a2a2;
+		border-radius: 8px;
+		color: #a2a2a2;
+		z-index: 1000;
+		box-sizing: border-box;
+	}
 
-    #overlay-to-start.svelte-3wqs9w,
-    #overlay-paused.svelte-3wqs9w {
-        position: absolute;
-        display: flex;
-        width: 100%;
-        height: 100%;
-        background-color: black;
-        opacity: 0.8;
-        z-index: 2;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        color: #a2a2a2;
-    }
-    #overlay-paused.svelte-3wqs9w {
-        opacity: 0.65;
-        pointer-events: none;
-    }
-    #overlay-to-start.svelte-3wqs9w .button:where(.svelte-3wqs9w) {
-        border: 1px solid white;
-        border-radius: 8px;
-        padding: 10px;
-        font-size: 30px;
-        cursor: pointer;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-    }
-    #overlay-paused.svelte-3wqs9w h2:where(.svelte-3wqs9w) {
-        font-size: 48px;
-        margin-bottom: 16px;
-    }
-    #overlay-paused.svelte-3wqs9w p:where(.svelte-3wqs9w) {
-        font-size: 24px;
-    }
-    #cursor.svelte-3wqs9w {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background-color: white;
-        z-index: 3;
-    }
+	.battle-preload-label.svelte-1n46o8q {
+		margin: 0 0 8px;
+		font-size: 14px;
+		text-align: center;
+	}
 
-    .widescreen.svelte-nvcuj9 {
-        width: 100vw;
-        height: 40vh;
-        margin-top: 100px;
-        display: flex;
-        overflow-x: scroll;
-        padding-top: 10px;
-    }
-    .lab-equipment.svelte-nvcuj9 {
-        display: flex;
-        justify-content: center;
-    }
-    .lab-equipment-button.svelte-nvcuj9 {
-        border: none;
-        background: none;
-        padding: 0;
-        cursor: pointer;
-    }
+	.battle-preload-track.svelte-1n46o8q {
+		height: 8px;
+		background: rgba(255, 255, 255, 0.15);
+		border-radius: 4px;
+		overflow: hidden;
+	}
+
+	.battle-preload-fill.svelte-1n46o8q {
+		height: 100%;
+		background: #ffffff;
+		border-radius: 4px;
+		transition: width 0.2s ease;
+	}
 
     #outer.svelte-1hxind {
         background-color: #050505;
@@ -92,6 +61,25 @@
         background: transparent;
         color: inherit;
         font: inherit;
+    }
+
+    .widescreen.svelte-nvcuj9 {
+        width: 100vw;
+        height: 40vh;
+        margin-top: 100px;
+        display: flex;
+        overflow-x: scroll;
+        padding-top: 10px;
+    }
+    .lab-equipment.svelte-nvcuj9 {
+        display: flex;
+        justify-content: center;
+    }
+    .lab-equipment-button.svelte-nvcuj9 {
+        border: none;
+        background: none;
+        padding: 0;
+        cursor: pointer;
     }
 
     #outer.svelte-12gfk6n {
@@ -315,41 +303,100 @@
     }
 
 
-    #health-bar.svelte-lxc4va {
-		height: 50px;
-		width: 300px;
-		box-sizing: border-box;
-		position: absolute;
-		left: 30px;
-		top: 30px;
-		float: right;
-		display: flex;
-		justify-content: left;
-		align-items: center;
-        background-color: red;
-        z-index: 2;
-	}
-
-    #health-bar.svelte-lxc4va .health:where(.svelte-lxc4va) {
-        height: 100%;
+    #overlay-to-start.svelte-3wqs9w,
+    #overlay-paused.svelte-3wqs9w {
+        position: absolute;
+        display: flex;
         width: 100%;
-        background-color: rgb(62, 255, 62);
+        height: 100%;
+        background-color: black;
+        opacity: 0.8;
+        z-index: 2;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: #a2a2a2;
+    }
+    #overlay-paused.svelte-3wqs9w {
+        opacity: 0.65;
+        pointer-events: none;
+    }
+    #overlay-to-start.svelte-3wqs9w .button:where(.svelte-3wqs9w) {
+        border: 1px solid white;
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 30px;
+        cursor: pointer;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+    }
+    #overlay-paused.svelte-3wqs9w h2:where(.svelte-3wqs9w) {
+        font-size: 48px;
+        margin-bottom: 16px;
+    }
+    #overlay-paused.svelte-3wqs9w p:where(.svelte-3wqs9w) {
+        font-size: 24px;
+    }
+    #cursor.svelte-3wqs9w {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: white;
+        z-index: 3;
     }
 
-    #score.svelte-1p9v040{
-		height: 50px;
-		width: 50px;
-        font-size: 30px;
+    #sidebar-right.svelte-u81rju {
+		height: 100vh;
+		width: 150px;
+		background-color: white;
+		box-sizing: border-box;
 		position: absolute;
-		left: 30px;
-		top: 80px;
+		opacity: .7;
+		top: 0px;
+		left: calc(100vw - 150px);
 		float: right;
-		display: flex;
-		justify-content: space-around;
-		align-items: center;
-        color: white;
+        padding: 20px;
         z-index: 2;
 	}
+    .select-atom-button.svelte-u81rju {
+        height: 40px;
+        width: 100px;
+        border: 1px solid black;
+        border-radius: 5px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 15px;
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        padding: 0;
+    }
+    .highlighted.svelte-u81rju {
+        color: green;
+        border: 1px solid green;
+        box-shadow: 0 0 5px 5px green;
+    }
+    #back-button.svelte-u81rju {
+        width: 100%;
+        height: 30px;
+        margin-bottom: 200px;
+        background-color: #ff6666;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        font: inherit;
+        padding: 0;
+    }
 
     .card.svelte-xbmljw{
         min-width: 300px;
@@ -420,53 +467,25 @@
         margin: 0 0 10px 0;
     }
 
-    #sidebar-right.svelte-u81rju {
-		height: 100vh;
-		width: 150px;
-		background-color: white;
+    #health-bar.svelte-lxc4va {
+		height: 50px;
+		width: 300px;
 		box-sizing: border-box;
 		position: absolute;
-		opacity: .7;
-		top: 0px;
-		left: calc(100vw - 150px);
+		left: 30px;
+		top: 30px;
 		float: right;
-        padding: 20px;
+		display: flex;
+		justify-content: left;
+		align-items: center;
+        background-color: red;
         z-index: 2;
 	}
-    .select-atom-button.svelte-u81rju {
-        height: 40px;
-        width: 100px;
-        border: 1px solid black;
-        border-radius: 5px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin: 15px;
-        background: transparent;
-        cursor: pointer;
-        font: inherit;
-        color: inherit;
-        padding: 0;
-    }
-    .highlighted.svelte-u81rju {
-        color: green;
-        border: 1px solid green;
-        box-shadow: 0 0 5px 5px green;
-    }
-    #back-button.svelte-u81rju {
+
+    #health-bar.svelte-lxc4va .health:where(.svelte-lxc4va) {
+        height: 100%;
         width: 100%;
-        height: 30px;
-        margin-bottom: 200px;
-        background-color: #ff6666;
-        border: none;
-        border-radius: 5px;
-        color: white;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        cursor: pointer;
-        font: inherit;
-        padding: 0;
+        background-color: rgb(62, 255, 62);
     }
 
     #spacer.svelte-iij2bz {
@@ -500,6 +519,21 @@
     .highlight.svelte-iij2bz {
         animation: svelte-iij2bz-highlight-background 1s ease forwards;
     }
+
+    #score.svelte-1p9v040{
+		height: 50px;
+		width: 50px;
+        font-size: 30px;
+		position: absolute;
+		left: 30px;
+		top: 80px;
+		float: right;
+		display: flex;
+		justify-content: space-around;
+		align-items: center;
+        color: white;
+        z-index: 2;
+	}
 
     #sidebar-bottom.svelte-17epzu7 {
 		height: 250px;

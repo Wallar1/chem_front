@@ -88,7 +88,7 @@
         } else {
             end_scene(store.GameStates.GAMELOST)
         }
-        global_store.current_scene = global_store.possible_scenes.Timeline;
+        global_store.current_scene.set(global_store.possible_scenes.Timeline);
     }
 </script>
 

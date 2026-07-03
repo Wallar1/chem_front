@@ -1,9 +1,12 @@
 <script>
     import { store } from './store.js';
+
+    let player_health = store.player_health;
+    $: health_percent = ($player_health / store.initial_player_health) * 100;
 </script>
 
 <div id='health-bar'>
-    <div class='health' style={`width: ${store.player_health}%`}></div>
+    <div class='health' style={`width: ${health_percent}%`}></div>
 </div>
 
 <style>

@@ -5,8 +5,8 @@
     export let scientist;
 
     function start_battle(scientist) {
-        store.current_scientist = scientist.name
-        global_store.current_scene = global_store.possible_scenes.Battle
+        store.current_scientist.set(scientist.name);
+        global_store.current_scene.set(global_store.possible_scenes.Battle);
 
         // game_state.update(currentState => {
         //     currentState.state = GameStates.STARTING;

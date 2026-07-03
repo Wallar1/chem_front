@@ -22,6 +22,7 @@ Run from the **repository root** (`chem_front/`), where `docker-compose.yml` liv
 | Install deps | `docker-compose run --rm chem npm install` |
 | Build | `docker-compose run --rm chem npm run build` |
 | Dev server | `docker-compose up` (runs `npm run dev` in the container) |
+| Tests | `docker-compose run --rm chem npm test` |
 | Any npm script | `docker-compose run --rm chem npm run <script>` |
 | Rebuild image | `docker-compose build chem` |
 
@@ -35,7 +36,8 @@ Container details:
 
 1. After changing `package.json` or `package-lock.json`, run install in Docker:
    `docker-compose run --rm chem npm install`
-2. To verify changes, build in Docker:
+2. To verify changes, run tests and/or build in Docker:
+   `docker-compose run --rm chem npm test`
    `docker-compose run --rm chem npm run build`
 3. If Docker commands fail because the image is stale, rebuild:
    `docker-compose build chem`
@@ -62,6 +64,6 @@ Prefer `docker-compose run --rm chem` when possible — it matches the project's
 
 ## Tests
 
-No test script is defined in `package.json` today. When one is added, run it the same way:
+Vitest smoke tests live under `web_app/src/**/*.test.js`. They mount key Svelte components (including Battle scene) in jsdom to catch store subscription errors and basic scene switching.
 
 `docker-compose run --rm chem npm test`

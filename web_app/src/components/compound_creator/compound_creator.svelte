@@ -9,21 +9,25 @@
         new CompoundCreator();
     })
 
-    $: show_overlay = (store.game_state.state === store.GameStates.GAMELOST ||
-                       store.game_state.state === store.GameStates.GAMEWON);
+    let game_state_store = store.game_state;
+    $: game_state = $game_state_store;
+    $: show_overlay = (
+        game_state.state === store.GameStates.GAMELOST ||
+        game_state.state === store.GameStates.GAMEWON
+    );
 
     function go_back_to_timeline() {
         dispose()
-        global_store.current_scene = global_store.possible_scenes.Timeline;
+        global_store.current_scene.set(global_store.possible_scenes.Timeline);
     }
 </script>
 
 <div id='outer'>
     <div id='overlay-to-start' style={show_overlay ? 'display: flex;' : 'display: none;'}>
-        {#if store.game_state.state === store.GameStates.GAMELOST}
+        {#if game_state.state === store.GameStates.GAMELOST}
             <h3>You ran out of moves, and the molecule disappeared</h3>
             <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</button>
-        {:else if store.game_state.state === store.GameStates.GAMEWON}
+        {:else if game_state.state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
             <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</button>
         {/if}

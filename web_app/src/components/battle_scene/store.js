@@ -34,6 +34,12 @@ const game_state = writable({
     'level': 1,
 });
 
+const battle_assets_preload = writable({
+    loaded: 0,
+    total: 0,
+    complete: false,
+});
+
 
 let initial_counts = {
     'H': {
@@ -110,7 +116,7 @@ const element_colors = { h: [ 20, 20, 20 ], he: [ 217, 255, 255 ], li: [ 204, 12
 
 let global_updates_queue = [];
 const initial_player_health = 100;
-let player_health = initial_player_health;
+const player_health = writable(initial_player_health);
 let player_is_invincible = false;
 let player_score = 0
 let global_clock = new THREE.Clock()
@@ -143,10 +149,13 @@ let battle_scene = null;
 
 
 
+export { battle_assets_preload };
+
 export const store = {
     selected_compound_index,
     key_to_compound,
     game_state,
+    battle_assets_preload,
     GameStates,
     current_element_counts,
     max_number_possible_for_each_compound,

@@ -16,6 +16,18 @@ var audio1 = new Audio('https://chem-game.s3.amazonaws.com/sounds/Digging A 10.w
 var audio2 = new Audio('https://chem-game.s3.amazonaws.com/sounds/Digging A 04.wav')
 var last_played_axe_hit = audio2;
 
+function play_axe_hit_sound() {
+    if (last_played_axe_hit === audio2) {
+        audio1.fastSeek(0)
+        audio1.play()
+        last_played_axe_hit = audio1;
+    } else {
+        audio2.fastSeek(0)
+        audio2.play()
+        last_played_axe_hit = audio2;
+    }
+}
+
 const axe_geometry = new THREE.CylinderGeometry( 5, 5, 100, 10 );
 const axe_material = new THREE.MeshToonMaterial( {color: 0x7a5930} );
 
@@ -33,14 +45,20 @@ export class Axe extends THREE.Object3D {
 
     try_to_swing() {
         if (!this.is_swinging) {
-            let swing_axe_updater = new Updater(this.swing_axe(), {finished: false, total_radians: 0, direction: -1, has_collided: false})
+            let swing_axe_updater = new Updater(this.swing_axe(), {
+                finished: false,
+                total_radians: 0,
+                direction: -1,
+                has_collided: false,
+                hit_enemies: new Set(),
+            })
             store.global_updates_queue.push(swing_axe_updater)
         }
     }
 
     swing_axe() {
         return (state, time_delta) => {
-            let {total_radians, finished, direction, has_collided} = state
+            let {total_radians, finished, direction, has_collided, hit_enemies} = state
             this.is_swinging = true;
             let change_direction = false;
         
@@ -70,17 +88,19 @@ export class Axe extends THREE.Object3D {
                     let mine = collisions[i];
                     mine.collide(store.axe);
                     has_collided = true;
-                    // alternate the axe hit sounds
-                    if (last_played_axe_hit === audio2) {
-                        audio1.fastSeek(0)
-                        audio1.play()
-                        last_played_axe_hit = audio1;
-                    } else {
-                        audio2.fastSeek(0)
-                        audio2.play()
-                        last_played_axe_hit = audio2;
-                    }
+                    play_axe_hit_sound();
                 }
+            }
+
+            let enemy_collisions = store.axe.check_collisions(store.enemies);
+            for (let i = 0; i < enemy_collisions.length; i++) {
+                let enemy = enemy_collisions[i];
+                if (hit_enemies.has(enemy)) {
+                    continue;
+                }
+                enemy.hit_by_axe();
+                hit_enemies.add(enemy);
+                play_axe_hit_sound();
             }
         
             if (finished) {
@@ -89,7 +109,7 @@ export class Axe extends THREE.Object3D {
             if (change_direction) {
                 direction = 1;
             }
-            return {total_radians, finished, direction, has_collided}
+            return {total_radians, finished, direction, has_collided, hit_enemies}
         }
     }
 

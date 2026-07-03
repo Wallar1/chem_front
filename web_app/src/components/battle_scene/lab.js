@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { store } from './store.js';
 import { Updater, GameObj, proxy_handler } from './objects';
 import { get_font_text_mesh } from '../../helper_functions.js';
+import { earth_radius } from './constants.js';
 
 
 // For now, all of the effects will last 10 seconds. This can be changed later
@@ -91,6 +92,22 @@ export function create_lab(arg_dict) {
     let proxy = new Proxy(lab, proxy_handler('mesh'));
     // proxy.position.copy(arg_dict['position'])
     return proxy
+}
+
+const LAB_SURFACE_Z_OFFSET = 40;
+
+export function spawn_lab_at_surface_quaternion(surface_quaternion) {
+    let lab = create_lab();
+    lab.keepTextRotatedWithCamera();
+    let parent = new THREE.Object3D();
+    lab.add_to(parent);
+    store.earth.add(parent);
+    lab.position.set(0, 0, earth_radius + LAB_SURFACE_Z_OFFSET);
+    parent.quaternion.copy(surface_quaternion);
+    lab.initial_rotation();
+    store.labs.push(lab);
+    add_energy_effect_updater(lab);
+    parent.updateMatrixWorld(true);
 }
 
 

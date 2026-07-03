@@ -1,5 +1,4 @@
 <script>
-    import { get } from 'svelte/store';
     import { store } from './store.js';
     import { fade } from 'svelte/transition';
 
@@ -8,12 +7,13 @@
         return performance.now() - last_updated < 1000;
     }
 
-    let el_counts = store.current_element_counts
+    let el_counts_store = store.current_element_counts;
+    $: el_counts = $el_counts_store;
 </script>
 
 <div id='sidebar-right'>
     <div id='spacer'></div>
-    {#each Object.entries($el_counts) as [el, {count, last_updated}] (el + count)}
+    {#each Object.entries(el_counts) as [el, {count, last_updated}] (el + count)}
         <div in:fade={{ duration: 300 }} class='el-count' class:highlight={should_highlight(last_updated)}>
             <p>{el}: {count}</p>
         </div>

@@ -7,8 +7,7 @@ import {
     movement_keys,
     compound_selection_keys,
     space,
-    tab,
-    meta_key,
+    axe_swing_key,
     pause_keys,
 } from './constants.js';
 
@@ -45,15 +44,28 @@ function is_playing() {
     return get(store.game_state).state === store.GameStates.PLAYING;
 }
 
-function should_block_browser_shortcut(e) {
-    if (e.key === meta_key) {
-        return false;
-    }
-    return e.metaKey || e.ctrlKey || e.altKey;
-}
-
 function is_pause_key(e) {
     return pause_keys.includes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey;
+}
+
+function swallow_keyboard_event(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+    }
+}
+
+export function reset_pressed_keys() {
+    if (!store.pressed_keys) return;
+    for (const key of movement_keys) {
+        if (store.pressed_keys[key]) {
+            store.pressed_keys[key]['pressed'] = 0;
+        }
+    }
+    if (store.pressed_keys[space]) {
+        store.pressed_keys[space]['pressed'] = 0;
+    }
 }
 
 
@@ -92,21 +104,13 @@ export class InputHandler {
 
         if (is_pause_key(e)) {
             store.battle_scene?.pause();
-            e.preventDefault();
+            swallow_keyboard_event(e);
             return;
         }
 
-        if (should_block_browser_shortcut(e)) {
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
         if (compound_selection_keys.includes(e.key)) {
             store.selected_compound_index.set(e.key)
-        } else if (e.key === tab || e.key === meta_key) {
+        } else if (e.key === axe_swing_key) {
             store.axe.try_to_swing();
         } else if (['ArrowRight', 'ArrowLeft'].indexOf(e.key) > -1) {
             let _selected_compound_index = parseInt(get(store.selected_compound_index))
@@ -125,15 +129,19 @@ export class InputHandler {
                 jump();
             }
         }
+
+        swallow_keyboard_event(e);
     }
 
     on_keyup(e) {
         if (!is_playing()) return;
-        e.stopPropagation()
+
         if (movement_keys.includes(e.key)) {
             store.pressed_keys[e.key]['pressed'] = 0;
         } else if (e.key === space) {
             store.pressed_keys[space]['pressed'] = 0;
         }
+
+        swallow_keyboard_event(e);
     }
 }
