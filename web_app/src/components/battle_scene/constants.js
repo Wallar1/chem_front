@@ -24,8 +24,7 @@ export const burn_pulse_damage = 15;
 export const movement_keys = ['w', 's', 'a', 'd']
 export const compound_selection_keys = ['1', '2', '3', '4', '5']
 export const space = ' '
-export const tab = 'Tab'
-export const meta_key = 'Meta'
+export const axe_swing_key = 'v'
 export const pause_keys = ['Escape', 'p', 'P']
 
 

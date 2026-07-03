@@ -8,9 +8,9 @@
 
     function set_random_lab_scene(e) {
         if (Math.random() < 0.5) {
-            global_store.current_scene = global_store.possible_scenes.CompoundCreator;
+            global_store.current_scene.set(global_store.possible_scenes.CompoundCreator);
         } else {
-            global_store.current_scene = global_store.possible_scenes.BalanceEquation;
+            global_store.current_scene.set(global_store.possible_scenes.BalanceEquation);
         }
     }
 

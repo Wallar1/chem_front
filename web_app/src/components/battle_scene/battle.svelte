@@ -7,6 +7,7 @@
     import Score from './score.svelte';
     import { store } from './store.js';
     import { global_store } from '../../global_store.js';
+    import { reset_pressed_keys } from './input_handler.js';
     
     var battle_scene;
     onMount(async () => {
@@ -40,6 +41,7 @@
 
     $: if (show_start_overlay) {
         document.exitPointerLock();
+        reset_pressed_keys();
         battle_scene?.remove_event_listeners();
         battle_scene?.remove_pause_listener?.();
     }
@@ -64,7 +66,11 @@
 
     function go_back_to_timeline() {
         battle_scene?.destroy?.();
-        global_store.current_scene = global_store.possible_scenes.Story;
+        store.game_state.update(currentState => {
+            currentState.state = store.GameStates.STARTING;
+            return currentState;
+        });
+        global_store.current_scene.set(global_store.possible_scenes.Timeline);
     }
 </script>
 

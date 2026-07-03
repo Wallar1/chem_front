@@ -1,43 +1,76 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { SkeletonUtils } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import { get } from 'svelte/store';
 
 import { GameObj, proxy_handler, check_collisions, Updater } from './objects.js';
 import { store } from './store.js';
+import { earth_radius } from './constants.js';
 import { get_random_from_probilities } from '../../helper_functions.js'
 import { blast_projectile } from './projectile.js';
+import { spawn_lab_at_surface_quaternion } from './lab.js';
+
+const AXE_DAMAGE = 8;
+const AXE_KNOCKBACK_RADIANS = 0.08;
+const AXE_STUN_SECONDS = 0.35;
+const _zone_center_vector = new THREE.Vector3(0, 0, earth_radius);
 
 
 var fbx_loader = new FBXLoader();
 
 
-function load_texture() {
-    if (!store.enemy_models['texture']) {
-        store.enemy_models['texture'] = new THREE.TextureLoader().load('low_poly_characters/Textures/texture.png');
-        store.enemy_models['material'] = new THREE.MeshStandardMaterial({map: store.enemy_models['texture']})
+function load_texture_async() {
+    if (store.enemy_models['texture']) {
+        return Promise.resolve(store.enemy_models['texture']);
     }
+    return new Promise((resolve, reject) => {
+        new THREE.TextureLoader().load(
+            'low_poly_characters/Textures/texture.png',
+            (texture) => {
+                store.enemy_models['texture'] = texture;
+                store.enemy_models['material'] = new THREE.MeshStandardMaterial({ map: texture });
+                resolve(texture);
+            },
+            undefined,
+            reject
+        );
+    });
+}
+
+function load_texture() {
+    load_texture_async();
+}
+
+function apply_enemy_material(object) {
+    const material = store.enemy_models['material'];
+    object.traverse(c => {
+        c.castShadow = true;
+        if (c.isMesh) {
+            c.material = material;
+        }
+    });
+}
+
+function ensure_model_template(model_name, scale) {
+    return load_texture_async().then(() => {
+        if (store.enemy_models[model_name]) {
+            apply_enemy_material(store.enemy_models[model_name]);
+            return store.enemy_models[model_name];
+        }
+        return new Promise((resolve, reject) => {
+            fbx_loader.load(`https://chem-game.s3.amazonaws.com/character-models/${model_name}.fbx`, (fbx_model) => {
+                fbx_model.scale.setScalar(scale);
+                apply_enemy_material(fbx_model);
+                store.enemy_models[model_name] = fbx_model;
+                resolve(fbx_model);
+            }, undefined, reject);
+        });
+    });
 }
 
 function load_model(model_name, scale) {
-    // fbx_loader.setPath('./low_poly_characters/Models/');
-    return new Promise((resolve, reject) => {
-        if (store.enemy_models[model_name]) {
-            return resolve(store.enemy_models[model_name])
-        }
-        fbx_loader.load(`https://chem-game.s3.amazonaws.com/character-models/${model_name}.fbx`, (fbx_model) => {
-            fbx_model.scale.setScalar(scale);
-            const material = store.enemy_models['material'];
-            fbx_model.traverse(c => {
-                c.castShadow = true;
-                if (c.isMesh) {
-                    c.material = material;
-                }
-            });
-            store.enemy_models[model_name] = fbx_model
-            resolve(fbx_model)
-        })
-    })
+    return ensure_model_template(model_name, scale).then(template => SkeletonUtils.clone(template))
 }
 
 function load_animation(file_path) {
@@ -47,10 +80,34 @@ function load_animation(file_path) {
         }
         fbx_loader.load(file_path, (anim) => {
             store.enemy_models[file_path] = anim
-            console.log(store.enemy_models)
             resolve(anim)
-        })
+        }, undefined, reject)
     })
+}
+
+function preload_battle_assets() {
+    const animation_paths = [...new Set(MODEL_CONFIGS.map(model => model.animation_name))];
+    const tasks = [
+        load_texture_async(),
+        ...MODEL_CONFIGS.map(model => ensure_model_template(model.model_name, model.scale)),
+        ...animation_paths.map(load_animation),
+    ];
+    const total = tasks.length;
+    let loaded = 0;
+
+    store.battle_assets_preload.set({ loaded: 0, total, complete: false });
+
+    const track = (promise) => promise.then((result) => {
+        loaded += 1;
+        store.battle_assets_preload.set({
+            loaded,
+            total,
+            complete: loaded >= total,
+        });
+        return result;
+    });
+
+    return Promise.all(tasks.map(track));
 }
 
 function update_animation(fbx_model, animation_name) {
@@ -103,7 +160,7 @@ const MODEL_CONFIGS = [
         'scale': 0.3,
         'initial_health': 50,
         'health_bar_z': -70,
-        'damage': 50,
+        'damage': 12,
         'probability': 20,
     },
     {
@@ -112,7 +169,7 @@ const MODEL_CONFIGS = [
         'scale': 1.0,
         'initial_health': 500,
         'health_bar_z': -270,
-        'damage': 40,
+        'damage': 15,
         'probability': 1,
     },
 ]
@@ -135,7 +192,6 @@ class Enemy extends GameObj {
         } = this.get_random_model()
         this.damage = damage;
 
-        load_texture()
         load_model(model_name, scale)
             .then(fbx_model => update_animation(fbx_model, animation_name))
             .then(fbx_model => {
@@ -163,6 +219,9 @@ class Enemy extends GameObj {
         this.health -= dmg
         if (this.health <= 0) {
             store.player_score += 1;
+            if (this.parent?.quaternion) {
+                spawn_lab_at_surface_quaternion(this.parent.quaternion.clone());
+            }
             this.should_delete = true;
             return
         }
@@ -175,6 +234,94 @@ class Enemy extends GameObj {
 
     check_collisions(collision_elements) {
         return check_collisions(this.mesh, collision_elements)
+    }
+
+    get_zone_world_center() {
+        if (!this.zone) {
+            return null;
+        }
+        return _zone_center_vector.clone().applyQuaternion(this.zone.center_quaternion);
+    }
+
+    is_player_in_zone() {
+        if (!this.zone) {
+            return true;
+        }
+        const camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3());
+        const zone_center = this.get_zone_world_center();
+        return camera_world_pos.distanceTo(zone_center) < this.zone.aggro_radius;
+    }
+
+    rotate_parent_toward_world_point(target_world_pos, earth_radius, time_delta, speed_multiplier = 1) {
+        const enemy_world_pos = this.getWorldPosition(new THREE.Vector3());
+        const dir_to_target_world = new THREE.Vector3().subVectors(target_world_pos, enemy_world_pos);
+        const up_local_parent = new THREE.Vector3(0, 0, earth_radius);
+        const dir_to_target_local_parent = this.parent.worldToLocal(dir_to_target_world.clone()).normalize();
+        const axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, dir_to_target_local_parent).normalize();
+        const radians = speed_multiplier * Math.PI * time_delta / 100;
+        const quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians);
+        this.parent.quaternion.multiply(quaternion);
+        this.parent.updateMatrixWorld(true);
+    }
+
+    face_toward_camera(dir_to_camera_world) {
+        const enemy_forward = new THREE.Vector3(0, 1, 0);
+        const forward_relative_to_world = this.localToWorld(enemy_forward.clone());
+        const up = new THREE.Vector3(0, 0, -1);
+        const up_in_world = this.localToWorld(up.clone());
+        const project_dir_in_world = dir_to_camera_world.clone().projectOnPlane(up_in_world.normalize());
+        const added = this.getWorldPosition(new THREE.Vector3()).add(project_dir_in_world);
+        const local_added = this.worldToLocal(added);
+        const local_forward = this.worldToLocal(forward_relative_to_world);
+        const angle = local_added.angleTo(local_forward);
+        const cross = new THREE.Vector3().crossVectors(local_forward, local_added);
+
+        if (angle > 0.01) {
+            this.rotateZ(Math.sign(cross.z) * 0.02);
+            this.updateMatrixWorld(true);
+        }
+    }
+
+    guard_zone(state, time_delta, earth_radius) {
+        const zone_center = this.get_zone_world_center();
+        const enemy_world_pos = this.getWorldPosition(new THREE.Vector3());
+        const guard_radius = this.zone.aggro_radius * 0.4;
+        if (enemy_world_pos.distanceTo(zone_center) < guard_radius) {
+            return state;
+        }
+        this.rotate_parent_toward_world_point(zone_center, earth_radius, time_delta, 0.5);
+        return state;
+    }
+
+    hit_by_axe() {
+        this.take_damage(AXE_DAMAGE);
+        if (this.should_delete) {
+            return;
+        }
+
+        const camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3());
+        const enemy_world_pos = this.getWorldPosition(new THREE.Vector3());
+        const knockback_dir_world = new THREE.Vector3().subVectors(enemy_world_pos, camera_world_pos);
+        const up_local_parent = new THREE.Vector3(0, 0, earth_radius);
+        const knockback_dir_local = this.parent.worldToLocal(knockback_dir_world.clone()).normalize();
+        const axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, knockback_dir_local).normalize();
+        const quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, -AXE_KNOCKBACK_RADIANS);
+        this.parent.quaternion.multiply(quaternion);
+        this.parent.updateMatrixWorld(true);
+
+        if (this.movement_updater) {
+            this.movement_updater.state.stunned = true;
+            const enemy = this;
+            const updater = new Updater((stun_state, stun_time_delta) => {
+                stun_state.total_time += stun_time_delta;
+                if (stun_state.total_time >= AXE_STUN_SECONDS) {
+                    enemy.movement_updater.state.stunned = false;
+                    return { finished: true, total_time: stun_state.total_time };
+                }
+                return { finished: false, total_time: stun_state.total_time };
+            }, { finished: false, total_time: 0 });
+            store.global_updates_queue.push(updater);
+        }
     }
 
     start_moving(earth_radius) {
@@ -197,47 +344,20 @@ class Enemy extends GameObj {
     
             // cant move or hurt player when stunned
             if (stunned) return state;
+
+            if (!enemy.is_player_in_zone()) {
+                return enemy.guard_zone(state, time_delta, earth_radius);
+            }
+
             let camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3())
             let enemy_world_pos = enemy.getWorldPosition(new THREE.Vector3())
-            // rotate the enemy parent to move the enemy close to the camera
-            let up_local_parent = new THREE.Vector3(0, 0, earth_radius)
             let dir_to_camera_world = new THREE.Vector3().subVectors(camera_world_pos, enemy_world_pos)
-            // only move when the player is close
-            if (dir_to_camera_world.lengthSq() > Math.pow(earth_radius)) {
+            const chase_radius = enemy.zone?.aggro_radius ?? earth_radius;
+            if (dir_to_camera_world.lengthSq() > Math.pow(chase_radius, 2)) {
                 return state
             }
-            let dir_to_camera_local_parent = enemy.parent.worldToLocal(dir_to_camera_world.clone()).normalize()
-            let axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, dir_to_camera_local_parent).normalize()
-            let movement_multiplier = 1;
-            let radians = movement_multiplier * Math.PI * time_delta/ 100;
-            let quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians)
-            enemy.parent.quaternion.multiply(quaternion);
-            enemy.parent.updateMatrixWorld(true)
-    
-    
-            // rotate the enemy to face the camera
-            // Forward direction relative to the enemy (not their local space, but literally from the enemy)
-            const enemy_forward = new THREE.Vector3(0, 1, 0);
-            // Apply the object's rotation to the forward vector
-            const forward_relative_to_world = enemy.localToWorld(enemy_forward.clone())
-            // Get the angle between the forward vector and the direction to the camera
-            const up = new THREE.Vector3(0, 0, -1);
-            const up_in_world = enemy.localToWorld(up.clone())
-            const project_dir_in_world = dir_to_camera_world.clone().projectOnPlane(up_in_world.normalize())
-            const added = enemy.getWorldPosition(new THREE.Vector3()).add(project_dir_in_world)
-    
-            const local_added = enemy.worldToLocal(added)
-            const local_forward = enemy.worldToLocal(forward_relative_to_world)
-            const angle = local_added.angleTo(local_forward)
-            
-            const cross = new THREE.Vector3().crossVectors(local_forward, local_added)
-    
-            if (angle > 0.01 ) {
-                // let quaternion2 = new THREE.Quaternion().setFromAxisAngle(enemy.localToWorld(up.clone()), .01)
-                // enemy.quaternion.premultiply(quaternion2);
-                enemy.rotateZ(Math.sign(cross.z) * .02)
-                enemy.updateMatrixWorld(true);
-            }
+            enemy.rotate_parent_toward_world_point(camera_world_pos, earth_radius, time_delta);
+            enemy.face_toward_camera(dir_to_camera_world);
             let collisions = enemy.check_collisions([store.camera]);
             if (collisions.length) {
                 enemy.damage_player();
@@ -253,9 +373,8 @@ class Enemy extends GameObj {
         if (store.player_is_invincible) {
             return;
         }
-        console.log('damaging player')
-        store.player_health = Math.max(0, store.player_health - this.damage);
-        if (store.player_health <= 0) {
+        store.player_health.update(health => Math.max(0, health - this.damage));
+        if (get(store.player_health) <= 0) {
             let current_game_state = get(store.game_state)
             current_game_state['state'] = store.GameStates.GAMELOST;
             store.game_state.set(current_game_state)
@@ -321,6 +440,6 @@ function fire_enemy_projectile(){
 }
 
 
-export { create_enemy, MODEL_CONFIGS, load_texture, load_model, update_animation }
+export { create_enemy, MODEL_CONFIGS, load_texture, load_model, update_animation, preload_battle_assets }
 
 
