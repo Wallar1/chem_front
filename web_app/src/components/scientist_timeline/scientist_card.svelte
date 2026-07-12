@@ -32,7 +32,6 @@
             <button type="button" class='button' on:click|stopPropagation={(e) => start_battle(scientist)}>Battle!</button>
         </div>
         <p>{scientist.name}</p>
-        <p>{scientist.year}</p>
     </div>
 </div>
 

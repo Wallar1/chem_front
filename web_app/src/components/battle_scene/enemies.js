@@ -15,6 +15,7 @@ import {
     get_chase_target_with_angle_offset as chase_target_with_angle_offset,
     rotate_parent_toward_world_point as rotate_parent_on_surface,
 } from './enemy-surface.js';
+import { has_upgrade, UPGRADE_IDS } from '../../upgrades.js';
 
 const AXE_DAMAGE = 5;
 const AXE_KNOCKBACK_RADIANS = 0.1;
@@ -447,7 +448,8 @@ class Enemy extends GameObj {
     }
 
     hit_by_axe() {
-        this.take_damage(AXE_DAMAGE);
+        const axe_damage = has_upgrade(UPGRADE_IDS.SHARP_AXE) ? AXE_DAMAGE * 2 : AXE_DAMAGE;
+        this.take_damage(axe_damage);
         if (this.should_delete) {
             return;
         }
@@ -538,7 +540,11 @@ class Enemy extends GameObj {
         if (store.player_is_invincible) {
             return;
         }
-        store.player_health.update(health => Math.max(0, health - this.damage));
+        let damage = this.damage;
+        if (has_upgrade(UPGRADE_IDS.LAB_COAT)) {
+            damage = damage / 2;
+        }
+        store.player_health.update(health => Math.max(0, health - damage));
         if (get(store.player_health) <= 0) {
             let current_game_state = get(store.game_state)
             current_game_state['state'] = store.GameStates.GAMELOST;

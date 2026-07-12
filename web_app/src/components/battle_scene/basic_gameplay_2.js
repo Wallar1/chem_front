@@ -102,6 +102,7 @@ export class BattleScene {
             return currentState;
         });
         reset_pressed_keys();
+        this.input_handler?.cancel_flask_charge?.();
         document.exitPointerLock();
         this.remove_event_listeners();
         this.add_pause_listener();
@@ -139,13 +140,15 @@ export class BattleScene {
 
     add_event_listeners(){
         this._on_mouse_move = this.input_handler.on_mouse_move.bind(this.input_handler);
-        this._on_mouse_click = this.input_handler.on_mouse_click.bind(this.input_handler);
+        this._on_mouse_down = this.input_handler.on_mouse_down.bind(this.input_handler);
+        this._on_mouse_up = this.input_handler.on_mouse_up.bind(this.input_handler);
         this._on_keydown = this.input_handler.on_keydown.bind(this.input_handler);
         this._on_keyup = this.input_handler.on_keyup.bind(this.input_handler);
 
         window.addEventListener('resize', resize_window, false);
         window.addEventListener('mousemove', this._on_mouse_move, false);
-        window.addEventListener('click', this._on_mouse_click, false);
+        window.addEventListener('mousedown', this._on_mouse_down, false);
+        window.addEventListener('mouseup', this._on_mouse_up, false);
         window.addEventListener('keydown', this._on_keydown, true);
         window.addEventListener('keyup', this._on_keyup, true);
 
@@ -171,7 +174,8 @@ export class BattleScene {
     remove_event_listeners(){
         window.removeEventListener('resize', resize_window, false);
         window.removeEventListener('mousemove', this._on_mouse_move, false);
-        window.removeEventListener('click', this._on_mouse_click, false);
+        window.removeEventListener('mousedown', this._on_mouse_down, false);
+        window.removeEventListener('mouseup', this._on_mouse_up, false);
         window.removeEventListener('keydown', this._on_keydown, true);
         window.removeEventListener('keyup', this._on_keyup, true);
 

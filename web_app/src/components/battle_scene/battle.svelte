@@ -90,6 +90,9 @@
     <div id='overlay-paused' style={show_pause_overlay ? 'display: flex;' : 'display: none;'}>
         <h2>Paused</h2>
         <p>Press P or Escape to resume</p>
+        <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>
+            Back to Timeline
+        </button>
     </div>
     <HealthBar/>
     <Score/>
@@ -116,25 +119,35 @@
         color: #a2a2a2;
     }
     #overlay-paused {
-        opacity: 0.65;
-        pointer-events: none;
+        opacity: 0.85;
+        pointer-events: auto;
+        gap: 12px;
     }
-    #overlay-to-start .button {
+    #overlay-to-start .button,
+    #overlay-paused .button {
         border: 1px solid white;
         border-radius: 8px;
-        padding: 10px;
+        padding: 10px 18px;
         font-size: 30px;
         cursor: pointer;
         background: transparent;
         color: inherit;
         font: inherit;
     }
+    #overlay-paused .button {
+        margin-top: 8px;
+        pointer-events: auto;
+    }
+    #overlay-paused .button:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
     #overlay-paused h2 {
         font-size: 48px;
-        margin-bottom: 16px;
+        margin: 0 0 8px;
     }
     #overlay-paused p {
         font-size: 24px;
+        margin: 0;
     }
     #cursor {
         position: absolute;

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="jewel" x1="18" y1="8" x2="46" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7CF0FF"/>
+      <stop offset="0.45" stop-color="#2B7CFF"/>
+      <stop offset="1" stop-color="#102A8A"/>
+    </linearGradient>
+    <linearGradient id="fire" x1="12" y1="48" x2="52" y2="12" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF6A00"/>
+      <stop offset="0.55" stop-color="#FFD166"/>
+      <stop offset="1" stop-color="#FFF3A3"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 36c4-10 8-18 14-22 2 8 1 16-2 24-4 2-8 2-12-2Z" fill="url(#fire)" opacity="0.85"/>
+  <path d="M54 34c-3-9-8-16-14-20-1 9 1 17 4 24 4 1 8 0 10-4Z" fill="url(#fire)" opacity="0.75"/>
+  <path d="M32 6l14 12-6 28H24L18 18 32 6Z" fill="url(#jewel)"/>
+  <path d="M32 6l14 12H18L32 6Z" fill="#B9F5FF" opacity="0.85"/>
+  <path d="M32 18l8 8-8 20-8-20 8-8Z" fill="#FFFFFF" opacity="0.35"/>
+  <path d="M8 22l8 2-6 4 2 6-6-2-4 6-2-8 4-2-2-6 6 0Z" stroke="#FFE566" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M52 18l6 4-2 6 6 2-4 6-4-4-6 2 2-6-4-4 6 0Z" stroke="#7CF0FF" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M28 50c2 4 4 6 4 8 2-2 4-5 6-8" stroke="#FF8A3D" stroke-width="2" stroke-linecap="round"/>
+  <path d="M22 12c6 2 10 1 14-2" stroke="#E8FBFF" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+</svg>

@@ -9,6 +9,7 @@
 	import CompoundCreator from './components/compound_creator/compound_creator.svelte';
 	import BalanceEquation from './components/balance_equation/balance_equation.svelte';
 	import Story from './components/story_scene/story_scene.svelte';
+	import Workshop from './components/workshop/workshop.svelte';
 	import { preload_battle_assets } from './components/battle_scene/enemies.js';
 
 	preload_battle_assets();
@@ -31,6 +32,8 @@
 		<BalanceEquation/>
 	{:else if $current_scene === possible_scenes.Story}
 		<Story/>
+	{:else if $current_scene === possible_scenes.Workshop}
+		<Workshop/>
 	{:else}
 		<p>Loading ...</p>
 	{/if}

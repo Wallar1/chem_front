@@ -5,6 +5,7 @@
     import RightSideBar from './right_element_bar.svelte';
     import { store } from './store.js';
     import { global_store } from '../../global_store.js';
+    import JoulesDisplay from '../joules_display.svelte';
     onMount(async () => {
         new CompoundCreator();
     })
@@ -29,6 +30,8 @@
             <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</button>
         {:else if game_state.state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
+            <p class="joule-reward">+1 joule</p>
+            <JoulesDisplay />
             <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Timeline</button>
         {/if}
     </div>
@@ -64,5 +67,10 @@
         background: transparent;
         color: inherit;
         font: inherit;
+    }
+    .joule-reward {
+        margin: 8px 0 12px;
+        color: #7cf0ff;
+        font-size: 1.1rem;
     }
 </style>

@@ -8,6 +8,7 @@ import {get} from 'svelte/store';
 import { store } from './store.js';
 import { Compound } from '../../compounds.js';
 import { dispose_renderer, dispose_group } from '../../helper_functions.js';
+import { award_joule } from '../../upgrades.js';
 
 
 let camera, scene, renderer, labelRenderer;
@@ -222,10 +223,15 @@ function loadMolecule( model ) {
 }
 
 function win_game() {
+    const current = get(store.game_state);
+    if (current['state'] === store.GameStates.GAMEWON) {
+        return;
+    }
     store.game_state.update(state => {
         state['state'] = store.GameStates.GAMEWON;
         return state;
     });
+    award_joule(1);
 
     // TODO: should we do this with an updater?
     start_rotation()
