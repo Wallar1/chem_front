@@ -22,9 +22,16 @@ Run from the **repository root** (`chem_front/`), where `docker-compose.yml` liv
 | Install deps | `docker-compose run --rm chem npm install` |
 | Build | `docker-compose run --rm chem npm run build` |
 | Dev server | `docker-compose up` (runs `npm run dev` in the container) |
-| Tests | `docker-compose run --rm chem npm test` |
-| Any npm script | `docker-compose run --rm chem npm run <script>` |
+| Tests (fast, container running) | `docker-compose exec chem npm test` |
+| Tests (one-off, no dev server) | `docker-compose run --rm chem npm test` |
+| Test watch (fast) | `docker-compose exec chem npm run test:watch` |
+| Any npm script | `docker-compose exec chem npm run <script>` when `chem` is up, else `docker-compose run --rm chem npm run <script>` |
 | Rebuild image | `docker-compose build chem` |
+
+### `exec` vs `run`
+
+- **`docker-compose exec chem …`** — Reuses the running `chem` container (started by `docker-compose up` or `docker-compose up -d chem`). No new container startup, no duplicate `node_modules` mount churn. **Prefer this for tests and repeated npm scripts during development.**
+- **`docker-compose run --rm chem …`** — Starts a fresh one-off container, then removes it. Use for `npm install`, `npm run build`, CI, or when `chem` is not already running.
 
 Container details:
 - Service: `chem`
@@ -34,12 +41,13 @@ Container details:
 
 ## Workflow
 
-1. After changing `package.json` or `package-lock.json`, run install in Docker:
+1. Start dev (once per session): `docker-compose up -d chem`
+2. After changing `package.json` or `package-lock.json`, run install in Docker:
    `docker-compose run --rm chem npm install`
-2. To verify changes, run tests and/or build in Docker:
-   `docker-compose run --rm chem npm test`
+3. To verify changes, run tests and/or build in Docker:
+   `docker-compose exec chem npm test` (or `npm run test:fast` — same vitest run)
    `docker-compose run --rm chem npm run build`
-3. If Docker commands fail because the image is stale, rebuild:
+4. If Docker commands fail because the image is stale, rebuild:
    `docker-compose build chem`
 
 ## Fallback (no docker-compose)
@@ -54,7 +62,7 @@ docker run --rm \
   bash -c "npm install && npm run build"
 ```
 
-Prefer `docker-compose run --rm chem` when possible — it matches the project's Dockerfile and volume mounts.
+Prefer `docker-compose exec chem` when the dev container is up; otherwise `docker-compose run --rm chem` — both match the project's Dockerfile and volume mounts.
 
 ## Do not
 
@@ -66,4 +74,17 @@ Prefer `docker-compose run --rm chem` when possible — it matches the project's
 
 Vitest smoke tests live under `web_app/src/**/*.test.js`. They mount key Svelte components (including Battle scene) in jsdom to catch store subscription errors and basic scene switching.
 
-`docker-compose run --rm chem npm test`
+Vitest is configured for a single jsdom worker (`pool: forks`, `singleFork: true`) so repeat runs stay fast inside the same container.
+
+**Recommended (dev container already up):**
+
+```bash
+docker-compose up -d chem   # skip if already running
+docker-compose exec chem npm test
+```
+
+**One-off (no running container):**
+
+```bash
+docker-compose run --rm chem npm test
+```

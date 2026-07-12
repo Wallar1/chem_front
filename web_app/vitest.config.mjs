@@ -20,5 +20,13 @@ export default defineConfig({
 		environment: 'jsdom',
 		setupFiles: ['./src/test/setup.js'],
 		include: ['src/**/*.{test,spec}.{js,ts}'],
+		// One jsdom worker for the whole run — avoids per-file environment spawn cost.
+		pool: 'forks',
+		poolOptions: {
+			forks: {
+				singleFork: true,
+			},
+		},
+		fileParallelism: false,
 	},
 });

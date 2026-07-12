@@ -105,7 +105,7 @@ export class CraigDragControls {
                     inverseMatrix: this.inverseMatrix,
                 }
                 let move_object_updater = new Updater(this.move_object, state)
-                store.global_updates_queue(move_object_updater)
+                store.global_updates_queue.push(move_object_updater)
             }
         }
     }
@@ -114,12 +114,12 @@ export class CraigDragControls {
         this.update_pointer( event );
         this.raycaster.setFromCamera( this.mouse, this.camera );
         const recursive = true;
-        let intersections = this.raycaster.intersectObjects( get(store.draggable_objects), recursive );
+        let intersections = this.raycaster.intersectObjects( store.draggable_objects, recursive );
 
         if ( intersections.length > 0 ) {
             this.selected = this.findGroup(intersections[0].object);
 
-            if (get(store.need_to_delete) && get(store.non_deletable_objs).indexOf(this.selected) < 0) {
+            if (get(store.need_to_delete) && store.non_deletable_objs.indexOf(this.selected) < 0) {
                 this.on_mouse_down_callback(this.selected)
                 dispose_group(this.selected);
                 
@@ -131,8 +131,7 @@ export class CraigDragControls {
                         console.error('Error playing sound:', error);
                     })
                 })
-                let new_draggable_objs = get(store.draggable_objects).filter(obj => obj !== this.selected)
-                store.draggable_objects.set(new_draggable_objs)
+                store.draggable_objects = store.draggable_objects.filter(obj => obj !== this.selected)
                 // for (let i=0;i<this.draggable_objects.length;i++) {
                 //     if (this.draggable_objects[i] === this.selected) {
                 //         this.draggable_objects.splice(i, 1);

@@ -56,21 +56,20 @@ export class BalanceEquationScene {
     animate(){
         requestAnimationFrame(()=>{
             if (get(store.game_state)['state'] === store.GameStates.GAMELOST) {
-                store.global_updates_queue.set([])
+                store.global_updates_queue = []
                 return;
             } else if (get(store.game_state)['state'] === store.GameStates.GAMEWON) {
-                store.global_updates_queue.set([])
+                store.global_updates_queue = []
                 return;
             }
             this.animate()
-            time_delta = store.global_clock.getDelta();
+            const time_delta = store.global_clock.getDelta();
             store.renderer.render(store.scene, store.camera);
             let next_updates = []
             // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
             // maybe we should pre-pend the new updaters to the beginning of the queue so they will process in the next frame
-            let guq = get(store.global_updates_queue);
-            for (let i=0; i<guq.length; i++) {
-                let updater = guq[i]
+            for (let i=0; i<store.global_updates_queue.length; i++) {
+                let updater = store.global_updates_queue[i]
                 updater.update(time_delta)
                 if (!updater.state.finished) { 
                     next_updates.push(updater);
@@ -80,7 +79,7 @@ export class BalanceEquationScene {
                     });
                 }
             }
-            store.global_updates_queue.set(next_updates)
+            store.global_updates_queue = next_updates
         });
     }
 
@@ -89,13 +88,7 @@ export class BalanceEquationScene {
         add_molecule_audio.play()
         let pos = screen_pos_to_world_pos(x, y)
         let molecule_group = create_molecule_group(molecule_name, pos);
-        store.draggable_objects.update(
-            (current_draggable_objs) => {
-                current_draggable_objs.push(molecule_group);
-                console.log(current_draggable_objs)
-                return current_draggable_objs
-            }
-        );
+        store.draggable_objects.push(molecule_group);
     }
 }
 
@@ -222,11 +215,7 @@ function spawn_initial_objects(){
                 
                 pos = screen_pos_to_world_pos(x, y)
                 let molecule_group = create_molecule_group(compound, pos);
-                non_deletable_objs.update(current_non_deletable_objs => {
-                    console.log(current_non_deletable_objs)
-                    current_non_deletable_objs.push(molecule_group)
-                    return current_non_deletable_objs
-                })
+                store.non_deletable_objs.push(molecule_group)
             })
         }
     }
@@ -251,7 +240,7 @@ export function end_scene(GameState){
         return state;
     });
     dispose_group(store.scene);
-    dispose_renderer(renderer);
+    dispose_renderer(store.renderer);
 }
 
 

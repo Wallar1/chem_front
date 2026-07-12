@@ -9043,25 +9043,6 @@ var app = (function () {
 	}
 
 	/**
-	 * Under some circumstances, imports may be reactive in legacy mode. In that case,
-	 * they should be using `reactive_import` as part of the transformation
-	 * @param {() => any} fn
-	 */
-	function reactive_import(fn) {
-		var s = source(0);
-
-		return function () {
-			if (arguments.length === 1) {
-				set(s, get$1(s) + 1);
-				return arguments[0];
-			} else {
-				get$1(s);
-				return fn();
-			}
-		};
-	}
-
-	/**
 	 * Used to simulate `$on` on a component instance when `compatibility.componentApi === 4`
 	 * @param {Record<string, any>} $$props
 	 * @param {string} event_name
@@ -9587,7 +9568,7 @@ var app = (function () {
 	// MULTIPLE SCENES
 
 	// Does this need to be a store?
-	const atoms$1 = writable({
+	const atoms = writable({
 	    'C': {
 	        'color': [144, 144, 144],
 	        'bonds': 4,
@@ -9616,7 +9597,7 @@ var app = (function () {
 
 
 	const global_store = {
-	    atoms: atoms$1,
+	    atoms,
 	    current_scene,
 	    possible_scenes,
 	};
@@ -52494,7 +52475,7 @@ var app = (function () {
 	// let time_delta = 
 	let earth = undefined;
 	let scene$2 = undefined;
-	let renderer$3 = undefined;
+	let renderer$2 = undefined;
 	let camera$2 = undefined;
 	let camera_parent = undefined;
 	let axe = undefined;
@@ -52536,7 +52517,7 @@ var app = (function () {
 	    global_clock: global_clock$1,
 	    earth,
 	    scene: scene$2,
-	    renderer: renderer$3,
+	    renderer: renderer$2,
 	    camera: camera$2,
 	    camera_parent,
 	    axe,
@@ -54044,6 +54025,30 @@ var app = (function () {
 	    }
 	}
 
+	const GameStates$1 = Object.freeze({
+	    'STARTING': Symbol('starting'),
+	    'PLAYING': Symbol('playing'),
+	    'GAMELOST': Symbol('game_over'),
+	    'GAMEWON': Symbol('game won'),
+	});
+
+	const game_state$1 = writable({
+	    'state': GameStates$1.STARTING,
+	    'level': 1,
+	});
+
+	const selected_atom = writable('C');
+
+	const creator_moves_remaining = writable(0);
+
+
+	const store$1 = {
+	    GameStates: GameStates$1,
+	    game_state: game_state$1,
+	    selected_atom,
+	    creator_moves_remaining,
+	};
+
 	const formula_to_damage_dict = {
 	    'H2': 10,
 	    'CH4': 40,
@@ -54121,7 +54126,7 @@ var app = (function () {
 	            const csv_atom = csv_atoms[i];
 	            const element = csv_atom.element;
 	            if (!materials[element.toLowerCase()]) {
-	                let color_info = get(atoms)[element]['color'];
+	                let color_info = get$2(global_store.atoms)[element]['color'];
 	                let color = new Color(`rgb(${color_info[0]}, ${color_info[1]}, ${color_info[2]})`);
 	                materials[element.toLowerCase()] = new MeshToonMaterial( { color: color } );
 	            }
@@ -54140,7 +54145,7 @@ var app = (function () {
 	            }
 	            atom_obj.scale.set( ATOM_SIZE, ATOM_SIZE, ATOM_SIZE );
 	            atom_obj.onclick = () => {
-	                if (element === get(selected_atom)) {
+	                if (element === get$2(store$1.selected_atom)) {
 	                    atom_obj.material = materials[element.toLowerCase()];
 	                    atom_obj.correct_material = true;
 	                }
@@ -62732,8 +62737,53 @@ var app = (function () {
 	    return proxy
 	}
 
-	const AXE_DAMAGE = 8;
-	const AXE_KNOCKBACK_RADIANS = 0.08;
+	function apply_surface_knockback(parent, tangent_knockback_world, earth_radius, knockback_radians) {
+		const up_local_parent = new Vector3(0, 0, earth_radius);
+		const knockback_dir_local = parent.worldToLocal(tangent_knockback_world.clone()).normalize();
+		const axis_of_rotation = new Vector3().crossVectors(up_local_parent, knockback_dir_local);
+		if (axis_of_rotation.lengthSq() < 1e-6) {
+			return false;
+		}
+		axis_of_rotation.normalize();
+		const quaternion = new Quaternion().setFromAxisAngle(axis_of_rotation, knockback_radians);
+		parent.quaternion.multiply(quaternion).normalize();
+		parent.updateMatrixWorld(true);
+		return true;
+	}
+
+	function get_chase_target_with_angle_offset(enemy_world_pos, target_world_pos, angle_offset_radians) {
+		const surface_normal = enemy_world_pos.clone().normalize();
+		const dir_to_target = new Vector3().subVectors(target_world_pos, enemy_world_pos);
+		const tangent_dir = dir_to_target.clone().projectOnPlane(surface_normal).normalize();
+		if (tangent_dir.lengthSq() < 1e-6) {
+			return target_world_pos.clone();
+		}
+		const rotated_dir = tangent_dir.clone().applyAxisAngle(surface_normal, angle_offset_radians);
+		return enemy_world_pos.clone().add(rotated_dir.multiplyScalar(dir_to_target.length()));
+	}
+
+	function rotate_parent_toward_world_point(
+		parent,
+		enemy_world_pos,
+		target_world_pos,
+		earth_radius,
+		time_delta,
+		speed_multiplier = 1,
+	) {
+		const dir_to_target_world = new Vector3().subVectors(target_world_pos, enemy_world_pos);
+		const up_local_parent = new Vector3(0, 0, earth_radius);
+		const dir_to_target_local_parent = parent.worldToLocal(dir_to_target_world.clone()).normalize();
+		const axis_of_rotation = new Vector3().crossVectors(up_local_parent, dir_to_target_local_parent).normalize();
+		const radians = speed_multiplier * Math.PI * time_delta / 100;
+		const quaternion = new Quaternion().setFromAxisAngle(axis_of_rotation, radians);
+		parent.quaternion.multiply(quaternion);
+		parent.updateMatrixWorld(true);
+	}
+
+	const AXE_DAMAGE = 5;
+	const AXE_KNOCKBACK_RADIANS = 0.1;
+	const AXE_KNOCKBACK_DURATION = 0.28;
+	const AXE_KNOCKBACK_LIFT = 50;
 	const AXE_STUN_SECONDS = 0.35;
 	const _zone_center_vector = new Vector3(0, 0, earth_radius);
 
@@ -62861,6 +62911,7 @@ var app = (function () {
 	        'health_bar_z': -120,
 	        'damage': 15,
 	        'probability': 10,
+	        'movement_pattern': 'jump',
 	    },
 	    {
 	        'model_name': 'Professor Gold',
@@ -62869,7 +62920,8 @@ var app = (function () {
 	        'initial_health': 200,
 	        'health_bar_z': -180,
 	        'damage': 10,
-	        'probability': 5
+	        'probability': 5,
+	        'movement_pattern': 'weave',
 	    },
 	    {
 	        'model_name': 'Male Blue',
@@ -62879,6 +62931,7 @@ var app = (function () {
 	        'health_bar_z': -70,
 	        'damage': 12,
 	        'probability': 20,
+	        'movement_pattern': 'fast',
 	    },
 	    {
 	        'model_name': 'Robot 4 Blue',
@@ -62888,6 +62941,7 @@ var app = (function () {
 	        'health_bar_z': -270,
 	        'damage': 15,
 	        'probability': 1,
+	        'movement_pattern': 'jerky',
 	    },
 	];
 
@@ -62905,9 +62959,12 @@ var app = (function () {
 	            scale,
 	            initial_health,
 	            health_bar_z,
-	            damage
+	            damage,
+	            movement_pattern,
 	        } = this.get_random_model();
 	        this.damage = damage;
+	        this.movement_pattern = movement_pattern ?? 'smooth';
+	        this.health = this.full_health = initial_health;
 
 	        load_model(model_name, scale)
 	            .then(fbx_model => update_animation(fbx_model, animation_name))
@@ -62933,6 +62990,9 @@ var app = (function () {
 	    }
 
 	    take_damage(dmg) {
+	        if (typeof this.health !== 'number' || Number.isNaN(this.health)) {
+	            return;
+	        }
 	        this.health -= dmg;
 	        if (this.health <= 0) {
 	            store$3.player_score += 1;
@@ -62942,7 +63002,9 @@ var app = (function () {
 	            this.should_delete = true;
 	            return
 	        }
-	        this.health_bar.scale.set(1, this.health/this.full_health, 1);
+	        if (this.health_bar) {
+	            this.health_bar.scale.set(1, this.health/this.full_health, 1);
+	        }
 	    }
 
 	    collide(collided_obj) {
@@ -62971,14 +63033,14 @@ var app = (function () {
 
 	    rotate_parent_toward_world_point(target_world_pos, earth_radius, time_delta, speed_multiplier = 1) {
 	        const enemy_world_pos = this.getWorldPosition(new Vector3());
-	        const dir_to_target_world = new Vector3().subVectors(target_world_pos, enemy_world_pos);
-	        const up_local_parent = new Vector3(0, 0, earth_radius);
-	        const dir_to_target_local_parent = this.parent.worldToLocal(dir_to_target_world.clone()).normalize();
-	        const axis_of_rotation = new Vector3().crossVectors(up_local_parent, dir_to_target_local_parent).normalize();
-	        const radians = speed_multiplier * Math.PI * time_delta / 100;
-	        const quaternion = new Quaternion().setFromAxisAngle(axis_of_rotation, radians);
-	        this.parent.quaternion.multiply(quaternion);
-	        this.parent.updateMatrixWorld(true);
+	        rotate_parent_toward_world_point(
+	            this.parent,
+	            enemy_world_pos,
+	            target_world_pos,
+	            earth_radius,
+	            time_delta,
+	            speed_multiplier,
+	        );
 	    }
 
 	    face_toward_camera(dir_to_camera_world) {
@@ -63010,21 +63072,153 @@ var app = (function () {
 	        return state;
 	    }
 
+	    get_chase_target_with_angle_offset(target_world_pos, angle_offset_radians) {
+	        const enemy_world_pos = this.getWorldPosition(new Vector3());
+	        return get_chase_target_with_angle_offset(enemy_world_pos, target_world_pos, angle_offset_radians);
+	    }
+
+	    move_toward_target(target_world_pos, earth_radius, time_delta, speed_multiplier) {
+	        this.rotate_parent_toward_world_point(target_world_pos, earth_radius, time_delta, speed_multiplier);
+	    }
+
+	    apply_movement_pattern(pattern, target_world_pos, earth_radius, time_delta, state) {
+	        switch (pattern) {
+	            case 'jerky':
+	                return this.move_jerky(target_world_pos, earth_radius, time_delta, state);
+	            case 'fast':
+	                this.move_toward_target(target_world_pos, earth_radius, time_delta, 2.1);
+	                return state;
+	            case 'jump':
+	                return this.move_jumping(target_world_pos, earth_radius, time_delta, state);
+	            case 'weave':
+	                return this.move_weaving(target_world_pos, earth_radius, time_delta, state);
+	            default:
+	                this.move_toward_target(target_world_pos, earth_radius, time_delta, 1);
+	                return state;
+	        }
+	    }
+
+	    move_jerky(target_world_pos, earth_radius, time_delta, state) {
+	        state.jerky_timer = (state.jerky_timer ?? 0) + time_delta;
+	        const phase_duration = state.jerky_bursting
+	            ? (state.jerky_burst_duration ?? 0.18)
+	            : (state.jerky_pause_duration ?? 0.8);
+
+	        if (state.jerky_timer >= phase_duration) {
+	            state.jerky_bursting = !state.jerky_bursting;
+	            state.jerky_timer = 0;
+	            if (state.jerky_bursting) {
+	                state.jerky_burst_duration = 0.1 + Math.random() * 0.15;
+	            } else {
+	                state.jerky_pause_duration = 0.5 + Math.random() * 0.7;
+	            }
+	        }
+
+	        if (state.jerky_bursting) {
+	            this.move_toward_target(target_world_pos, earth_radius, time_delta, 1.1);
+	        }
+	        return state;
+	    }
+
+	    move_jumping(target_world_pos, earth_radius, time_delta, state) {
+	        if (state.base_z === undefined) {
+	            state.base_z = this.position.z;
+	        }
+	        state.jump_timer = (state.jump_timer ?? 0) + time_delta;
+
+	        if (!state.jump_airborne) {
+	            this.position.z = state.base_z;
+	            if (state.jump_timer >= (state.jump_cooldown ?? 0.55)) {
+	                state.jump_airborne = true;
+	                state.jump_timer = 0;
+	                state.jump_duration = 0.26 + Math.random() * 0.2;
+	                state.jump_angle = (Math.random() - 0.5) * 0.9;
+	                state.jump_lift = 45 + Math.random() * 25;
+	            }
+	            return state;
+	        }
+
+	        const jump_progress = state.jump_timer / state.jump_duration;
+	        if (jump_progress >= 1) {
+	            state.jump_airborne = false;
+	            state.jump_timer = 0;
+	            state.jump_cooldown = 0.5 + Math.random() * 0.4;
+	            this.position.z = state.base_z;
+	            return state;
+	        }
+
+	        const angled_target = this.get_chase_target_with_angle_offset(target_world_pos, state.jump_angle);
+	        this.move_toward_target(angled_target, earth_radius, time_delta, 4.6);
+	        this.position.z = state.base_z + Math.sin(jump_progress * Math.PI) * state.jump_lift;
+	        return state;
+	    }
+
+	    move_weaving(target_world_pos, earth_radius, time_delta, state) {
+	        state.weave_timer = (state.weave_timer ?? 0) + time_delta;
+	        const weave_period = 1.4;
+	        const weave_angle = Math.sin((state.weave_timer / weave_period) * Math.PI * 2) * 0.45;
+	        const woven_target = this.get_chase_target_with_angle_offset(target_world_pos, weave_angle);
+	        this.move_toward_target(woven_target, earth_radius, time_delta, 0.85);
+	        return state;
+	    }
+
+	    apply_axe_knockback(tangent_knockback_world) {
+	        if (tangent_knockback_world.lengthSq() < 1e-6) {
+	            return;
+	        }
+	        if (this.knockback_updater) {
+	            this.knockback_updater.state.finished = true;
+	        }
+
+	        const enemy = this;
+	        const tangent = tangent_knockback_world.clone().normalize();
+	        const updater = new Updater((state, time_delta) => {
+	            if (enemy.should_delete) {
+	                enemy.position.z = state.base_z;
+	                return { ...state, finished: true };
+	            }
+
+	            state.elapsed += time_delta;
+	            const linear_progress = Math.min(state.elapsed / AXE_KNOCKBACK_DURATION, 1);
+	            const eased_progress = 1 - Math.pow(1 - linear_progress, 2);
+	            const delta_radians = AXE_KNOCKBACK_RADIANS * (eased_progress - state.eased_progress);
+
+	            if (delta_radians > 0) {
+	                apply_surface_knockback(enemy.parent, tangent, earth_radius, delta_radians);
+	                state.eased_progress = eased_progress;
+	            }
+
+	            enemy.position.z = state.base_z + Math.sin(linear_progress * Math.PI) * AXE_KNOCKBACK_LIFT;
+
+	            if (linear_progress >= 1) {
+	                enemy.position.z = state.base_z;
+	                return { ...state, finished: true };
+	            }
+	            return state;
+	        }, {
+	            finished: false,
+	            elapsed: 0,
+	            eased_progress: 0,
+	            base_z: this.position.z,
+	        });
+
+	        store$3.global_updates_queue.push(updater);
+	        this.knockback_updater = updater;
+	    }
+
 	    hit_by_axe() {
 	        this.take_damage(AXE_DAMAGE);
 	        if (this.should_delete) {
 	            return;
 	        }
 
-	        const camera_world_pos = store$3.camera.getWorldPosition(new Vector3());
 	        const enemy_world_pos = this.getWorldPosition(new Vector3());
-	        const knockback_dir_world = new Vector3().subVectors(enemy_world_pos, camera_world_pos);
-	        const up_local_parent = new Vector3(0, 0, earth_radius);
-	        const knockback_dir_local = this.parent.worldToLocal(knockback_dir_world.clone()).normalize();
-	        const axis_of_rotation = new Vector3().crossVectors(up_local_parent, knockback_dir_local).normalize();
-	        const quaternion = new Quaternion().setFromAxisAngle(axis_of_rotation, -AXE_KNOCKBACK_RADIANS);
-	        this.parent.quaternion.multiply(quaternion);
-	        this.parent.updateMatrixWorld(true);
+	        const surface_normal = enemy_world_pos.clone().normalize();
+	        const player_facing_world = store$3.camera.getWorldDirection(new Vector3());
+	        const tangent_knockback = player_facing_world.clone().projectOnPlane(surface_normal);
+	        if (tangent_knockback.lengthSq() >= 1e-6) {
+	            this.apply_axe_knockback(tangent_knockback);
+	        }
 
 	        if (this.movement_updater) {
 	            this.movement_updater.state.stunned = true;
@@ -63042,7 +63236,6 @@ var app = (function () {
 	    }
 
 	    start_moving(earth_radius) {
-	        // TODO: make it so the enemies dont move in a perfectly straight line, they zig zag. Also they jump
 	        function move_enemy(state, time_delta) {
 	            /*
 	            The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
@@ -63062,18 +63255,33 @@ var app = (function () {
 	            // cant move or hurt player when stunned
 	            if (stunned) return state;
 
+	            let camera_world_pos = store$3.camera.getWorldPosition(new Vector3());
+
+	            const advance_airborne_jump = () => {
+	                if (enemy.movement_pattern === 'jump' && state.jump_airborne) {
+	                    state = enemy.move_jumping(camera_world_pos, earth_radius, time_delta, state);
+	                }
+	            };
+
 	            if (!enemy.is_player_in_zone()) {
+	                advance_airborne_jump();
 	                return enemy.guard_zone(state, time_delta, earth_radius);
 	            }
 
-	            let camera_world_pos = store$3.camera.getWorldPosition(new Vector3());
 	            let enemy_world_pos = enemy.getWorldPosition(new Vector3());
 	            let dir_to_camera_world = new Vector3().subVectors(camera_world_pos, enemy_world_pos);
 	            const chase_radius = enemy.zone?.aggro_radius ?? earth_radius;
 	            if (dir_to_camera_world.lengthSq() > Math.pow(chase_radius, 2)) {
+	                advance_airborne_jump();
 	                return state
 	            }
-	            enemy.rotate_parent_toward_world_point(camera_world_pos, earth_radius, time_delta);
+	            state = enemy.apply_movement_pattern(
+	                enemy.movement_pattern,
+	                camera_world_pos,
+	                earth_radius,
+	                time_delta,
+	                state,
+	            );
 	            enemy.face_toward_camera(dir_to_camera_world);
 	            let collisions = enemy.check_collisions([store$3.camera]);
 	            if (collisions.length) {
@@ -65916,31 +66124,7 @@ var app = (function () {
 
 	}
 
-	const GameStates$1 = Object.freeze({
-	    'STARTING': Symbol('starting'),
-	    'PLAYING': Symbol('playing'),
-	    'GAMELOST': Symbol('game_over'),
-	    'GAMEWON': Symbol('game won'),
-	});
-
-	const game_state$1 = writable({
-	    'state': GameStates$1.STARTING,
-	    'level': 1,
-	});
-
-	const selected_atom$1 = writable('C');
-
-	const creator_moves_remaining = writable(0);
-
-
-	const store$1 = {
-	    GameStates: GameStates$1,
-	    game_state: game_state$1,
-	    selected_atom: selected_atom$1,
-	    creator_moves_remaining,
-	};
-
-	let camera$1, scene$1, renderer$2, labelRenderer;
+	let camera$1, scene$1, renderer$1, labelRenderer;
 	let controls;
 
 	let root$5;
@@ -65974,7 +66158,7 @@ var app = (function () {
 	function onWindowResize() {
 	    camera$1.aspect = window.innerWidth / window.innerHeight;
 	    camera$1.updateProjectionMatrix();
-	    renderer$2.setSize( window.innerWidth, window.innerHeight );
+	    renderer$1.setSize( window.innerWidth, window.innerHeight );
 	    labelRenderer.setSize( window.innerWidth, window.innerHeight );
 	}
 
@@ -65984,7 +66168,7 @@ var app = (function () {
 	function animate() {
 	    requestAnimationFrame(animate);
 	    controls.update();
-	    renderer$2.render(scene$1, camera$1);
+	    renderer$1.render(scene$1, camera$1);
 	    labelRenderer.render( scene$1, camera$1 );
 	    if (is_rotating) {
 	        root$5.rotation.y = root$5.rotation.y + .01;
@@ -66009,10 +66193,10 @@ var app = (function () {
 	    root$5 = new Group();
 	    scene$1.add( root$5 );
 
-	    renderer$2 = new WebGLRenderer( { antialias: true } );
-	    renderer$2.setPixelRatio( window.devicePixelRatio );
-	    renderer$2.setSize( window.innerWidth, window.innerHeight );
-	    document.getElementById( 'canvas-container' ).appendChild( renderer$2.domElement );
+	    renderer$1 = new WebGLRenderer( { antialias: true } );
+	    renderer$1.setPixelRatio( window.devicePixelRatio );
+	    renderer$1.setSize( window.innerWidth, window.innerHeight );
+	    document.getElementById( 'canvas-container' ).appendChild( renderer$1.domElement );
 
 	    // TODO: what is this doing
 	    labelRenderer = new CSS2DRenderer();
@@ -66022,7 +66206,7 @@ var app = (function () {
 	    labelRenderer.domElement.style.pointerEvents = 'none';
 	    document.getElementById( 'canvas-container' ).appendChild( labelRenderer.domElement );
 
-	    controls = new TrackballControls( camera$1, renderer$2.domElement );
+	    controls = new TrackballControls( camera$1, renderer$1.domElement );
 	    controls.minDistance = 100;
 	    controls.maxDistance = 1000;
 
@@ -66146,7 +66330,7 @@ var app = (function () {
 
 	function dispose() {
 	    dispose_group(scene$1);
-	    dispose_renderer(renderer$2);
+	    dispose_renderer(renderer$1);
 	    remove_event_listeners$1();
 	}
 
@@ -66451,14 +66635,14 @@ var app = (function () {
 
 	let global_clock = undefined;
 	let global_updates_queue = [];
-	let time_delta$1 = undefined;
+	let time_delta = undefined;
 	let scene = undefined;
-	let renderer$1 = undefined;
+	let renderer = undefined;
 	let camera = undefined;
 	let mouse_ray = undefined;
 	let mouse = undefined;
 	let draggable_objects = [];
-	let non_deletable_objs$1 = [];
+	let non_deletable_objs = [];
 
 
 	const store = {
@@ -66473,14 +66657,14 @@ var app = (function () {
 	    left_vs_right_to_degrees_of_rotation,
 	    global_clock,
 	    global_updates_queue,
-	    time_delta: time_delta$1,
+	    time_delta,
 	    scene,
-	    renderer: renderer$1,
+	    renderer,
 	    camera,
 	    mouse_ray,
 	    mouse,
 	    draggable_objects,
-	    non_deletable_objs: non_deletable_objs$1,
+	    non_deletable_objs,
 	};
 
 	class CraigDragControls {
@@ -66572,7 +66756,7 @@ var app = (function () {
 	                    inverseMatrix: this.inverseMatrix,
 	                };
 	                let move_object_updater = new Updater(this.move_object, state);
-	                store.global_updates_queue(move_object_updater);
+	                store.global_updates_queue.push(move_object_updater);
 	            }
 	        }
 	    }
@@ -66581,12 +66765,12 @@ var app = (function () {
 	        this.update_pointer( event );
 	        this.raycaster.setFromCamera( this.mouse, this.camera );
 	        const recursive = true;
-	        let intersections = this.raycaster.intersectObjects( get$2(store.draggable_objects), recursive );
+	        let intersections = this.raycaster.intersectObjects( store.draggable_objects, recursive );
 
 	        if ( intersections.length > 0 ) {
 	            this.selected = this.findGroup(intersections[0].object);
 
-	            if (get$2(store.need_to_delete) && get$2(store.non_deletable_objs).indexOf(this.selected) < 0) {
+	            if (get$2(store.need_to_delete) && store.non_deletable_objs.indexOf(this.selected) < 0) {
 	                this.on_mouse_down_callback(this.selected);
 	                dispose_group(this.selected);
 	                
@@ -66598,8 +66782,7 @@ var app = (function () {
 	                        console.error('Error playing sound:', error);
 	                    });
 	                });
-	                let new_draggable_objs = get$2(store.draggable_objects).filter(obj => obj !== this.selected);
-	                store.draggable_objects.set(new_draggable_objs);
+	                store.draggable_objects = store.draggable_objects.filter(obj => obj !== this.selected);
 	                // for (let i=0;i<this.draggable_objects.length;i++) {
 	                //     if (this.draggable_objects[i] === this.selected) {
 	                //         this.draggable_objects.splice(i, 1);
@@ -66694,21 +66877,20 @@ var app = (function () {
 	    animate(){
 	        requestAnimationFrame(()=>{
 	            if (get$2(store.game_state)['state'] === store.GameStates.GAMELOST) {
-	                store.global_updates_queue.set([]);
+	                store.global_updates_queue = [];
 	                return;
 	            } else if (get$2(store.game_state)['state'] === store.GameStates.GAMEWON) {
-	                store.global_updates_queue.set([]);
+	                store.global_updates_queue = [];
 	                return;
 	            }
 	            this.animate();
-	            time_delta = store.global_clock.getDelta();
+	            const time_delta = store.global_clock.getDelta();
 	            store.renderer.render(store.scene, store.camera);
 	            let next_updates = [];
 	            // sometimes during iteration, another updater will be added to the queue, so we cant do a forEach
 	            // maybe we should pre-pend the new updaters to the beginning of the queue so they will process in the next frame
-	            let guq = get$2(store.global_updates_queue);
-	            for (let i=0; i<guq.length; i++) {
-	                let updater = guq[i];
+	            for (let i=0; i<store.global_updates_queue.length; i++) {
+	                let updater = store.global_updates_queue[i];
 	                updater.update(time_delta);
 	                if (!updater.state.finished) { 
 	                    next_updates.push(updater);
@@ -66718,7 +66900,7 @@ var app = (function () {
 	                    });
 	                }
 	            }
-	            store.global_updates_queue.set(next_updates);
+	            store.global_updates_queue = next_updates;
 	        });
 	    }
 
@@ -66727,13 +66909,7 @@ var app = (function () {
 	        add_molecule_audio.play();
 	        let pos = screen_pos_to_world_pos(x, y);
 	        let molecule_group = create_molecule_group(molecule_name, pos);
-	        store.draggable_objects.update(
-	            (current_draggable_objs) => {
-	                current_draggable_objs.push(molecule_group);
-	                console.log(current_draggable_objs);
-	                return current_draggable_objs
-	            }
-	        );
+	        store.draggable_objects.push(molecule_group);
 	    }
 	}
 
@@ -66860,11 +67036,7 @@ var app = (function () {
 	                
 	                pos = screen_pos_to_world_pos(x, y);
 	                let molecule_group = create_molecule_group(compound, pos);
-	                non_deletable_objs.update(current_non_deletable_objs => {
-	                    console.log(current_non_deletable_objs);
-	                    current_non_deletable_objs.push(molecule_group);
-	                    return current_non_deletable_objs
-	                });
+	                store.non_deletable_objs.push(molecule_group);
 	            });
 	        }
 	    }
@@ -66889,7 +67061,7 @@ var app = (function () {
 	        return state;
 	    });
 	    dispose_group(store.scene);
-	    dispose_renderer(renderer);
+	    dispose_renderer(store.renderer);
 	}
 
 
@@ -66914,21 +67086,20 @@ var app = (function () {
 
 	Balance_equation[FILENAME] = 'src/components/balance_equation/balance_equation.svelte';
 
-	var $$_import_store = reactive_import(() => store);
-	var root$2 = add_locations(from_html(`<div class="p-cont svelte-1p1igs7"><p class="spaced-p svelte-1p1igs7"> </p> <p class="spaced-p svelte-1p1igs7">↑</p></div>`), Balance_equation[FILENAME], [[103, 16, [[104, 20], [105, 20]]]]);
-	var root_1$1 = add_locations(from_html(`<button type="button" class="add-molecule-button svelte-1p1igs7"><p class="svelte-1p1igs7"> </p></button>`), Balance_equation[FILENAME], [[117, 20, [[118, 24]]]]);
-	var root_2$1 = add_locations(from_html(`<div></div>`), Balance_equation[FILENAME], [[115, 12]]);
+	var root$2 = add_locations(from_html(`<div class="p-cont svelte-1p1igs7"><p class="spaced-p svelte-1p1igs7"> </p> <p class="spaced-p svelte-1p1igs7">↑</p></div>`), Balance_equation[FILENAME], [[107, 16, [[108, 20], [109, 20]]]]);
+	var root_1$1 = add_locations(from_html(`<button type="button" class="add-molecule-button svelte-1p1igs7"><p class="svelte-1p1igs7"> </p></button>`), Balance_equation[FILENAME], [[121, 20, [[122, 24]]]]);
+	var root_2$1 = add_locations(from_html(`<div></div>`), Balance_equation[FILENAME], [[119, 12]]);
 
 	var root_3 = add_locations(from_html(`<div id="outer" class="svelte-1p1igs7"><button type="button" id="back-button" class="svelte-1p1igs7"><p class="svelte-1p1igs7">Back</p></button> <div id="canvas-container" class="svelte-1p1igs7"><canvas class="svelte-1p1igs7"></canvas></div> <div id="arrow-container" class="svelte-1p1igs7"><div id="balance-arrows" class="svelte-1p1igs7"></div> <h1 class="center-arrow svelte-1p1igs7">↑</h1> <hr class="middle-divider svelte-1p1igs7"/></div> <button type="button" id="submit">Submit!</button> <div class="add-molecules-container svelte-1p1igs7"><!> <button type="button" id="trash">🗑️</button></div></div>`), Balance_equation[FILENAME], [
 		[
-			95,
+			99,
 			0,
 			[
-				[96, 4, [[96, 111]]],
-				[97, 4, [[98, 8]]],
-				[100, 4, [[101, 8], [109, 8], [110, 8]]],
-				[112, 4],
-				[113, 4, [[123, 8]]]
+				[100, 4, [[100, 111]]],
+				[101, 4, [[102, 8]]],
+				[104, 4, [[105, 8], [113, 8], [114, 8]]],
+				[116, 4],
+				[117, 4, [[127, 8]]]
 			]
 		]
 	]);
@@ -66938,6 +67109,25 @@ var app = (function () {
 
 		push($$props, false, Balance_equation);
 
+		const $balance_rotations = () => (
+			validate_store(balance_rotations, 'balance_rotations'),
+			store_get(balance_rotations, '$balance_rotations', $$stores)
+		);
+
+		const $compounds_in_scene = () => (
+			validate_store(compounds_in_scene, 'compounds_in_scene'),
+			store_get(compounds_in_scene, '$compounds_in_scene', $$stores)
+		);
+
+		const $need_to_delete = () => (
+			validate_store(need_to_delete, 'need_to_delete'),
+			store_get(need_to_delete, '$need_to_delete', $$stores)
+		);
+
+		const [$$stores, $$cleanup] = setup_stores();
+		const balance_rotations = store.balance_rotations;
+		const compounds_in_scene = store.compounds_in_scene;
+		const need_to_delete = store.need_to_delete;
 		let balance_equation_scene;
 
 		onMount(async () => {
@@ -66999,14 +67189,14 @@ var app = (function () {
 
 		function add_molecule_to_scene(compound, side) {
 			let y = getRandomBetween(-.4, -.8);
-			let x_multiplier = strict_equals(side, $$_import_store().sides.LEFT) ? -1 : 1;
+			let x_multiplier = strict_equals(side, store.sides.LEFT) ? -1 : 1;
 			let x = x_multiplier * getRandomBetween(.2, .8);
 
 			balance_equation_scene.add_molecule_in_play(compound, x, y);
 		}
 
 		function toggle_delete_molecule_from_scene() {
-			$$_import_store($$_import_store().need_to_delete = !$$_import_store().need_to_delete);
+			need_to_delete.update((value) => !value);
 		}
 
 		function go_to_timeline(event) {
@@ -67014,16 +67204,16 @@ var app = (function () {
 			leave_scene_audio.play();
 
 			if (get$1(balanced)) {
-				end_scene($$_import_store().GameStates.GAMEWON);
+				end_scene(store.GameStates.GAMEWON);
 			} else {
-				end_scene($$_import_store().GameStates.GAMELOST);
+				end_scene(store.GameStates.GAMELOST);
 			}
 
 			global_store.current_scene.set(global_store.possible_scenes.Timeline);
 		}
 
-		legacy_pre_effect(() => ($$_import_store(), get$1(balanced)), () => {
-			let counts = Object.values($$_import_store().balance_rotations);
+		legacy_pre_effect(() => ($balance_rotations(), get$1(balanced)), () => {
+			let counts = Object.values($balance_rotations());
 
 			set(balanced, !counts.length || counts.filter((k) => strict_equals(k, 0, false)).length ? false : true);
 
@@ -67070,8 +67260,8 @@ var app = (function () {
 				div_2,
 				5,
 				() => (
-					deep_read_state($$_import_store()),
-					untrack(() => Object.entries($$_import_store().balance_rotations))
+					$balance_rotations(),
+					untrack(() => Object.entries($balance_rotations()))
 				),
 				([el, rotation]) => el + rotation,
 				($$anchor, $$item) => {
@@ -67108,7 +67298,7 @@ var app = (function () {
 			),
 			'each',
 			Balance_equation,
-			102,
+			106,
 			12
 		);
 
@@ -67125,8 +67315,8 @@ var app = (function () {
 				node_1,
 				1,
 				() => (
-					deep_read_state($$_import_store()),
-					untrack(() => [$$_import_store().sides.LEFT, $$_import_store().sides.RIGHT])
+					deep_read_state(store),
+					untrack(() => [store.sides.LEFT, store.sides.RIGHT])
 				),
 				(side) => side,
 				($$anchor, side) => {
@@ -67137,9 +67327,9 @@ var app = (function () {
 							div_5,
 							5,
 							() => (
-								deep_read_state($$_import_store()),
+								$compounds_in_scene(),
 								get$1(side),
-								untrack(() => $$_import_store().compounds_in_scene[get$1(side)])
+								untrack(() => $compounds_in_scene()[get$1(side)])
 							),
 							(compound) => compound,
 							($$anchor, compound) => {
@@ -67156,7 +67346,7 @@ var app = (function () {
 						),
 						'each',
 						Balance_equation,
-						116,
+						120,
 						16
 					);
 
@@ -67167,7 +67357,7 @@ var app = (function () {
 			),
 			'each',
 			Balance_equation,
-			114,
+			118,
 			8
 		);
 
@@ -67178,16 +67368,7 @@ var app = (function () {
 
 		template_effect(() => {
 			set_class(button_1, 1, clsx(get$1(balanced) ? "jiggle" : ""), 'svelte-1p1igs7');
-
-			set_class(
-				button_3,
-				1,
-				clsx((
-					deep_read_state($$_import_store()),
-					untrack(() => $$_import_store().need_to_delete ? 'red' : 'gray')
-				)),
-				'svelte-1p1igs7'
-			);
+			set_class(button_3, 1, clsx($need_to_delete() ? 'red' : 'gray'), 'svelte-1p1igs7');
 		});
 
 		event('click', button, stopPropagation((_) => {
@@ -67203,7 +67384,11 @@ var app = (function () {
 
 		append$1($$anchor, div);
 
-		return pop($$exports);
+		var $$pop = pop($$exports);
+
+		$$cleanup();
+
+		return $$pop;
 	}
 
 	Story_scene[FILENAME] = 'src/components/story_scene/story_scene.svelte';

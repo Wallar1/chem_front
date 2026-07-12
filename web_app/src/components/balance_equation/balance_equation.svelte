@@ -4,6 +4,10 @@
     import { BalanceEquationScene, end_scene } from './balance_equation.js';
     import { store } from './store.js';
     import { global_store } from '../../global_store.js';
+
+    const balance_rotations = store.balance_rotations;
+    const compounds_in_scene = store.compounds_in_scene;
+    const need_to_delete = store.need_to_delete;
     
     let balance_equation_scene;
     onMount(async () => {
@@ -15,7 +19,7 @@
 
     let balanced = false;
     $: {
-        let counts = Object.values(store.balance_rotations);
+        let counts = Object.values($balance_rotations);
         balanced = !counts.length || counts.filter(k => k !== 0).length ? false : true;
         if (balanced){
             game_won_audio.fastSeek(0);
@@ -77,7 +81,7 @@
     }
 
     function toggle_delete_molecule_from_scene() {
-        store.need_to_delete = !store.need_to_delete;
+        need_to_delete.update(value => !value);
     }
 
     function go_to_timeline(event) {
@@ -99,7 +103,7 @@
     </div>
     <div id='arrow-container'>
         <div id='balance-arrows'>
-            {#each Object.entries(store.balance_rotations) as [el, rotation] (el + rotation)}
+            {#each Object.entries($balance_rotations) as [el, rotation] (el + rotation)}
                 <div class="p-cont">
                     <p class="spaced-p">{el}</p>
                     <p class="spaced-p" in:custom_rotate={{duration: 1000, rotation: rotation}} style="transform: rotate({rotation}deg); color: {calc_color(rotation)}">↑</p>
@@ -113,14 +117,14 @@
     <div class="add-molecules-container">
         {#each [store.sides.LEFT, store.sides.RIGHT] as side (side)}
             <div class="{side} add-molecules">
-                {#each store.compounds_in_scene[side] as compound (compound)}
+                {#each $compounds_in_scene[side] as compound (compound)}
                     <button type="button" class="add-molecule-button" on:click|stopPropagation={() => add_molecule_to_scene(compound, side)}>
                         <p>{compound}</p>
                     </button>
                 {/each}
             </div>
         {/each}
-        <button type="button" class={store.need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</button>
+        <button type="button" class={$need_to_delete ? 'red':'gray'} id="trash" on:click={() => toggle_delete_molecule_from_scene()}>🗑️</button>
     </div>
 </div>
 
