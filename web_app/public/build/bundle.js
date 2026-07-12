@@ -9448,6 +9448,23 @@ var app = (function () {
 	}
 
 	/**
+	 * Schedules a callback to run immediately before the component is unmounted.
+	 *
+	 * Out of `onMount`, `beforeUpdate`, `afterUpdate` and `onDestroy`, this is the
+	 * only one that runs inside a server-side component.
+	 *
+	 * @param {() => any} fn
+	 * @returns {void}
+	 */
+	function onDestroy(fn) {
+		if (component_context === null) {
+			lifecycle_outside_component('onDestroy');
+		}
+
+		onMount(() => () => untrack(fn));
+	}
+
+	/**
 	 * Legacy-mode: Init callbacks object for onMount/beforeUpdate/afterUpdate
 	 * @param {ComponentContext} context
 	 */
@@ -52551,7 +52568,7 @@ var app = (function () {
 
 	Scientist_card[FILENAME] = 'src/components/scientist_timeline/scientist_card.svelte';
 
-	var root$d = add_locations(from_html(`<div class="card svelte-xbmljw" role="button" tabindex="0"><img/> <div class="text svelte-xbmljw"><div class="story svelte-xbmljw"><p class="svelte-xbmljw"> </p> <button type="button" class="button svelte-xbmljw">Battle!</button></div> <p class="svelte-xbmljw"> </p> <p class="svelte-xbmljw"> </p></div></div>`), Scientist_card[FILENAME], [
+	var root$e = add_locations(from_html(`<div class="card svelte-xbmljw" role="button" tabindex="0"><img/> <div class="text svelte-xbmljw"><div class="story svelte-xbmljw"><p class="svelte-xbmljw"> </p> <button type="button" class="button svelte-xbmljw">Battle!</button></div> <p class="svelte-xbmljw"> </p> <p class="svelte-xbmljw"> </p></div></div>`), Scientist_card[FILENAME], [
 		[
 			27,
 			0,
@@ -52603,7 +52620,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$d();
+		var div = root$e();
 		var img = child(div);
 		let classes;
 		var div_1 = sibling(img, 2);
@@ -52673,7 +52690,7 @@ var app = (function () {
 
 	Scientist_timeline[FILENAME] = 'src/components/scientist_timeline/scientist_timeline.svelte';
 
-	var root$c = add_locations(from_html(`<div><div class="widescreen svelte-nvcuj9"></div> <div class="lab-equipment svelte-nvcuj9"><button type="button" class="lab-equipment-button svelte-nvcuj9"><img src="lab_equipment.webp" alt="lab equipment"/></button></div></div>`), Scientist_timeline[FILENAME], [[30, 0, [[31, 4], [36, 4, [[37, 8, [[38, 12]]]]]]]]);
+	var root$d = add_locations(from_html(`<div><div class="widescreen svelte-nvcuj9"></div> <div class="lab-equipment svelte-nvcuj9"><button type="button" class="lab-equipment-button svelte-nvcuj9"><img src="lab_equipment.webp" alt="lab equipment"/></button></div></div>`), Scientist_timeline[FILENAME], [[30, 0, [[31, 4], [36, 4, [[37, 8, [[38, 12]]]]]]]]);
 
 	function Scientist_timeline($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Scientist_timeline, ...$$anchor });
@@ -52711,7 +52728,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$c();
+		var div = root$d();
 		var div_1 = child(div);
 
 		add_svelte_meta(
@@ -64487,7 +64504,7 @@ var app = (function () {
 
 	Compound_card[FILENAME] = 'src/components/battle_scene/compound_card.svelte';
 
-	var root$b = add_locations(from_html(`<div><div class="stats svelte-r5rrem"><p> </p> <p> </p></div> <h2 class="el_name svelte-r5rrem"> </h2></div>`), Compound_card[FILENAME], [[10, 0, [[11, 4, [[12, 8], [13, 8]]], [15, 4]]]]);
+	var root$c = add_locations(from_html(`<div><div class="stats svelte-r5rrem"><p> </p> <p> </p></div> <h2 class="el_name svelte-r5rrem"> </h2></div>`), Compound_card[FILENAME], [[10, 0, [[11, 4, [[12, 8], [13, 8]]], [15, 4]]]]);
 
 	function Compound_card($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Compound_card, ...$$anchor });
@@ -64552,7 +64569,7 @@ var app = (function () {
 			$on: ($$event_name, $$event_cb) => add_legacy_event_listener($$props, $$event_name, $$event_cb)
 		};
 
-		var div = root$b();
+		var div = root$c();
 		var div_1 = child(div);
 		var p = child(div_1);
 		var text = child(p);
@@ -64585,7 +64602,7 @@ var app = (function () {
 
 	Bottom_compound_bar[FILENAME] = 'src/components/battle_scene/bottom_compound_bar.svelte';
 
-	var root$a = add_locations(from_html(`<div id="sidebar-bottom" class="svelte-17epzu7"></div>`), Bottom_compound_bar[FILENAME], [[17, 0]]);
+	var root$b = add_locations(from_html(`<div id="sidebar-bottom" class="svelte-17epzu7"></div>`), Bottom_compound_bar[FILENAME], [[17, 0]]);
 
 	function Bottom_compound_bar($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Bottom_compound_bar, ...$$anchor });
@@ -64636,7 +64653,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$a();
+		var div = root$b();
 
 		add_svelte_meta(
 			() => each(div, 5, () => get$1(keyboard_compounds), ([key, compound]) => key + '-' + (get$1(max_by_compound)[compound] ?? 0) + '-' + get$1(selected_key), ($$anchor, $$item) => {
@@ -64732,8 +64749,8 @@ var app = (function () {
 
 	Right_element_bar$1[FILENAME] = 'src/components/battle_scene/right_element_bar.svelte';
 
-	var root$9 = add_locations(from_html(`<div><p class="svelte-iij2bz"> </p></div>`), Right_element_bar$1[FILENAME], [[17, 8, [[18, 12]]]]);
-	var root_1$5 = add_locations(from_html(`<div id="sidebar-right" class="svelte-iij2bz"><div id="spacer" class="svelte-iij2bz"></div> <!></div>`), Right_element_bar$1[FILENAME], [[14, 0, [[15, 4]]]]);
+	var root$a = add_locations(from_html(`<div><p class="svelte-iij2bz"> </p></div>`), Right_element_bar$1[FILENAME], [[17, 8, [[18, 12]]]]);
+	var root_1$6 = add_locations(from_html(`<div id="sidebar-right" class="svelte-iij2bz"><div id="spacer" class="svelte-iij2bz"></div> <!></div>`), Right_element_bar$1[FILENAME], [[14, 0, [[15, 4]]]]);
 
 	function Right_element_bar$1($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Right_element_bar$1, ...$$anchor });
@@ -64768,7 +64785,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_1$5();
+		var div = root_1$6();
 		var node = sibling(child(div), 2);
 
 		add_svelte_meta(
@@ -64794,7 +64811,7 @@ var app = (function () {
 
 					last_updated();
 
-					var div_1 = root$9();
+					var div_1 = root$a();
 					let classes;
 					var p = child(div_1);
 					var text = child(p);
@@ -64832,7 +64849,7 @@ var app = (function () {
 
 	Health_bar[FILENAME] = 'src/components/battle_scene/health_bar.svelte';
 
-	var root$8 = add_locations(from_html(`<div id="health-bar" class="svelte-lxc4va"><div class="health svelte-lxc4va"></div></div>`), Health_bar[FILENAME], [[8, 0, [[9, 4]]]]);
+	var root$9 = add_locations(from_html(`<div id="health-bar" class="svelte-lxc4va"><div class="health svelte-lxc4va"></div></div>`), Health_bar[FILENAME], [[8, 0, [[9, 4]]]]);
 
 	function Health_bar($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Health_bar, ...$$anchor });
@@ -64861,7 +64878,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$8();
+		var div = root$9();
 		var div_1 = child(div);
 
 		reset(div);
@@ -64877,7 +64894,7 @@ var app = (function () {
 
 	Score[FILENAME] = 'src/components/battle_scene/score.svelte';
 
-	var root$7 = add_locations(from_html(`<div id="score" class="svelte-1p9v040"> </div>`), Score[FILENAME], [[5, 0]]);
+	var root$8 = add_locations(from_html(`<div id="score" class="svelte-1p9v040"> </div>`), Score[FILENAME], [[5, 0]]);
 
 	function Score($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Score, ...$$anchor });
@@ -64891,7 +64908,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$7();
+		var div = root$8();
 		var text = child(div, true);
 
 		reset(div);
@@ -64901,17 +64918,205 @@ var app = (function () {
 		return pop($$exports);
 	}
 
+	const MIN_DOT_SIZE = 4;
+	const MAX_DOT_SIZE = 12;
+	const ANTIPODAL_EPSILON = 1e-6;
+
+	const _player_normal = new Vector3();
+	const _enemy_normal = new Vector3();
+	const _forward = new Vector3();
+	const _right = new Vector3();
+	const _tangent = new Vector3();
+	const _look = new Vector3();
+	const _player_pos = new Vector3();
+	const _enemy_pos = new Vector3();
+
+	/**
+	 * Shortest-arc angular distance on the unit sphere, in [0, π].
+	 */
+	function shortest_angular_distance(player_unit, enemy_unit) {
+		const cos_angle = MathUtils.clamp(player_unit.dot(enemy_unit), -1, 1);
+		return Math.acos(cos_angle);
+	}
+
+	/**
+	 * Tangent direction at the player toward the enemy along the shortest geodesic.
+	 * Returns null when the points are coincident or exactly antipodal (no unique shortest path).
+	 */
+	function shortest_geodesic_tangent(player_unit, enemy_unit, target = new Vector3()) {
+		target.copy(enemy_unit).addScaledVector(player_unit, -enemy_unit.dot(player_unit));
+		if (target.lengthSq() < ANTIPODAL_EPSILON) {
+			return null;
+		}
+		return target.normalize();
+	}
+
+	/**
+	 * Map angular distance (0 = next to player, π = opposite side) to indicator pixel size.
+	 */
+	function indicator_size_for_distance(angular_distance) {
+		const t = MathUtils.clamp(angular_distance / Math.PI, 0, 1);
+		return MathUtils.lerp(MAX_DOT_SIZE, MIN_DOT_SIZE, t);
+	}
+
+	/**
+	 * Bearing of a tangent direction relative to the player's forward on the surface.
+	 * 0 = forward, positive = clockwise when viewed from above the player.
+	 */
+	function bearing_from_forward(tangent, forward, right) {
+		const x = tangent.dot(right);
+		const y = tangent.dot(forward);
+		return Math.atan2(x, y);
+	}
+
+	/**
+	 * Build minimap indicator descriptors for all living enemies.
+	 * Each indicator: { angle, size } where angle is radians from forward (clockwise)
+	 * and size is the CSS pixel diameter of the dot.
+	 */
+	function compute_minimap_indicators(camera, enemies) {
+		if (!camera || !enemies?.length) {
+			return [];
+		}
+
+		camera.getWorldPosition(_player_pos);
+		if (_player_pos.lengthSq() < ANTIPODAL_EPSILON) {
+			return [];
+		}
+		_player_normal.copy(_player_pos).normalize();
+
+		camera.getWorldDirection(_look);
+		_forward.copy(_look).projectOnPlane(_player_normal);
+		if (_forward.lengthSq() < ANTIPODAL_EPSILON) {
+			return [];
+		}
+		_forward.normalize();
+		_right.crossVectors(_forward, _player_normal).normalize();
+
+		const indicators = [];
+		for (let i = 0; i < enemies.length; i++) {
+			const enemy = enemies[i];
+			if (enemy?.should_delete) {
+				continue;
+			}
+			const mesh = enemy.mesh ?? enemy;
+			if (!mesh?.getWorldPosition) {
+				continue;
+			}
+			mesh.getWorldPosition(_enemy_pos);
+			if (_enemy_pos.lengthSq() < ANTIPODAL_EPSILON) {
+				continue;
+			}
+			_enemy_normal.copy(_enemy_pos).normalize();
+
+			const tangent = shortest_geodesic_tangent(_player_normal, _enemy_normal, _tangent);
+			if (!tangent) {
+				continue;
+			}
+
+			const angular_distance = shortest_angular_distance(_player_normal, _enemy_normal);
+			indicators.push({
+				angle: bearing_from_forward(tangent, _forward, _right),
+				size: indicator_size_for_distance(angular_distance),
+			});
+		}
+		return indicators;
+	}
+
+	Minimap[FILENAME] = 'src/components/battle_scene/minimap.svelte';
+
+	var root$7 = add_locations(from_html(`<div class="enemy-dot svelte-1ps5lr"></div>`), Minimap[FILENAME], [[50, 3]]);
+	var root_1$5 = add_locations(from_html(`<div id="minimap" aria-label="Enemy minimap" class="svelte-1ps5lr"><div class="disc svelte-1ps5lr"><div class="forward-marker svelte-1ps5lr"></div> <div class="player-marker svelte-1ps5lr"></div> <!></div></div>`), Minimap[FILENAME], [[45, 0, [[46, 1, [[47, 2], [48, 2]]]]]]);
+
+	function Minimap($$anchor, $$props) {
+		if (new.target) return createClassComponent({ component: Minimap, ...$$anchor });
+
+		push($$props, false, Minimap);
+
+		const DISC_SIZE = 110;
+		const RING_RADIUS = 42;
+		let indicators = tag(mutable_source([]), 'indicators');
+		let raf_id = 0;
+
+		function tick() {
+			const state = get$2(store$3.game_state)?.state;
+
+			if (strict_equals(state, store$3.GameStates.PLAYING) || strict_equals(state, store$3.GameStates.PAUSED)) {
+				set(indicators, compute_minimap_indicators(store$3.camera, store$3.enemies));
+			} else {
+				set(indicators, []);
+			}
+
+			raf_id = requestAnimationFrame(tick);
+		}
+
+		onMount(() => {
+			raf_id = requestAnimationFrame(tick);
+		});
+
+		onDestroy(() => {
+			if (raf_id) {
+				cancelAnimationFrame(raf_id);
+			}
+		});
+
+		function dot_style(indicator) {
+			const x = Math.sin(indicator.angle) * RING_RADIUS;
+			const y = -Math.cos(indicator.angle) * RING_RADIUS;
+			const size = indicator.size;
+
+			return `
+			width: ${size}px;
+			height: ${size}px;
+			transform: translate(${x}px, ${y}px) translate(-50%, -50%);
+		`;
+		}
+
+		var $$exports = {
+			$set: update_legacy_props,
+			$on: ($$event_name, $$event_cb) => add_legacy_event_listener($$props, $$event_name, $$event_cb)
+		};
+
+		init$1();
+
+		var div = root_1$5();
+
+		set_style(div, `width: ${DISC_SIZE}px; height: ${DISC_SIZE}px;`);
+
+		var div_1 = child(div);
+		var node = sibling(child(div_1), 4);
+
+		add_svelte_meta(
+			() => each(node, 1, () => get$1(indicators), index, ($$anchor, indicator) => {
+				var div_2 = root$7();
+
+				template_effect(($0) => set_style(div_2, $0), [() => dot_style(get$1(indicator))]);
+				append$1($$anchor, div_2);
+			}),
+			'each',
+			Minimap,
+			49,
+			2
+		);
+
+		reset(div_1);
+		reset(div);
+		append$1($$anchor, div);
+
+		return pop($$exports);
+	}
+
 	Battle[FILENAME] = 'src/components/battle_scene/battle.svelte';
 
-	var root$6 = add_locations(from_html(`<button type="button" class="button svelte-3wqs9w">Start</button>`), Battle[FILENAME], [[80, 12]]);
-	var root_1$4 = add_locations(from_html(`<h3>Game Over</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[82, 12], [83, 12]]);
-	var root_2$3 = add_locations(from_html(`<h3>You Win!</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[85, 12], [86, 12]]);
+	var root$6 = add_locations(from_html(`<button type="button" class="button svelte-3wqs9w">Start</button>`), Battle[FILENAME], [[81, 12]]);
+	var root_1$4 = add_locations(from_html(`<h3>Game Over</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[83, 12], [84, 12]]);
+	var root_2$3 = add_locations(from_html(`<h3>You Win!</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[86, 12], [87, 12]]);
 
-	var root_3$1 = add_locations(from_html(`<div><div id="overlay-to-start" class="svelte-3wqs9w"><!></div> <div id="overlay-paused" class="svelte-3wqs9w"><h2 class="svelte-3wqs9w">Paused</h2> <p class="svelte-3wqs9w">Press P or Escape to resume</p></div> <!> <!> <!> <!> <div id="cursor" class="svelte-3wqs9w"></div> <div id="canvas-container"></div></div>`), Battle[FILENAME], [
+	var root_3$1 = add_locations(from_html(`<div><div id="overlay-to-start" class="svelte-3wqs9w"><!></div> <div id="overlay-paused" class="svelte-3wqs9w"><h2 class="svelte-3wqs9w">Paused</h2> <p class="svelte-3wqs9w">Press P or Escape to resume</p></div> <!> <!> <!> <!> <!> <div id="cursor" class="svelte-3wqs9w"></div> <div id="canvas-container"></div></div>`), Battle[FILENAME], [
 		[
-			77,
+			78,
 			0,
-			[[78, 4], [89, 4, [[90, 8], [91, 8]]], [97, 4], [98, 4]]
+			[[79, 4], [90, 4, [[91, 8], [92, 8]]], [99, 4], [100, 4]]
 		]
 	]);
 
@@ -65068,7 +65273,7 @@ var app = (function () {
 				}),
 				'if',
 				Battle,
-				79,
+				80,
 				8
 			);
 		}
@@ -65078,19 +65283,23 @@ var app = (function () {
 		var div_2 = sibling(div_1, 2);
 		var node_1 = sibling(div_2, 2);
 
-		add_svelte_meta(() => Health_bar(node_1, {}), 'component', Battle, 93, 4, { componentTag: 'HealthBar' });
+		add_svelte_meta(() => Health_bar(node_1, {}), 'component', Battle, 94, 4, { componentTag: 'HealthBar' });
 
 		var node_2 = sibling(node_1, 2);
 
-		add_svelte_meta(() => Score(node_2, {}), 'component', Battle, 94, 4, { componentTag: 'Score' });
+		add_svelte_meta(() => Score(node_2, {}), 'component', Battle, 95, 4, { componentTag: 'Score' });
 
 		var node_3 = sibling(node_2, 2);
 
-		add_svelte_meta(() => Right_element_bar$1(node_3, {}), 'component', Battle, 95, 4, { componentTag: 'RightSideBar' });
+		add_svelte_meta(() => Minimap(node_3, {}), 'component', Battle, 96, 4, { componentTag: 'Minimap' });
 
 		var node_4 = sibling(node_3, 2);
 
-		add_svelte_meta(() => Bottom_compound_bar(node_4, {}), 'component', Battle, 96, 4, { componentTag: 'BottomCompoundBar' });
+		add_svelte_meta(() => Right_element_bar$1(node_4, {}), 'component', Battle, 97, 4, { componentTag: 'RightSideBar' });
+
+		var node_5 = sibling(node_4, 2);
+
+		add_svelte_meta(() => Bottom_compound_bar(node_5, {}), 'component', Battle, 98, 4, { componentTag: 'BottomCompoundBar' });
 		next(4);
 		reset(div);
 

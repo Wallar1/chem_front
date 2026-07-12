@@ -16,6 +16,7 @@ vi.mock('./basic_gameplay_2.js', () => ({
 import HealthBar from './health_bar.svelte';
 import RightElementBar from './right_element_bar.svelte';
 import BottomCompoundBar from './bottom_compound_bar.svelte';
+import Minimap from './minimap.svelte';
 import Battle from './battle.svelte';
 import { store } from './store.js';
 
@@ -40,9 +41,16 @@ describe('battle scene components', () => {
 		expect(container.querySelectorAll('.card').length).toBeGreaterThan(0);
 	});
 
+	it('renders Minimap disc', () => {
+		const { container } = render(Minimap);
+		expect(container.querySelector('#minimap')).toBeTruthy();
+		expect(container.querySelector('.disc')).toBeTruthy();
+	});
+
 	it('mounts Battle without store subscription errors', () => {
 		const { container } = render(Battle);
 		expect(container.querySelector('#canvas-container')).toBeTruthy();
+		expect(container.querySelector('#minimap')).toBeTruthy();
 		expect(screen.getByText('Start')).toBeTruthy();
 	});
 });

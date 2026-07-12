@@ -291,25 +291,6 @@
         z-index: 3;
     }
 
-    .widescreen.svelte-nvcuj9 {
-        width: 100vw;
-        height: 40vh;
-        margin-top: 100px;
-        display: flex;
-        overflow-x: scroll;
-        padding-top: 10px;
-    }
-    .lab-equipment.svelte-nvcuj9 {
-        display: flex;
-        justify-content: center;
-    }
-    .lab-equipment-button.svelte-nvcuj9 {
-        border: none;
-        background: none;
-        padding: 0;
-        cursor: pointer;
-    }
-
     #outer.svelte-1hxind {
         background-color: #050505;
         background: radial-gradient(ellipse at center,  rgba(43,45,48,1) 0%,rgba(0,0,0,1) 100%);
@@ -339,6 +320,25 @@
         font: inherit;
     }
 
+    .widescreen.svelte-nvcuj9 {
+        width: 100vw;
+        height: 40vh;
+        margin-top: 100px;
+        display: flex;
+        overflow-x: scroll;
+        padding-top: 10px;
+    }
+    .lab-equipment.svelte-nvcuj9 {
+        display: flex;
+        justify-content: center;
+    }
+    .lab-equipment-button.svelte-nvcuj9 {
+        border: none;
+        background: none;
+        padding: 0;
+        cursor: pointer;
+    }
+
     #outer.svelte-12gfk6n {
         height: 100vh;
         width: 100vw;
@@ -361,38 +361,6 @@
 		justify-content: space-around;
 		align-items: center;
 	}
-
-    #spacer.svelte-iij2bz {
-        width: 100%;
-        height: 300px;
-    }
-    #sidebar-right.svelte-iij2bz {
-		height: 100vh;
-		width: 150px;
-		background-color: white;
-		box-sizing: border-box;
-		position: absolute;
-		opacity: .7;
-		top: 0px;
-		left: calc(100vw - 150px);
-		float: right;
-	}
-    .el-count.svelte-iij2bz {
-        width: 100%;
-        height: 80px;
-        border: 1px solid gray;
-        border-radius: 4px;
-        margin: 10px;
-    }
-
-    @keyframes svelte-iij2bz-highlight-background {
-        0% { background-color: yellow; }
-        100% { background-color: transparent; }
-    }
-
-    .highlight.svelte-iij2bz {
-        animation: svelte-iij2bz-highlight-background 1s ease forwards;
-    }
 
     #score.svelte-1p9v040{
 		height: 50px;
@@ -429,6 +397,89 @@
         width: 100%;
         background-color: rgb(62, 255, 62);
     }
+
+    #spacer.svelte-iij2bz {
+        width: 100%;
+        height: 300px;
+    }
+    #sidebar-right.svelte-iij2bz {
+		height: 100vh;
+		width: 150px;
+		background-color: white;
+		box-sizing: border-box;
+		position: absolute;
+		opacity: .7;
+		top: 0px;
+		left: calc(100vw - 150px);
+		float: right;
+	}
+    .el-count.svelte-iij2bz {
+        width: 100%;
+        height: 80px;
+        border: 1px solid gray;
+        border-radius: 4px;
+        margin: 10px;
+    }
+
+    @keyframes svelte-iij2bz-highlight-background {
+        0% { background-color: yellow; }
+        100% { background-color: transparent; }
+    }
+
+    .highlight.svelte-iij2bz {
+        animation: svelte-iij2bz-highlight-background 1s ease forwards;
+    }
+
+	#minimap.svelte-1ps5lr {
+		position: absolute;
+		left: 30px;
+		top: 140px;
+		z-index: 2;
+		pointer-events: none;
+	}
+
+	.disc.svelte-1ps5lr {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		background: radial-gradient(circle at 45% 40%, rgba(70, 95, 80, 0.55), rgba(15, 25, 20, 0.75));
+		border: 2px solid rgba(210, 230, 215, 0.55);
+		box-sizing: border-box;
+		overflow: hidden;
+	}
+
+	.player-marker.svelte-1ps5lr {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 8px;
+		height: 8px;
+		margin: -4px 0 0 -4px;
+		border-radius: 50%;
+		background: rgba(240, 248, 240, 0.95);
+	}
+
+	.forward-marker.svelte-1ps5lr {
+		position: absolute;
+		top: 10px;
+		left: 50%;
+		width: 0;
+		height: 0;
+		margin-left: -5px;
+		border-left: 5px solid transparent;
+		border-right: 5px solid transparent;
+		border-bottom: 8px solid rgba(200, 230, 210, 0.85);
+	}
+
+	.enemy-dot.svelte-1ps5lr {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		border-radius: 50%;
+		background: rgb(255, 72, 72);
+		box-shadow: 0 0 4px rgba(255, 60, 60, 0.7);
+	}
 
     #sidebar-right.svelte-u81rju {
 		height: 100vh;

@@ -5,6 +5,7 @@
     import RightSideBar from './right_element_bar.svelte';
     import HealthBar from './health_bar.svelte';
     import Score from './score.svelte';
+    import Minimap from './minimap.svelte';
     import { store } from './store.js';
     import { global_store } from '../../global_store.js';
     import { reset_pressed_keys } from './input_handler.js';
@@ -92,6 +93,7 @@
     </div>
     <HealthBar/>
     <Score/>
+    <Minimap/>
     <RightSideBar/>
     <BottomCompoundBar/>
     <div id='cursor'></div>
