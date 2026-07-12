@@ -166,6 +166,7 @@ var app = (function () {
 	const CLASS_CACHE = Symbol('class');
 	const STYLE_CACHE = Symbol('style');
 	const TEXT_CACHE = Symbol('text');
+	const FORM_RESET_HANDLER = Symbol('form reset');
 	/** An anchor might change, via this symbol on the original anchor we can tell HMR about the updated anchor */
 	const HMR_ANCHOR = Symbol('hmr anchor');
 
@@ -4850,6 +4851,30 @@ var app = (function () {
 		}
 	}
 
+	let listening_to_form_reset = false;
+
+	function add_form_reset_listener() {
+		if (!listening_to_form_reset) {
+			listening_to_form_reset = true;
+			document.addEventListener(
+				'reset',
+				(evt) => {
+					// Needs to happen one tick later or else the dom properties of the form
+					// elements have not updated to their reset values yet
+					Promise.resolve().then(() => {
+						if (!evt.defaultPrevented) {
+							for (const e of /**@type {HTMLFormElement} */ (evt.target).elements) {
+								/** @type {any} */ (e)[FORM_RESET_HANDLER]?.();
+							}
+						}
+					});
+				},
+				// In the capture phase to guarantee we get noticed of it (no possibility of stopPropagation)
+				{ capture: true }
+			);
+		}
+	}
+
 	/**
 	 * @template T
 	 * @param {() => T} fn
@@ -8724,6 +8749,64 @@ var app = (function () {
 	const LINK_TAG = IS_XHTML ? 'link' : 'LINK';
 
 	/**
+	 * The value/checked attribute in the template actually corresponds to the defaultValue property, so we need
+	 * to remove it upon hydration to avoid a bug when someone resets the form value.
+	 * @param {HTMLInputElement} input
+	 * @returns {void}
+	 */
+	function remove_input_defaults(input) {
+		if (!hydrating) return;
+
+		var already_removed = false;
+
+		// We try and remove the default attributes later, rather than sync during hydration.
+		// Doing it sync during hydration has a negative impact on performance, but deferring the
+		// work in an idle task alleviates this greatly. If a form reset event comes in before
+		// the idle callback, then we ensure the input defaults are cleared just before.
+		var remove_defaults = () => {
+			if (already_removed) return;
+			already_removed = true;
+
+			// Remove the attributes but preserve the values
+			if (input.hasAttribute('value')) {
+				var value = input.value;
+				set_attribute(input, 'value', null);
+				input.value = value;
+			}
+
+			if (input.hasAttribute('checked')) {
+				var checked = input.checked;
+				set_attribute(input, 'checked', null);
+				input.checked = checked;
+			}
+		};
+
+		/** @type {any} */ (input)[FORM_RESET_HANDLER] = remove_defaults;
+		queue_micro_task(remove_defaults);
+		add_form_reset_listener();
+	}
+
+	/**
+	 * @param {Element} element
+	 * @param {boolean} checked
+	 */
+	function set_checked(element, checked) {
+		var attributes = get_attributes(element);
+
+		if (
+			attributes.checked ===
+			(attributes.checked =
+				// treat null and undefined the same for the initial value
+				checked ?? undefined)
+		) {
+			return;
+		}
+
+		// @ts-expect-error
+		element.checked = checked;
+	}
+
+	/**
 	 * @param {Element} element
 	 * @param {string} attribute
 	 * @param {string | null} value
@@ -9483,87 +9566,84 @@ var app = (function () {
 
 	enable_legacy_mode_flag();
 
-	/*
-	    'ErnestRutherford': {
-	        name: 'Ernest Rutherford',
-	        src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
-	        history: '',
-	        strength: '',
-	        weakness: '',
-	        enemy_type: ''
-	    }
+	const UPGRADE_IDS = Object.freeze({
+	    LAB_COAT: 'lab_coat',
+	    SHARP_AXE: 'sharp_axe',
+	    ERLENMEYER_FLASK: 'erlenmeyer_flask',
+	    SEPARATING_FUNNEL: 'separating_funnel',
+	});
 
-	    enemy {
-	        model
-	        damage
-	        effect
-	        health
-	        animations
-	    }
-	*/
+	const UPGRADE_CATALOG = Object.freeze([
+	    {
+	        id: UPGRADE_IDS.LAB_COAT,
+	        name: 'New Lab Coat',
+	        cost: 10,
+	        description: 'Halves damage taken from enemies.',
+	    },
+	    {
+	        id: UPGRADE_IDS.SHARP_AXE,
+	        name: 'Sharp Axe',
+	        cost: 5,
+	        description: 'Destroys mines in one swing and deals 2× axe damage to enemies.',
+	    },
+	    {
+	        id: UPGRADE_IDS.ERLENMEYER_FLASK,
+	        name: 'Erlenmeyer Flask',
+	        cost: 5,
+	        description: 'Hold click up to 1s to grow your projectile (up to 2× size and damage).',
+	    },
+	    {
+	        id: UPGRADE_IDS.SEPARATING_FUNNEL,
+	        name: 'Separating Funnel',
+	        cost: 10,
+	        description: 'Fires two projectiles per shot without using extra atoms.',
+	    },
+	]);
 
-	const scientists = {
-	    'Democritus': {
-	        'name': 'Democritus',
-	        'year': '380 BC',
-	        'story': 'Declared that matter is composed of indivisible and indestructible particles called "atomos"',
-	        'src': 'https://www.lookingforwisdom.com/content/images/size/w2000/2020/11/Coypel_Democritus.jpg',
-	    },
-	    'Geber': {
-	        'name': 'Jābir ibn Hayyān (Geber)',
-	        'story': 'Father of chemistry: introduced a systematic classification of chemical substances, and provided instructions for deriving an inorganic compound (sal ammoniac or ammonium chloride) from organic substances (such as plants, blood, and hair) by chemical means. Declared there were 6 idealized elements: air, earth, fire, water, sulphur (combustability), and mercury (metallic properties).',
-	        'year': '800',
-	        'src': 'https://www.bbvaopenmind.com/wp-content/uploads/2021/04/BBVA-OpenMind-Miguel-Barral-Jabir-ibn-Hayyan-2.jpg'
-	    },
-	    'SirFrancisBacon': {
-	        'name': 'Sir Francis Bacon',
-	        'story': 'Developed the scientific method',
-	        'year': '1605',
-	        'src': 'https://www.biography.com/.image/t_share/MTIwNjA4NjMzNzMxNzc4MDYw/francis-bacon-9194632-1-402.jpg'
-	    },
-	    'RobertBoyle': {
-	        'name': 'Robert Boyle',
-	        'story': "Founder of modern chemistry. Boyle's law states that the volume and pressure of a gas are inversely proportional when the temperature is constant. So when the pressure goes up, the volume goes down, and vice versa",
-	        'year': '1662',
-	        'src': 'https://i0.wp.com/theirishspirit.com/wp-content/uploads/2022/01/Robert-Boyle.jpg?fit=1326%2C986&ssl=1'
-	    },
-	    AlessandroVolta: {
-	        name: 'Alessandro Volta',
-	        story: 'Constructed the first electrical battery and founded electrochemistry with the invention of galvonic cells.',
-	        year: '1800',
-	        src: 'https://upload.wikimedia.org/wikipedia/commons/5/52/Alessandro_Volta.jpeg'
-	    },
-	    Lavoisier: {
-	        name: 'Antoine-Laurent de Lavoisier',
-	        story: "Brought about a rennaissance in chemistry by discovering the Law of Conservation of Mass, inventing our system of naming with Berthollet, working with Laplace on calorimetry, and understanding combustion with his wife.",
-	        year: '1780',
-	        src: 'https://www.sciencehistory.org/sites/default/files/styles/rte_full_width/public/lavoisier3.jpg?itok=7fZV0U1C'
-	    },
-	    DuPont: {
-	        name: 'Éleuthère Irénée du Pont',
-	        story: 'Invented gun powder and founded the DuPont chemical company. Studied under Lavoisier.',
-	        year: '1802',
-	        src: 'https://worldbookblog.files.wordpress.com/2015/06/pc369888-src.jpg'
-	    },
-	    JohnDalton: {
-	        name: 'John Dalton',
-	        story: "Discovered the relationship between a mixture of gases and their partial pressures (Dalton's Law). Provided a basis for modern atomic theory and stoichiometry.",
-	        year: '1803',
-	        src: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhdKbVsLm24B8B1n8DZOgsk5Mc-DxqCo7W0f2I6lzqHxummLeW7WH7Lqec2q5ptcVuS4MaRnoOV6-8ZcYYc8VbVVDevAS4fwaD19PEQdVHdmqPiivDxx3uuZA-mZ-jpnakWIAUvXr3-iX4LgLIjyJN3GVOB_zt8Ds51zklPbMx7NXJ--bOqI5Gs2Y8zzA/s1230/John_Dalton_by_Charles_Turner.jpg'
-	    },
-	    Berzelius: {
-	        name: 'Jöns Jacob Berzelius',
-	        story: "Invented our chemical symbals for elements and subscripts/proportions (eg H2O), as well as identified several new elements (silicon, selenium, thorium, cerium, lithium, and vanadium).",
-	        year: '1828',
-	        src: 'https://www.worldofchemicals.com/Article/477/Jons%20Jacob%20Berzelius.jpg'
-	    },
-	    HumphryDavy: {
-	        name: 'Humphry Davy',
-	        story: "Discovered several earth metals (sodium, potassium, calcium, magnesium, strontium, and barium), as well as contributions to the discoveries of the elemental nature of chlorine and iodine.",
-	        year: '1807',
-	        src: 'https://cdn.britannica.com/96/12396-050-A1110D81/Humphry-Davy-Thomas-Lawrence-detail-oil-painting.jpg'
-	    }
-	};
+	function empty_upgrade_flags() {
+	    return {
+	        [UPGRADE_IDS.LAB_COAT]: false,
+	        [UPGRADE_IDS.SHARP_AXE]: false,
+	        [UPGRADE_IDS.ERLENMEYER_FLASK]: false,
+	        [UPGRADE_IDS.SEPARATING_FUNNEL]: false,
+	    };
+	}
+
+	const joules = writable(0);
+	const owned_upgrades = writable(empty_upgrade_flags());
+	const upgrade_debug_toggles = writable(empty_upgrade_flags());
+
+	function award_joule(amount = 1) {
+	    joules.update((n) => n + amount);
+	}
+
+	function has_upgrade(id) {
+	    const owned = get$2(owned_upgrades);
+	    const debug = get$2(upgrade_debug_toggles);
+	    return !!(owned[id] || debug[id]);
+	}
+
+	function buy_upgrade(id) {
+	    const item = UPGRADE_CATALOG.find((u) => u.id === id);
+	    if (!item) return { ok: false, reason: 'unknown' };
+
+	    const owned = get$2(owned_upgrades);
+	    if (owned[id]) return { ok: false, reason: 'owned' };
+
+	    const balance = get$2(joules);
+	    if (balance < item.cost) return { ok: false, reason: 'broke' };
+
+	    joules.set(balance - item.cost);
+	    owned_upgrades.update((flags) => ({ ...flags, [id]: true }));
+	    return { ok: true };
+	}
+
+	function toggle_upgrade_debug(id) {
+	    upgrade_debug_toggles.update((flags) => ({
+	        ...flags,
+	        [id]: !flags[id],
+	    }));
+	}
 
 	const possible_scenes = Object.freeze({
 	    'Loading': Symbol('loading'),
@@ -9572,10 +9652,11 @@ var app = (function () {
 	    'CompoundCreator': Symbol('compound creator'),
 	    'BalanceEquation': Symbol('balance equation'),
 	    'Story': Symbol('story'),
+	    'Workshop': Symbol('workshop'),
 	});
 	// export const current_scene = writable(possible_scenes.Story);
-	const current_scene = writable(possible_scenes.Battle);
-	// export const current_scene = writable(possible_scenes.Timeline);
+	// const current_scene = writable(possible_scenes.Battle);
+	const current_scene = writable(possible_scenes.Timeline);
 	// export const current_scene = writable(possible_scenes.CompoundCreator);
 	// export const current_scene = writable(possible_scenes.BalanceEquation);
 
@@ -9617,6 +9698,9 @@ var app = (function () {
 	    atoms,
 	    current_scene,
 	    possible_scenes,
+	    joules,
+	    owned_upgrades,
+	    upgrade_debug_toggles,
 	};
 
 	/**
@@ -52560,6 +52644,88 @@ var app = (function () {
 	    },
 	};
 
+	/*
+	    'ErnestRutherford': {
+	        name: 'Ernest Rutherford',
+	        src: 'https://physicsworld.com/wp-content/uploads/2019/06/1909Riceamr.jpg'
+	        history: '',
+	        strength: '',
+	        weakness: '',
+	        enemy_type: ''
+	    }
+
+	    enemy {
+	        model
+	        damage
+	        effect
+	        health
+	        animations
+	    }
+	*/
+
+	const scientists = {
+	    'Democritus': {
+	        'name': 'Democritus',
+	        'year': '380 BC',
+	        'story': 'Declared that matter is composed of indivisible and indestructible particles called "atomos"',
+	        'src': 'https://www.lookingforwisdom.com/content/images/size/w2000/2020/11/Coypel_Democritus.jpg',
+	    },
+	    'Geber': {
+	        'name': 'Jābir ibn Hayyān (Geber)',
+	        'story': 'Father of chemistry: introduced a systematic classification of chemical substances, and provided instructions for deriving an inorganic compound (sal ammoniac or ammonium chloride) from organic substances (such as plants, blood, and hair) by chemical means. Declared there were 6 idealized elements: air, earth, fire, water, sulphur (combustability), and mercury (metallic properties).',
+	        'year': '800',
+	        'src': 'https://www.bbvaopenmind.com/wp-content/uploads/2021/04/BBVA-OpenMind-Miguel-Barral-Jabir-ibn-Hayyan-2.jpg'
+	    },
+	    'SirFrancisBacon': {
+	        'name': 'Sir Francis Bacon',
+	        'story': 'Developed the scientific method',
+	        'year': '1605',
+	        'src': 'https://www.biography.com/.image/t_share/MTIwNjA4NjMzNzMxNzc4MDYw/francis-bacon-9194632-1-402.jpg'
+	    },
+	    'RobertBoyle': {
+	        'name': 'Robert Boyle',
+	        'story': "Founder of modern chemistry. Boyle's law states that the volume and pressure of a gas are inversely proportional when the temperature is constant. So when the pressure goes up, the volume goes down, and vice versa",
+	        'year': '1662',
+	        'src': 'https://i0.wp.com/theirishspirit.com/wp-content/uploads/2022/01/Robert-Boyle.jpg?fit=1326%2C986&ssl=1'
+	    },
+	    AlessandroVolta: {
+	        name: 'Alessandro Volta',
+	        story: 'Constructed the first electrical battery and founded electrochemistry with the invention of galvonic cells.',
+	        year: '1800',
+	        src: 'https://upload.wikimedia.org/wikipedia/commons/5/52/Alessandro_Volta.jpeg'
+	    },
+	    Lavoisier: {
+	        name: 'Antoine-Laurent de Lavoisier',
+	        story: "Brought about a rennaissance in chemistry by discovering the Law of Conservation of Mass, inventing our system of naming with Berthollet, working with Laplace on calorimetry, and understanding combustion with his wife.",
+	        year: '1780',
+	        src: 'https://www.sciencehistory.org/sites/default/files/styles/rte_full_width/public/lavoisier3.jpg?itok=7fZV0U1C'
+	    },
+	    DuPont: {
+	        name: 'Éleuthère Irénée du Pont',
+	        story: 'Invented gun powder and founded the DuPont chemical company. Studied under Lavoisier.',
+	        year: '1802',
+	        src: 'https://worldbookblog.files.wordpress.com/2015/06/pc369888-src.jpg'
+	    },
+	    JohnDalton: {
+	        name: 'John Dalton',
+	        story: "Discovered the relationship between a mixture of gases and their partial pressures (Dalton's Law). Provided a basis for modern atomic theory and stoichiometry.",
+	        year: '1803',
+	        src: 'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhdKbVsLm24B8B1n8DZOgsk5Mc-DxqCo7W0f2I6lzqHxummLeW7WH7Lqec2q5ptcVuS4MaRnoOV6-8ZcYYc8VbVVDevAS4fwaD19PEQdVHdmqPiivDxx3uuZA-mZ-jpnakWIAUvXr3-iX4LgLIjyJN3GVOB_zt8Ds51zklPbMx7NXJ--bOqI5Gs2Y8zzA/s1230/John_Dalton_by_Charles_Turner.jpg'
+	    },
+	    Berzelius: {
+	        name: 'Jöns Jacob Berzelius',
+	        story: "Invented our chemical symbals for elements and subscripts/proportions (eg H2O), as well as identified several new elements (silicon, selenium, thorium, cerium, lithium, and vanadium).",
+	        year: '1828',
+	        src: 'https://www.worldofchemicals.com/Article/477/Jons%20Jacob%20Berzelius.jpg'
+	    },
+	    HumphryDavy: {
+	        name: 'Humphry Davy',
+	        story: "Discovered several earth metals (sodium, potassium, calcium, magnesium, strontium, and barium), as well as contributions to the discoveries of the elemental nature of chlorine and iodine.",
+	        year: '1807',
+	        src: 'https://cdn.britannica.com/96/12396-050-A1110D81/Humphry-Davy-Thomas-Lawrence-detail-oil-painting.jpg'
+	    }
+	};
+
 	const current_scientist = writable(scientists.RobertBoyle);
 
 	const store$2 = {
@@ -52568,14 +52734,11 @@ var app = (function () {
 
 	Scientist_card[FILENAME] = 'src/components/scientist_timeline/scientist_card.svelte';
 
-	var root$e = add_locations(from_html(`<div class="card svelte-xbmljw" role="button" tabindex="0"><img/> <div class="text svelte-xbmljw"><div class="story svelte-xbmljw"><p class="svelte-xbmljw"> </p> <button type="button" class="button svelte-xbmljw">Battle!</button></div> <p class="svelte-xbmljw"> </p> <p class="svelte-xbmljw"> </p></div></div>`), Scientist_card[FILENAME], [
+	var root$g = add_locations(from_html(`<div class="card svelte-xbmljw" role="button" tabindex="0"><img/> <div class="text svelte-xbmljw"><div class="story svelte-xbmljw"><p class="svelte-xbmljw"> </p> <button type="button" class="button svelte-xbmljw">Battle!</button></div> <p class="svelte-xbmljw"> </p></div></div>`), Scientist_card[FILENAME], [
 		[
 			27,
 			0,
-			[
-				[28, 4],
-				[29, 4, [[30, 8, [[31, 12], [32, 12]]], [34, 8], [35, 8]]]
-			]
+			[[28, 4], [29, 4, [[30, 8, [[31, 12], [32, 12]]], [34, 8]]]]
 		]
 	]);
 
@@ -52620,7 +52783,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$e();
+		var div = root$g();
 		var img = child(div);
 		let classes;
 		var div_1 = sibling(img, 2);
@@ -52638,11 +52801,6 @@ var app = (function () {
 		var text_1 = child(p_1, true);
 
 		reset(p_1);
-
-		var p_2 = sibling(p_1, 2);
-		var text_2 = child(p_2, true);
-
-		reset(p_2);
 		reset(div_1);
 		reset(div);
 
@@ -52673,11 +52831,6 @@ var app = (function () {
 				deep_read_state(scientist()),
 				untrack(() => scientist().name)
 			));
-
-			set_text(text_2, (
-				deep_read_state(scientist()),
-				untrack(() => scientist().year)
-			));
 		});
 
 		event('click', button, stopPropagation((e) => start_battle(scientist())));
@@ -52688,9 +52841,74 @@ var app = (function () {
 		return pop($$exports);
 	}
 
+	Joules_display[FILENAME] = 'src/components/joules_display.svelte';
+
+	var root$f = add_locations(from_html(`<div><img src="joule.svg" alt="" class="joule-icon svelte-kg8rnh" width="40" height="40"/> <span class="joule-count"> </span></div>`), Joules_display[FILENAME], [[7, 0, [[8, 4], [9, 4]]]]);
+
+	function Joules_display($$anchor, $$props) {
+		if (new.target) return createClassComponent({ component: Joules_display, ...$$anchor });
+
+		push($$props, false, Joules_display);
+
+		const $joules = () => (
+			validate_store(joules, 'joules'),
+			store_get(joules, '$joules', $$stores)
+		);
+
+		const [$$stores, $$cleanup] = setup_stores();
+		let compact = prop($$props, 'compact', 12, false);
+
+		var $$exports = {
+			get compact() {
+				return compact();
+			},
+
+			set compact($$value) {
+				compact($$value);
+				flushSync();
+			},
+			$set: update_legacy_props,
+			$on: ($$event_name, $$event_cb) => add_legacy_event_listener($$props, $$event_name, $$event_cb)
+		};
+
+		var div = root$f();
+		let classes;
+		var span = sibling(child(div), 2);
+		var text = child(span, true);
+
+		reset(span);
+		reset(div);
+
+		template_effect(() => {
+			classes = set_class(div, 1, 'joules-display svelte-kg8rnh', null, classes, { compact: compact() });
+			set_attribute(div, 'aria-label', `Joules: ${$joules() ?? ''}`);
+			set_text(text, $joules());
+		});
+
+		append$1($$anchor, div);
+
+		var $$pop = pop($$exports);
+
+		$$cleanup();
+
+		return $$pop;
+	}
+
 	Scientist_timeline[FILENAME] = 'src/components/scientist_timeline/scientist_timeline.svelte';
 
-	var root$d = add_locations(from_html(`<div><div class="widescreen svelte-nvcuj9"></div> <div class="lab-equipment svelte-nvcuj9"><button type="button" class="lab-equipment-button svelte-nvcuj9"><img src="lab_equipment.webp" alt="lab equipment"/></button></div></div>`), Scientist_timeline[FILENAME], [[30, 0, [[31, 4], [36, 4, [[37, 8, [[38, 12]]]]]]]]);
+	var root$e = add_locations(from_html(`<div class="scientist-slot svelte-nvcuj9"><!> <div class="timeline-marker svelte-nvcuj9"><div class="timeline-tick svelte-nvcuj9"></div> <span class="timeline-year svelte-nvcuj9"> </span></div></div>`), Scientist_timeline[FILENAME], [[42, 16, [[44, 20, [[45, 24], [46, 24]]]]]]);
+
+	var root_1$8 = add_locations(from_html(`<div><div class="joules-hud svelte-nvcuj9"><!></div> <div class="widescreen svelte-nvcuj9"><div class="timeline-content svelte-nvcuj9"><!> <div class="timeline-line svelte-nvcuj9" aria-hidden="true"></div></div></div> <div class="scene-links svelte-nvcuj9"><button type="button" class="scene-link-button lab-link svelte-nvcuj9"><img src="lab_equipment.webp" alt="Go to lab" class="svelte-nvcuj9"/></button> <button type="button" class="scene-link-button workshop-link svelte-nvcuj9"><img src="workshop.svg" alt="Go to workshop" class="svelte-nvcuj9"/></button></div></div>`), Scientist_timeline[FILENAME], [
+		[
+			35,
+			0,
+			[
+				[36, 4],
+				[39, 4, [[40, 8, [[50, 12]]]]],
+				[53, 4, [[54, 8, [[55, 12]]], [57, 8, [[58, 12]]]]]
+			]
+		]
+	]);
 
 	function Scientist_timeline($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Scientist_timeline, ...$$anchor });
@@ -52703,6 +52921,10 @@ var app = (function () {
 			} else {
 				global_store.current_scene.set(global_store.possible_scenes.BalanceEquation);
 			}
+		}
+
+		function go_to_workshop(e) {
+			global_store.current_scene.set(global_store.possible_scenes.Workshop);
 		}
 
 		const click_sound = new Audio('https://chem-game.s3.amazonaws.com/sounds/bubble_pop.mp3');
@@ -52728,39 +52950,64 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$d();
+		var div = root_1$8();
 		var div_1 = child(div);
+		var node = child(div_1);
+
+		add_svelte_meta(() => Joules_display(node, {}), 'component', Scientist_timeline, 37, 8, { componentTag: 'JoulesDisplay' });
+		reset(div_1);
+
+		var div_2 = sibling(div_1, 2);
+		var div_3 = child(div_2);
+		var node_1 = child(div_3);
 
 		add_svelte_meta(
-			() => each(div_1, 5, () => Object.values(scientists), index, ($$anchor, scientist) => {
+			() => each(node_1, 1, () => Object.values(scientists), index, ($$anchor, scientist) => {
+				var div_4 = root$e();
+				var node_2 = child(div_4);
+
 				add_svelte_meta(
-					() => Scientist_card($$anchor, {
+					() => Scientist_card(node_2, {
 						get scientist() {
 							return get$1(scientist);
 						}
 					}),
 					'component',
 					Scientist_timeline,
-					33,
-					12,
+					43,
+					20,
 					{ componentTag: 'ScientistCard' }
 				);
+
+				var div_5 = sibling(node_2, 2);
+				var span = sibling(child(div_5), 2);
+				var text = child(span, true);
+
+				reset(span);
+				reset(div_5);
+				reset(div_4);
+				template_effect(() => set_text(text, get$1(scientist).year));
+				append$1($$anchor, div_4);
 			}),
 			'each',
 			Scientist_timeline,
-			32,
-			8
+			41,
+			12
 		);
 
-		reset(div_1);
-
-		var div_2 = sibling(div_1, 2);
-		var button = child(div_2);
-
+		next(2);
+		reset(div_3);
 		reset(div_2);
+
+		var div_6 = sibling(div_2, 2);
+		var button = child(div_6);
+		var button_1 = sibling(button, 2);
+
+		reset(div_6);
 		reset(div);
 		bind_this(div, ($$value) => set(timeline_el, $$value), () => get$1(timeline_el));
 		event('click', button, stopPropagation(set_random_lab_scene));
+		event('click', button_1, stopPropagation(go_to_workshop));
 		append$1($$anchor, div);
 
 		return pop($$exports);
@@ -54348,7 +54595,8 @@ var app = (function () {
 	        let atoms_added = Math.ceil(Math.random() * this.max_atoms_added_per_hit);
 	        store$3.current_element_counts.update(this.element, atoms_added);
 	        this.hits_taken += 1;
-	        if (this.hits_taken >= this.hits_possible) {
+	        const hits_needed = has_upgrade(UPGRADE_IDS.SHARP_AXE) ? 1 : this.hits_possible;
+	        if (this.hits_taken >= hits_needed) {
 	            delete_mine(this);
 	        }
 
@@ -63224,7 +63472,8 @@ var app = (function () {
 	    }
 
 	    hit_by_axe() {
-	        this.take_damage(AXE_DAMAGE);
+	        const axe_damage = has_upgrade(UPGRADE_IDS.SHARP_AXE) ? AXE_DAMAGE * 2 : AXE_DAMAGE;
+	        this.take_damage(axe_damage);
 	        if (this.should_delete) {
 	            return;
 	        }
@@ -63315,7 +63564,11 @@ var app = (function () {
 	        if (store$3.player_is_invincible) {
 	            return;
 	        }
-	        store$3.player_health.update(health => Math.max(0, health - this.damage));
+	        let damage = this.damage;
+	        if (has_upgrade(UPGRADE_IDS.LAB_COAT)) {
+	            damage = damage / 2;
+	        }
+	        store$3.player_health.update(health => Math.max(0, health - damage));
 	        if (get$2(store$3.player_health) <= 0) {
 	            let current_game_state = get$2(store$3.game_state);
 	            current_game_state['state'] = store$3.GameStates.GAMELOST;
@@ -63555,6 +63808,9 @@ var app = (function () {
 	    return has_collided;
 	}
 
+	const MUZZLE_LOCAL_POS = new Vector3(0, -20, 0);
+	const CHARGE_INDICATOR_BASE_RADIUS = 2.5;
+
 	function create_gun(){
 	    const gun_geometry = new CylinderGeometry( 1, 1, 5, 10 );
 	    const gun_material = new MeshToonMaterial( {color: 0x737373} );
@@ -63565,6 +63821,58 @@ var app = (function () {
 	    store$3.gun.position.set(-10, 0, -5);
 	    store$3.gun.rotateX(Math.PI/2);
 	    gun_mesh.position.set(5, 0, 0);
+
+	    const charge_geometry = new SphereGeometry(CHARGE_INDICATOR_BASE_RADIUS, 24, 16);
+	    const charge_material = new MeshBasicMaterial({
+	        color: 0x7cf0ff,
+	        transparent: true,
+	        opacity: 0.45,
+	        depthWrite: false,
+	    });
+	    store$3.charge_indicator = new Mesh(charge_geometry, charge_material);
+	    store$3.charge_indicator.position.copy(MUZZLE_LOCAL_POS);
+	    store$3.charge_indicator.visible = false;
+	    store$3.gun.add(store$3.charge_indicator);
+	    store$3._charge_updater = null;
+	}
+
+	function start_flask_charge_indicator() {
+	    if (!store$3.charge_indicator) return;
+	    if (store$3._charge_updater) {
+	        store$3._charge_updater.state.active = false;
+	        store$3._charge_updater = null;
+	    }
+	    store$3.charge_indicator.visible = true;
+	    store$3.charge_indicator.scale.setScalar(1);
+	    store$3.charge_indicator.material.opacity = 0.35;
+
+	    const updater = new Updater((state) => {
+	        if (!state.active || !store$3.charge_indicator) {
+	            return { finished: true };
+	        }
+	        const charge = Math.min(1, (performance.now() - state.started_at) / 1000);
+	        // Matches projectile growth: diameter 1x → 2x
+	        store$3.charge_indicator.scale.setScalar(1 + charge);
+	        store$3.charge_indicator.material.opacity = 0.35 + charge * 0.4;
+	        return state;
+	    }, {
+	        finished: false,
+	        active: true,
+	        started_at: performance.now(),
+	    });
+	    store$3._charge_updater = updater;
+	    store$3.global_updates_queue.push(updater);
+	}
+
+	function stop_flask_charge_indicator() {
+	    if (store$3._charge_updater) {
+	        store$3._charge_updater.state.active = false;
+	        store$3._charge_updater = null;
+	    }
+	    if (store$3.charge_indicator) {
+	        store$3.charge_indicator.visible = false;
+	        store$3.charge_indicator.scale.setScalar(1);
+	    }
 	}
 
 
@@ -63588,28 +63896,85 @@ var app = (function () {
 	}
 
 
+	function get_shot_directions(base_direction) {
+	    if (!has_upgrade(UPGRADE_IDS.SEPARATING_FUNNEL)) {
+	        return [base_direction.clone()];
+	    }
 
-	function try_to_fire_player_weapon(compound){
-	    const initial_pos = store$3.gun.localToWorld(new Vector3(0, -20, 0));
+	    const up = store$3.camera.up.clone().normalize();
+	    const split_radians = MathUtils.degToRad(1);
+	    const left = base_direction.clone().applyAxisAngle(up, split_radians).normalize();
+	    const right = base_direction.clone().applyAxisAngle(up, -split_radians).normalize();
+	    return [left, right];
+	}
 
-	    const onclick = (target) => {
-	        // this is just a POC. It doesnt work because all of the projectiles use the same material
-	        // target.object.material.color.set('#eb4034')
-	    };
-	    let params = {'parent': store$3.scene, initial_pos, onclick};
-	    let weapon_will_fire = check_if_weapon_can_fire_and_get_new_counts(compound);
-	    if (!weapon_will_fire) return;
-	    let projectile = create_projectile(compound, params);
+
+	function spawn_projectile({compound, initial_pos, direction, lateral_offset, size_mult, damage_mult}) {
+	    const onclick = () => {};
+	    const params = {'parent': store$3.scene, initial_pos, onclick};
+	    const projectile = create_projectile(compound, params);
+	    projectile.damage *= damage_mult;
 	    if (store$3.lab_effects['chemical'] > 0) {
 	        projectile.damage *= 2;
 	    }
+	    projectile.mesh.scale.setScalar(size_mult);
+	    if (lateral_offset) {
+	        projectile.mesh.position.add(lateral_offset);
+	    }
 	    store$3.scene.add(projectile.mesh);
-	    let initial_time = store$3.global_clock.elapsedTime;
-	    let direction = store$3.camera.getWorldDirection(new Vector3());
-	    let updater = new Updater(blast_projectile, {projectile: projectile, initial_time, direction});
+	    const initial_time = store$3.global_clock.elapsedTime;
+	    const updater = new Updater(blast_projectile, {
+	        projectile,
+	        initial_time,
+	        direction: direction.clone(),
+	    });
 	    store$3.global_updates_queue.push(updater);
+	}
+
+
+	/**
+	 * @param {string} compound
+	 * @param {{ charge?: number }} [options] charge in [0, 1]; only used with Erlenmeyer Flask
+	 */
+	function try_to_fire_player_weapon(compound, options = {}){
+	    const charge = Math.min(1, Math.max(0, options.charge ?? 0));
+	    const has_flask = has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK);
+	    const size_mult = has_flask ? 1 + charge : 1;
+	    const damage_mult = has_flask ? 1 + charge : 1;
+
+	    const initial_pos = store$3.gun.localToWorld(MUZZLE_LOCAL_POS.clone());
+	    stop_flask_charge_indicator();
+	    const weapon_will_fire = check_if_weapon_can_fire_and_get_new_counts(compound);
+	    if (!weapon_will_fire) return;
+
+	    const base_direction = store$3.camera.getWorldDirection(new Vector3()).normalize();
+	    const directions = get_shot_directions(base_direction);
+	    const right = new Vector3().crossVectors(base_direction, store$3.camera.up).normalize();
+	    const split_spacing = Math.max(1.2, (projectile_base_radius(compound) * size_mult) * 0.9);
+
+	    directions.forEach((direction, index) => {
+	        let lateral_offset = null;
+	        if (directions.length > 1) {
+	            const side = index === 0 ? -1 : 1;
+	            lateral_offset = right.clone().multiplyScalar(side * split_spacing * 0.5);
+	        }
+	        spawn_projectile({
+	            compound,
+	            initial_pos: initial_pos.clone(),
+	            direction,
+	            lateral_offset,
+	            size_mult,
+	            damage_mult,
+	        });
+	    });
 
 	    play_gun_animation();
+	}
+
+
+	function projectile_base_radius(compound) {
+	    const radii = { H2: 2, CH4: 4, NH3: 5, CN: 3, H2O: 5 };
+	    return radii[compound] ?? 3;
 	}
 
 
@@ -63680,33 +64045,49 @@ var app = (function () {
 
 
 	class InputHandler {
+	    constructor() {
+	        this._charge_started_at = null;
+	    }
+
 	    on_mouse_move(event){
 	        if (!is_playing()) return;
 	        rotate_on_mouse_move(event);
 	    }
 
-	    on_mouse_click(event) {
+	    on_mouse_down(event) {
 	        if (!is_playing()) return;
-	        // this next line helps debug. Previously we were getting different positions because the renderer was expecting
-	        // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
-	        // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
-	        
-	        
-	        // let children = []
-	        // for (let c=0; c<scene.children.length; c++) {
-	        //     children.push(scene.children[c])
-	        // }
-	        // for (let e=0; e<earth.children.length; e++) {
-	        //     children.push(earth.children[e])
-	        // }
-	        // let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
-	        // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-	        // if (intersects_with_click.length) {
-	        //     intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
-	        // }
-	    
+	        if (event.button !== 0) return;
+	        this._charge_started_at = performance.now();
+	        if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
+	            this._fire_selected_compound(0);
+	            this._charge_started_at = null;
+	            return;
+	        }
+	        start_flask_charge_indicator();
+	    }
+
+	    on_mouse_up(event) {
+	        if (!is_playing()) return;
+	        if (event.button !== 0) return;
+	        if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
+	            this._charge_started_at = null;
+	            return;
+	        }
+	        if (this._charge_started_at == null) return;
+	        const held_seconds = (performance.now() - this._charge_started_at) / 1000;
+	        const charge = Math.min(1, Math.max(0, held_seconds));
+	        this._charge_started_at = null;
+	        this._fire_selected_compound(charge);
+	    }
+
+	    cancel_flask_charge() {
+	        this._charge_started_at = null;
+	        stop_flask_charge_indicator();
+	    }
+
+	    _fire_selected_compound(charge) {
 	        let compound = get$2(store$3.key_to_compound)[get$2(store$3.selected_compound_index)];
-	        try_to_fire_player_weapon(compound);
+	        try_to_fire_player_weapon(compound, { charge });
 	    }
 
 	    on_keydown(e) {
@@ -64128,6 +64509,7 @@ var app = (function () {
 	            return currentState;
 	        });
 	        reset_pressed_keys();
+	        this.input_handler?.cancel_flask_charge?.();
 	        document.exitPointerLock();
 	        this.remove_event_listeners();
 	        this.add_pause_listener();
@@ -64165,13 +64547,15 @@ var app = (function () {
 
 	    add_event_listeners(){
 	        this._on_mouse_move = this.input_handler.on_mouse_move.bind(this.input_handler);
-	        this._on_mouse_click = this.input_handler.on_mouse_click.bind(this.input_handler);
+	        this._on_mouse_down = this.input_handler.on_mouse_down.bind(this.input_handler);
+	        this._on_mouse_up = this.input_handler.on_mouse_up.bind(this.input_handler);
 	        this._on_keydown = this.input_handler.on_keydown.bind(this.input_handler);
 	        this._on_keyup = this.input_handler.on_keyup.bind(this.input_handler);
 
 	        window.addEventListener('resize', resize_window, false);
 	        window.addEventListener('mousemove', this._on_mouse_move, false);
-	        window.addEventListener('click', this._on_mouse_click, false);
+	        window.addEventListener('mousedown', this._on_mouse_down, false);
+	        window.addEventListener('mouseup', this._on_mouse_up, false);
 	        window.addEventListener('keydown', this._on_keydown, true);
 	        window.addEventListener('keyup', this._on_keyup, true);
 
@@ -64197,7 +64581,8 @@ var app = (function () {
 	    remove_event_listeners(){
 	        window.removeEventListener('resize', resize_window, false);
 	        window.removeEventListener('mousemove', this._on_mouse_move, false);
-	        window.removeEventListener('click', this._on_mouse_click, false);
+	        window.removeEventListener('mousedown', this._on_mouse_down, false);
+	        window.removeEventListener('mouseup', this._on_mouse_up, false);
 	        window.removeEventListener('keydown', this._on_keydown, true);
 	        window.removeEventListener('keyup', this._on_keyup, true);
 
@@ -64504,7 +64889,7 @@ var app = (function () {
 
 	Compound_card[FILENAME] = 'src/components/battle_scene/compound_card.svelte';
 
-	var root$c = add_locations(from_html(`<div><div class="stats svelte-r5rrem"><p> </p> <p> </p></div> <h2 class="el_name svelte-r5rrem"> </h2></div>`), Compound_card[FILENAME], [[10, 0, [[11, 4, [[12, 8], [13, 8]]], [15, 4]]]]);
+	var root$d = add_locations(from_html(`<div><div class="stats svelte-r5rrem"><p> </p> <p> </p></div> <h2 class="el_name svelte-r5rrem"> </h2></div>`), Compound_card[FILENAME], [[10, 0, [[11, 4, [[12, 8], [13, 8]]], [15, 4]]]]);
 
 	function Compound_card($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Compound_card, ...$$anchor });
@@ -64569,7 +64954,7 @@ var app = (function () {
 			$on: ($$event_name, $$event_cb) => add_legacy_event_listener($$props, $$event_name, $$event_cb)
 		};
 
-		var div = root$c();
+		var div = root$d();
 		var div_1 = child(div);
 		var p = child(div_1);
 		var text = child(p);
@@ -64602,7 +64987,7 @@ var app = (function () {
 
 	Bottom_compound_bar[FILENAME] = 'src/components/battle_scene/bottom_compound_bar.svelte';
 
-	var root$b = add_locations(from_html(`<div id="sidebar-bottom" class="svelte-17epzu7"></div>`), Bottom_compound_bar[FILENAME], [[17, 0]]);
+	var root$c = add_locations(from_html(`<div id="sidebar-bottom" class="svelte-17epzu7"></div>`), Bottom_compound_bar[FILENAME], [[17, 0]]);
 
 	function Bottom_compound_bar($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Bottom_compound_bar, ...$$anchor });
@@ -64653,7 +65038,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$b();
+		var div = root$c();
 
 		add_svelte_meta(
 			() => each(div, 5, () => get$1(keyboard_compounds), ([key, compound]) => key + '-' + (get$1(max_by_compound)[compound] ?? 0) + '-' + get$1(selected_key), ($$anchor, $$item) => {
@@ -64749,8 +65134,8 @@ var app = (function () {
 
 	Right_element_bar$1[FILENAME] = 'src/components/battle_scene/right_element_bar.svelte';
 
-	var root$a = add_locations(from_html(`<div><p class="svelte-iij2bz"> </p></div>`), Right_element_bar$1[FILENAME], [[17, 8, [[18, 12]]]]);
-	var root_1$6 = add_locations(from_html(`<div id="sidebar-right" class="svelte-iij2bz"><div id="spacer" class="svelte-iij2bz"></div> <!></div>`), Right_element_bar$1[FILENAME], [[14, 0, [[15, 4]]]]);
+	var root$b = add_locations(from_html(`<div><p class="svelte-iij2bz"> </p></div>`), Right_element_bar$1[FILENAME], [[17, 8, [[18, 12]]]]);
+	var root_1$7 = add_locations(from_html(`<div id="sidebar-right" class="svelte-iij2bz"><div id="spacer" class="svelte-iij2bz"></div> <!></div>`), Right_element_bar$1[FILENAME], [[14, 0, [[15, 4]]]]);
 
 	function Right_element_bar$1($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Right_element_bar$1, ...$$anchor });
@@ -64785,7 +65170,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_1$6();
+		var div = root_1$7();
 		var node = sibling(child(div), 2);
 
 		add_svelte_meta(
@@ -64811,7 +65196,7 @@ var app = (function () {
 
 					last_updated();
 
-					var div_1 = root$a();
+					var div_1 = root$b();
 					let classes;
 					var p = child(div_1);
 					var text = child(p);
@@ -64849,7 +65234,7 @@ var app = (function () {
 
 	Health_bar[FILENAME] = 'src/components/battle_scene/health_bar.svelte';
 
-	var root$9 = add_locations(from_html(`<div id="health-bar" class="svelte-lxc4va"><div class="health svelte-lxc4va"></div></div>`), Health_bar[FILENAME], [[8, 0, [[9, 4]]]]);
+	var root$a = add_locations(from_html(`<div id="health-bar" class="svelte-lxc4va"><div class="health svelte-lxc4va"></div></div>`), Health_bar[FILENAME], [[8, 0, [[9, 4]]]]);
 
 	function Health_bar($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Health_bar, ...$$anchor });
@@ -64878,7 +65263,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$9();
+		var div = root$a();
 		var div_1 = child(div);
 
 		reset(div);
@@ -64894,7 +65279,7 @@ var app = (function () {
 
 	Score[FILENAME] = 'src/components/battle_scene/score.svelte';
 
-	var root$8 = add_locations(from_html(`<div id="score" class="svelte-1p9v040"> </div>`), Score[FILENAME], [[5, 0]]);
+	var root$9 = add_locations(from_html(`<div id="score" class="svelte-1p9v040"> </div>`), Score[FILENAME], [[5, 0]]);
 
 	function Score($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Score, ...$$anchor });
@@ -64908,7 +65293,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$8();
+		var div = root$9();
 		var text = child(div, true);
 
 		reset(div);
@@ -65025,8 +65410,8 @@ var app = (function () {
 
 	Minimap[FILENAME] = 'src/components/battle_scene/minimap.svelte';
 
-	var root$7 = add_locations(from_html(`<div class="enemy-dot svelte-1ps5lr"></div>`), Minimap[FILENAME], [[50, 3]]);
-	var root_1$5 = add_locations(from_html(`<div id="minimap" aria-label="Enemy minimap" class="svelte-1ps5lr"><div class="disc svelte-1ps5lr"><div class="forward-marker svelte-1ps5lr"></div> <div class="player-marker svelte-1ps5lr"></div> <!></div></div>`), Minimap[FILENAME], [[45, 0, [[46, 1, [[47, 2], [48, 2]]]]]]);
+	var root$8 = add_locations(from_html(`<div class="enemy-dot svelte-1ps5lr"></div>`), Minimap[FILENAME], [[50, 3]]);
+	var root_1$6 = add_locations(from_html(`<div id="minimap" aria-label="Enemy minimap" class="svelte-1ps5lr"><div class="disc svelte-1ps5lr"><div class="forward-marker svelte-1ps5lr"></div> <div class="player-marker svelte-1ps5lr"></div> <!></div></div>`), Minimap[FILENAME], [[45, 0, [[46, 1, [[47, 2], [48, 2]]]]]]);
 
 	function Minimap($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Minimap, ...$$anchor });
@@ -65079,7 +65464,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_1$5();
+		var div = root_1$6();
 
 		set_style(div, `width: ${DISC_SIZE}px; height: ${DISC_SIZE}px;`);
 
@@ -65088,7 +65473,7 @@ var app = (function () {
 
 		add_svelte_meta(
 			() => each(node, 1, () => get$1(indicators), index, ($$anchor, indicator) => {
-				var div_2 = root$7();
+				var div_2 = root$8();
 
 				template_effect(($0) => set_style(div_2, $0), [() => dot_style(get$1(indicator))]);
 				append$1($$anchor, div_2);
@@ -65108,15 +65493,20 @@ var app = (function () {
 
 	Battle[FILENAME] = 'src/components/battle_scene/battle.svelte';
 
-	var root$6 = add_locations(from_html(`<button type="button" class="button svelte-3wqs9w">Start</button>`), Battle[FILENAME], [[81, 12]]);
-	var root_1$4 = add_locations(from_html(`<h3>Game Over</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[83, 12], [84, 12]]);
-	var root_2$3 = add_locations(from_html(`<h3>You Win!</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[86, 12], [87, 12]]);
+	var root$7 = add_locations(from_html(`<button type="button" class="button svelte-3wqs9w">Start</button>`), Battle[FILENAME], [[81, 12]]);
+	var root_1$5 = add_locations(from_html(`<h3>Game Over</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[83, 12], [84, 12]]);
+	var root_2$4 = add_locations(from_html(`<h3>You Win!</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[86, 12], [87, 12]]);
 
-	var root_3$1 = add_locations(from_html(`<div><div id="overlay-to-start" class="svelte-3wqs9w"><!></div> <div id="overlay-paused" class="svelte-3wqs9w"><h2 class="svelte-3wqs9w">Paused</h2> <p class="svelte-3wqs9w">Press P or Escape to resume</p></div> <!> <!> <!> <!> <!> <div id="cursor" class="svelte-3wqs9w"></div> <div id="canvas-container"></div></div>`), Battle[FILENAME], [
+	var root_3$2 = add_locations(from_html(`<div><div id="overlay-to-start" class="svelte-3wqs9w"><!></div> <div id="overlay-paused" class="svelte-3wqs9w"><h2 class="svelte-3wqs9w">Paused</h2> <p class="svelte-3wqs9w">Press P or Escape to resume</p> <button type="button" class="button svelte-3wqs9w">Back to Timeline</button></div> <!> <!> <!> <!> <!> <div id="cursor" class="svelte-3wqs9w"></div> <div id="canvas-container"></div></div>`), Battle[FILENAME], [
 		[
 			78,
 			0,
-			[[79, 4], [90, 4, [[91, 8], [92, 8]]], [99, 4], [100, 4]]
+			[
+				[79, 4],
+				[90, 4, [[91, 8], [92, 8], [93, 8]]],
+				[102, 4],
+				[103, 4]
+			]
 		]
 	]);
 
@@ -65227,20 +65617,20 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_3$1();
+		var div = root_3$2();
 		var div_1 = child(div);
 		var node = child(div_1);
 
 		{
 			var consequent = ($$anchor) => {
-				var button = root$6();
+				var button = root$7();
 
 				event('click', button, stopPropagation(handle_click));
 				append$1($$anchor, button);
 			};
 
 			var consequent_1 = ($$anchor) => {
-				var fragment = root_1$4();
+				var fragment = root_1$5();
 				var button_1 = sibling(first_child(fragment), 2);
 
 				event('click', button_1, stopPropagation(go_back_to_timeline));
@@ -65248,7 +65638,7 @@ var app = (function () {
 			};
 
 			var consequent_2 = ($$anchor) => {
-				var fragment_1 = root_2$3();
+				var fragment_1 = root_2$4();
 				var button_2 = sibling(first_child(fragment_1), 2);
 
 				event('click', button_2, stopPropagation(go_back_to_timeline));
@@ -65281,25 +65671,29 @@ var app = (function () {
 		reset(div_1);
 
 		var div_2 = sibling(div_1, 2);
+		var button_3 = sibling(child(div_2), 4);
+
+		reset(div_2);
+
 		var node_1 = sibling(div_2, 2);
 
-		add_svelte_meta(() => Health_bar(node_1, {}), 'component', Battle, 94, 4, { componentTag: 'HealthBar' });
+		add_svelte_meta(() => Health_bar(node_1, {}), 'component', Battle, 97, 4, { componentTag: 'HealthBar' });
 
 		var node_2 = sibling(node_1, 2);
 
-		add_svelte_meta(() => Score(node_2, {}), 'component', Battle, 95, 4, { componentTag: 'Score' });
+		add_svelte_meta(() => Score(node_2, {}), 'component', Battle, 98, 4, { componentTag: 'Score' });
 
 		var node_3 = sibling(node_2, 2);
 
-		add_svelte_meta(() => Minimap(node_3, {}), 'component', Battle, 96, 4, { componentTag: 'Minimap' });
+		add_svelte_meta(() => Minimap(node_3, {}), 'component', Battle, 99, 4, { componentTag: 'Minimap' });
 
 		var node_4 = sibling(node_3, 2);
 
-		add_svelte_meta(() => Right_element_bar$1(node_4, {}), 'component', Battle, 97, 4, { componentTag: 'RightSideBar' });
+		add_svelte_meta(() => Right_element_bar$1(node_4, {}), 'component', Battle, 100, 4, { componentTag: 'RightSideBar' });
 
 		var node_5 = sibling(node_4, 2);
 
-		add_svelte_meta(() => Bottom_compound_bar(node_5, {}), 'component', Battle, 98, 4, { componentTag: 'BottomCompoundBar' });
+		add_svelte_meta(() => Bottom_compound_bar(node_5, {}), 'component', Battle, 101, 4, { componentTag: 'BottomCompoundBar' });
 		next(4);
 		reset(div);
 
@@ -65308,6 +65702,7 @@ var app = (function () {
 			set_style(div_2, get$1(show_pause_overlay) ? 'display: flex;' : 'display: none;');
 		});
 
+		event('click', button_3, stopPropagation(go_back_to_timeline));
 		append$1($$anchor, div);
 
 		var $$pop = pop($$exports);
@@ -66336,7 +66731,7 @@ var app = (function () {
 	let camera$1, scene$1, renderer$1, labelRenderer;
 	let controls;
 
-	let root$5;
+	let root$6;
 
 	const MOLECULE_PATHS = {
 	    'Aspirin': 'aspirin.sdf',
@@ -66380,7 +66775,7 @@ var app = (function () {
 	    renderer$1.render(scene$1, camera$1);
 	    labelRenderer.render( scene$1, camera$1 );
 	    if (is_rotating) {
-	        root$5.rotation.y = root$5.rotation.y + .01;
+	        root$6.rotation.y = root$6.rotation.y + .01;
 	    }
 	}
 
@@ -66399,8 +66794,8 @@ var app = (function () {
 
 	    scene$1.add( new AmbientLight( 0x515151, 3 ) );
 
-	    root$5 = new Group();
-	    scene$1.add( root$5 );
+	    root$6 = new Group();
+	    scene$1.add( root$6 );
 
 	    renderer$1 = new WebGLRenderer( { antialias: true } );
 	    renderer$1.setPixelRatio( window.devicePixelRatio );
@@ -66482,7 +66877,7 @@ var app = (function () {
 	            lose_game();
 	        }
 	        intersects_with_click[0].object.onclick();
-	        let all_atoms = root$5.children.filter(obj => obj.is_atom === true);
+	        let all_atoms = root$6.children.filter(obj => obj.is_atom === true);
 	        let correct_atoms = all_atoms.filter(atom => atom.correct_material);
 	        if (all_atoms.length === correct_atoms.length) {
 	            win_game();
@@ -66498,8 +66893,8 @@ var app = (function () {
 	function loadMolecule( model ) {
 	    const url = 'models/sdf/' + model;
 
-	    while ( root$5.children.length > 0 ) {
-	        const object = root$5.children[ 0 ];
+	    while ( root$6.children.length > 0 ) {
+	        const object = root$6.children[ 0 ];
 	        object.parent.remove( object );
 	    }
 
@@ -66512,7 +66907,7 @@ var app = (function () {
 	        const use_normal = true;
 	        const show_label = false;
 
-	        new Compound(root$5, csv_atoms, csv_bonds, use_normal, show_label);
+	        new Compound(root$6, csv_atoms, csv_bonds, use_normal, show_label);
 
 	        animate();
 
@@ -66521,10 +66916,15 @@ var app = (function () {
 	}
 
 	function win_game() {
+	    const current = get$2(store$1.game_state);
+	    if (current['state'] === store$1.GameStates.GAMEWON) {
+	        return;
+	    }
 	    store$1.game_state.update(state => {
 	        state['state'] = store$1.GameStates.GAMEWON;
 	        return state;
 	    });
+	    award_joule(1);
 
 	    // TODO: should we do this with an updater?
 	    start_rotation();
@@ -66545,8 +66945,8 @@ var app = (function () {
 
 	Right_element_bar[FILENAME] = 'src/components/compound_creator/right_element_bar.svelte';
 
-	var root$4 = add_locations(from_html(`<button type="button"><h3> </h3></button>`), Right_element_bar[FILENAME], [[27, 8, [[29, 12]]]]);
-	var root_1$3 = add_locations(from_html(`<div id="sidebar-right" class="svelte-u81rju"><button type="button" id="back-button" class="svelte-u81rju"><p>Back</p></button> <!> <div><h4>Moves Remaining:</h4> <h4> </h4></div></div>`), Right_element_bar[FILENAME], [[24, 0, [[25, 4, [[25, 90]]], [32, 4, [[33, 8], [34, 8]]]]]]);
+	var root$5 = add_locations(from_html(`<button type="button"><h3> </h3></button>`), Right_element_bar[FILENAME], [[27, 8, [[29, 12]]]]);
+	var root_1$4 = add_locations(from_html(`<div id="sidebar-right" class="svelte-u81rju"><button type="button" id="back-button" class="svelte-u81rju"><p>Back</p></button> <!> <div><h4>Moves Remaining:</h4> <h4> </h4></div></div>`), Right_element_bar[FILENAME], [[24, 0, [[25, 4, [[25, 90]]], [32, 4, [[33, 8], [34, 8]]]]]]);
 
 	function Right_element_bar($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Right_element_bar, ...$$anchor });
@@ -66592,13 +66992,13 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_1$3();
+		var div = root_1$4();
 		var button = child(div);
 		var node = sibling(button, 2);
 
 		add_svelte_meta(
 			() => each(node, 1, () => Object.keys($atoms()), (atom_symbol) => atom_symbol, ($$anchor, atom_symbol) => {
-				var button_1 = root$4();
+				var button_1 = root$5();
 				var h3 = child(button_1);
 				var text = child(h3, true);
 
@@ -66647,9 +67047,9 @@ var app = (function () {
 
 	Compound_creator[FILENAME] = 'src/components/compound_creator/compound_creator.svelte';
 
-	var root$3 = add_locations(from_html(`<h3>You ran out of moves, and the molecule disappeared</h3> <button type="button" class="button svelte-1hxind">Back to the Timeline</button>`, 1), Compound_creator[FILENAME], [[28, 12], [29, 12]]);
-	var root_1$2 = add_locations(from_html(`<h3>You Win!</h3> <button type="button" class="button svelte-1hxind">Back to the Timeline</button>`, 1), Compound_creator[FILENAME], [[31, 12], [32, 12]]);
-	var root_2$2 = add_locations(from_html(`<div id="outer" class="svelte-1hxind"><div id="overlay-to-start" class="svelte-1hxind"><!></div> <!> <div id="canvas-container"></div></div>`), Compound_creator[FILENAME], [[25, 0, [[26, 4], [36, 4]]]]);
+	var root$4 = add_locations(from_html(`<h3>You ran out of moves, and the molecule disappeared</h3> <button type="button" class="button svelte-1hxind">Back to the Timeline</button>`, 1), Compound_creator[FILENAME], [[29, 12], [30, 12]]);
+	var root_1$3 = add_locations(from_html(`<h3>You Win!</h3> <p class="joule-reward svelte-1hxind">+1 joule</p> <!> <button type="button" class="button svelte-1hxind">Back to the Timeline</button>`, 1), Compound_creator[FILENAME], [[32, 12], [33, 12], [35, 12]]);
+	var root_2$3 = add_locations(from_html(`<div id="outer" class="svelte-1hxind"><div id="overlay-to-start" class="svelte-1hxind"><!></div> <!> <div id="canvas-container"></div></div>`), Compound_creator[FILENAME], [[26, 0, [[27, 4], [39, 4]]]]);
 
 	function Compound_creator($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Compound_creator, ...$$anchor });
@@ -66693,13 +67093,13 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_2$2();
+		var div = root_2$3();
 		var div_1 = child(div);
 		var node = child(div_1);
 
 		{
 			var consequent = ($$anchor) => {
-				var fragment = root$3();
+				var fragment = root$4();
 				var button = sibling(first_child(fragment), 2);
 
 				event('click', button, stopPropagation(go_back_to_timeline));
@@ -66707,8 +67107,12 @@ var app = (function () {
 			};
 
 			var consequent_1 = ($$anchor) => {
-				var fragment_1 = root_1$2();
-				var button_1 = sibling(first_child(fragment_1), 2);
+				var fragment_1 = root_1$3();
+				var node_1 = sibling(first_child(fragment_1), 4);
+
+				add_svelte_meta(() => Joules_display(node_1, {}), 'component', Compound_creator, 34, 12, { componentTag: 'JoulesDisplay' });
+
+				var button_1 = sibling(node_1, 2);
 
 				event('click', button_1, stopPropagation(go_back_to_timeline));
 				append$1($$anchor, fragment_1);
@@ -66728,16 +67132,16 @@ var app = (function () {
 				}),
 				'if',
 				Compound_creator,
-				27,
+				28,
 				8
 			);
 		}
 
 		reset(div_1);
 
-		var node_1 = sibling(div_1, 2);
+		var node_2 = sibling(div_1, 2);
 
-		add_svelte_meta(() => Right_element_bar(node_1, {}), 'component', Compound_creator, 35, 4, { componentTag: 'RightSideBar' });
+		add_svelte_meta(() => Right_element_bar(node_2, {}), 'component', Compound_creator, 38, 4, { componentTag: 'RightSideBar' });
 		next(2);
 		reset(div);
 		template_effect(() => set_style(div_1, get$1(show_overlay) ? 'display: flex;' : 'display: none;'));
@@ -67269,6 +67673,9 @@ var app = (function () {
 	        state['state'] = GameState;
 	        return state;
 	    });
+	    if (GameState === store.GameStates.GAMEWON) {
+	        award_joule(1);
+	    }
 	    dispose_group(store.scene);
 	    dispose_renderer(store.renderer);
 	}
@@ -67295,11 +67702,11 @@ var app = (function () {
 
 	Balance_equation[FILENAME] = 'src/components/balance_equation/balance_equation.svelte';
 
-	var root$2 = add_locations(from_html(`<div class="p-cont svelte-1p1igs7"><p class="spaced-p svelte-1p1igs7"> </p> <p class="spaced-p svelte-1p1igs7">↑</p></div>`), Balance_equation[FILENAME], [[107, 16, [[108, 20], [109, 20]]]]);
-	var root_1$1 = add_locations(from_html(`<button type="button" class="add-molecule-button svelte-1p1igs7"><p class="svelte-1p1igs7"> </p></button>`), Balance_equation[FILENAME], [[121, 20, [[122, 24]]]]);
-	var root_2$1 = add_locations(from_html(`<div></div>`), Balance_equation[FILENAME], [[119, 12]]);
+	var root$3 = add_locations(from_html(`<div class="p-cont svelte-1p1igs7"><p class="spaced-p svelte-1p1igs7"> </p> <p class="spaced-p svelte-1p1igs7">↑</p></div>`), Balance_equation[FILENAME], [[107, 16, [[108, 20], [109, 20]]]]);
+	var root_1$2 = add_locations(from_html(`<button type="button" class="add-molecule-button svelte-1p1igs7"><p class="svelte-1p1igs7"> </p></button>`), Balance_equation[FILENAME], [[121, 20, [[122, 24]]]]);
+	var root_2$2 = add_locations(from_html(`<div></div>`), Balance_equation[FILENAME], [[119, 12]]);
 
-	var root_3 = add_locations(from_html(`<div id="outer" class="svelte-1p1igs7"><button type="button" id="back-button" class="svelte-1p1igs7"><p class="svelte-1p1igs7">Back</p></button> <div id="canvas-container" class="svelte-1p1igs7"><canvas class="svelte-1p1igs7"></canvas></div> <div id="arrow-container" class="svelte-1p1igs7"><div id="balance-arrows" class="svelte-1p1igs7"></div> <h1 class="center-arrow svelte-1p1igs7">↑</h1> <hr class="middle-divider svelte-1p1igs7"/></div> <button type="button" id="submit">Submit!</button> <div class="add-molecules-container svelte-1p1igs7"><!> <button type="button" id="trash">🗑️</button></div></div>`), Balance_equation[FILENAME], [
+	var root_3$1 = add_locations(from_html(`<div id="outer" class="svelte-1p1igs7"><button type="button" id="back-button" class="svelte-1p1igs7"><p class="svelte-1p1igs7">Back</p></button> <div id="canvas-container" class="svelte-1p1igs7"><canvas class="svelte-1p1igs7"></canvas></div> <div id="arrow-container" class="svelte-1p1igs7"><div id="balance-arrows" class="svelte-1p1igs7"></div> <h1 class="center-arrow svelte-1p1igs7">↑</h1> <hr class="middle-divider svelte-1p1igs7"/></div> <button type="button" id="submit">Submit!</button> <div class="add-molecules-container svelte-1p1igs7"><!> <button type="button" id="trash">🗑️</button></div></div>`), Balance_equation[FILENAME], [
 		[
 			99,
 			0,
@@ -67458,7 +67865,7 @@ var app = (function () {
 		// from https://learn.svelte.dev/tutorial/custom-css-transitions. I am trying to make this:
 		// style="transform: rotate({rotation}deg); color: {calc_color(rotation)}
 		// into an animation
-		div = root_3();
+		div = root_3$1();
 
 		var button = child(div);
 		var div_1 = sibling(button, 4);
@@ -67483,7 +67890,7 @@ var app = (function () {
 
 					rotation();
 
-					var div_3 = root$2();
+					var div_3 = root$3();
 					var p = child(div_3);
 					var text = child(p, true);
 
@@ -67529,7 +67936,7 @@ var app = (function () {
 				),
 				(side) => side,
 				($$anchor, side) => {
-					var div_5 = root_2$1();
+					var div_5 = root_2$2();
 
 					add_svelte_meta(
 						() => each(
@@ -67542,7 +67949,7 @@ var app = (function () {
 							),
 							(compound) => compound,
 							($$anchor, compound) => {
-								var button_2 = root_1$1();
+								var button_2 = root_1$2();
 								var p_2 = child(button_2);
 								var text_1 = child(p_2, true);
 
@@ -67602,7 +68009,7 @@ var app = (function () {
 
 	Story_scene[FILENAME] = 'src/components/story_scene/story_scene.svelte';
 
-	var root$1 = add_locations(from_html(`<div id="outer" role="button" tabindex="0" aria-label="Continue story" class="svelte-12gfk6n"><img class="svelte-12gfk6n"/></div>`), Story_scene[FILENAME], [[36, 0, [[37, 4]]]]);
+	var root$2 = add_locations(from_html(`<div id="outer" role="button" tabindex="0" aria-label="Continue story" class="svelte-12gfk6n"><img class="svelte-12gfk6n"/></div>`), Story_scene[FILENAME], [[36, 0, [[37, 4]]]]);
 
 	function Story_scene($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Story_scene, ...$$anchor });
@@ -67646,7 +68053,7 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$1();
+		var div = root$2();
 		var img = child(div);
 
 		reset(div);
@@ -67663,11 +68070,258 @@ var app = (function () {
 		return pop($$exports);
 	}
 
+	Workshop[FILENAME] = 'src/components/workshop/workshop.svelte';
+
+	var root$1 = add_locations(from_html(`<li><div class="upgrade-copy svelte-s2k4cj"><h2 class="svelte-s2k4cj"> </h2> <p class="svelte-s2k4cj"> </p> <div class="cost svelte-s2k4cj"><img src="joule.svg" alt="" width="22" height="22" class="svelte-s2k4cj"/> <span> </span></div></div> <button type="button" class="buy-button svelte-s2k4cj"> </button></li>`), Workshop[FILENAME], [
+		[
+			48,
+			16,
+			[
+				[49, 20, [[50, 24], [51, 24], [52, 24, [[53, 28], [54, 28]]]]],
+				[57, 20]
+			]
+		]
+	]);
+
+	var root_1$1 = add_locations(from_html(`<p class="purchase-message svelte-s2k4cj" role="status"> </p>`), Workshop[FILENAME], [[69, 12]]);
+	var root_2$1 = add_locations(from_html(`<em class="svelte-s2k4cj">(owned)</em>`), Workshop[FILENAME], [[87, 28]]);
+	var root_3 = add_locations(from_html(`<li><label class="svelte-s2k4cj"><input type="checkbox"/> <span> </span> <!></label></li>`), Workshop[FILENAME], [[78, 16, [[79, 20, [[80, 24], [85, 24]]]]]]);
+
+	var root_4 = add_locations(from_html(`<div class="workshop svelte-s2k4cj"><header class="workshop-header svelte-s2k4cj"><h1 class="svelte-s2k4cj">Workshop</h1> <p class="svelte-s2k4cj">Spend joules on gear that helps in battle.</p> <!> <button type="button" class="back-button svelte-s2k4cj">Back to Timeline</button></header> <div class="workshop-body svelte-s2k4cj"><ul class="upgrade-list svelte-s2k4cj"></ul> <!></div> <section class="debug-panel svelte-s2k4cj" aria-label="Upgrade test toggles"><h2 class="svelte-s2k4cj">Test toggles</h2> <p class="svelte-s2k4cj">Force-enable upgrades in battle without spending joules.</p> <ul class="debug-list svelte-s2k4cj"></ul></section></div>`), Workshop[FILENAME], [
+		[
+			33,
+			0,
+			[
+				[34, 4, [[35, 8], [36, 8], [38, 8]]],
+				[43, 4, [[44, 8]]],
+				[73, 4, [[74, 8], [75, 8], [76, 8]]]
+			]
+		]
+	]);
+
+	function Workshop($$anchor, $$props) {
+		if (new.target) return createClassComponent({ component: Workshop, ...$$anchor });
+
+		push($$props, false, Workshop);
+
+		const $owned_upgrades = () => (
+			validate_store(owned_upgrades, 'owned_upgrades'),
+			store_get(owned_upgrades, '$owned_upgrades', $$stores)
+		);
+
+		const $joules = () => (
+			validate_store(joules, 'joules'),
+			store_get(joules, '$joules', $$stores)
+		);
+
+		const $upgrade_debug_toggles = () => (
+			validate_store(upgrade_debug_toggles, 'upgrade_debug_toggles'),
+			store_get(upgrade_debug_toggles, '$upgrade_debug_toggles', $$stores)
+		);
+
+		const [$$stores, $$cleanup] = setup_stores();
+		let purchase_message = tag(mutable_source(''), 'purchase_message');
+
+		function go_back_to_timeline() {
+			global_store.current_scene.set(global_store.possible_scenes.Timeline);
+		}
+
+		function purchase(id) {
+			const result = buy_upgrade(id);
+
+			if (result.ok) {
+				set(purchase_message, 'Upgrade acquired.');
+			} else if (strict_equals(result.reason, 'owned')) {
+				set(purchase_message, 'You already own that upgrade.');
+			} else if (strict_equals(result.reason, 'broke')) {
+				set(purchase_message, 'Not enough joules.');
+			} else {
+				set(purchase_message, 'Could not buy that upgrade.');
+			}
+		}
+
+		var $$exports = {
+			$set: update_legacy_props,
+			$on: ($$event_name, $$event_cb) => add_legacy_event_listener($$props, $$event_name, $$event_cb)
+		};
+
+		init$1();
+
+		var div = root_4();
+		var header = child(div);
+		var node = sibling(child(header), 4);
+
+		add_svelte_meta(() => Joules_display(node, {}), 'component', Workshop, 37, 8, { componentTag: 'JoulesDisplay' });
+
+		var button = sibling(node, 2);
+
+		reset(header);
+
+		var div_1 = sibling(header, 2);
+		var ul = child(div_1);
+
+		add_svelte_meta(
+			() => each(ul, 5, () => UPGRADE_CATALOG, index, ($$anchor, item) => {
+				const owned = tag(derived_safe_equal(() => $owned_upgrades()[get$1(item).id]), 'owned');
+
+				get$1(owned);
+
+				const can_afford = tag(derived_safe_equal(() => $joules() >= get$1(item).cost), 'can_afford');
+
+				get$1(can_afford);
+
+				var li = root$1();
+				let classes;
+				var div_2 = child(li);
+				var h2 = child(div_2);
+				var text = child(h2, true);
+
+				reset(h2);
+
+				var p = sibling(h2, 2);
+				var text_1 = child(p, true);
+
+				reset(p);
+
+				var div_3 = sibling(p, 2);
+				var span = sibling(child(div_3), 2);
+				var text_2 = child(span, true);
+
+				reset(span);
+				reset(div_3);
+				reset(div_2);
+
+				var button_1 = sibling(div_2, 2);
+				var text_3 = child(button_1, true);
+
+				reset(button_1);
+				reset(li);
+
+				template_effect(() => {
+					classes = set_class(li, 1, 'upgrade-item svelte-s2k4cj', null, classes, { owned: get$1(owned) });
+					set_text(text, get$1(item).name);
+					set_text(text_1, get$1(item).description);
+					set_text(text_2, get$1(item).cost);
+					button_1.disabled = get$1(owned) || !get$1(can_afford);
+
+					set_text(text_3, get$1(owned)
+						? 'Owned'
+						: get$1(can_afford) ? 'Buy' : 'Need more joules');
+				});
+
+				event('click', button_1, function click() {
+					return purchase(get$1(item).id);
+				});
+
+				append$1($$anchor, li);
+			}),
+			'each',
+			Workshop,
+			45,
+			12
+		);
+
+		reset(ul);
+
+		var node_1 = sibling(ul, 2);
+
+		{
+			var consequent = ($$anchor) => {
+				var p_1 = root_1$1();
+				var text_4 = child(p_1, true);
+
+				reset(p_1);
+				template_effect(() => set_text(text_4, get$1(purchase_message)));
+				append$1($$anchor, p_1);
+			};
+
+			add_svelte_meta(
+				() => if_block(node_1, ($$render) => {
+					if (get$1(purchase_message)) $$render(consequent);
+				}),
+				'if',
+				Workshop,
+				68,
+				8
+			);
+		}
+
+		reset(div_1);
+
+		var section = sibling(div_1, 2);
+		var ul_1 = sibling(child(section), 4);
+
+		add_svelte_meta(
+			() => each(ul_1, 5, () => UPGRADE_CATALOG, index, ($$anchor, item) => {
+				var li_1 = root_3();
+				var label = child(li_1);
+				var input = child(label);
+
+				remove_input_defaults(input);
+
+				var span_1 = sibling(input, 2);
+				var text_5 = child(span_1, true);
+
+				reset(span_1);
+
+				var node_2 = sibling(span_1, 2);
+
+				{
+					var consequent_1 = ($$anchor) => {
+						var em = root_2$1();
+
+						append$1($$anchor, em);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_2, ($$render) => {
+							if ($owned_upgrades()[get$1(item).id]) $$render(consequent_1);
+						}),
+						'if',
+						Workshop,
+						86,
+						24
+					);
+				}
+
+				reset(label);
+				reset(li_1);
+
+				template_effect(() => {
+					set_checked(input, $upgrade_debug_toggles()[get$1(item).id]);
+					set_text(text_5, get$1(item).name);
+				});
+
+				event('change', input, function change() {
+					return toggle_upgrade_debug(get$1(item).id);
+				});
+
+				append$1($$anchor, li_1);
+			}),
+			'each',
+			Workshop,
+			77,
+			12
+		);
+
+		reset(ul_1);
+		reset(section);
+		reset(div);
+		event('click', button, go_back_to_timeline);
+		append$1($$anchor, div);
+
+		var $$pop = pop($$exports);
+
+		$$cleanup();
+
+		return $$pop;
+	}
+
 	App[FILENAME] = 'src/App.svelte';
 
-	var root = add_locations(from_html(`<p>Loading ...</p>`), App[FILENAME], [[35, 2]]);
-	var root_1 = add_locations(from_html(`<div class="battle-preload svelte-1n46o8q" aria-live="polite" aria-busy="true"><p class="battle-preload-label svelte-1n46o8q"> </p> <div class="battle-preload-track svelte-1n46o8q" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="battle-preload-fill svelte-1n46o8q"></div></div></div>`), App[FILENAME], [[39, 2, [[40, 3], [41, 3, [[42, 4]]]]]]);
-	var root_2 = add_locations(from_html(`<main><!> <!></main>`), App[FILENAME], [[23, 0]]);
+	var root = add_locations(from_html(`<p>Loading ...</p>`), App[FILENAME], [[38, 2]]);
+	var root_1 = add_locations(from_html(`<div class="battle-preload svelte-1n46o8q" aria-live="polite" aria-busy="true"><p class="battle-preload-label svelte-1n46o8q"> </p> <div class="battle-preload-track svelte-1n46o8q" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="battle-preload-fill svelte-1n46o8q"></div></div></div>`), App[FILENAME], [[42, 2, [[43, 3], [44, 3, [[45, 4]]]]]]);
+	var root_2 = add_locations(from_html(`<main><!> <!></main>`), App[FILENAME], [[24, 0]]);
 
 	function App($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: App, ...$$anchor });
@@ -67720,23 +68374,27 @@ var app = (function () {
 
 		{
 			var consequent = ($$anchor) => {
-				add_svelte_meta(() => Compound_creator($$anchor, {}), 'component', App, 25, 2, { componentTag: 'CompoundCreator' });
+				add_svelte_meta(() => Compound_creator($$anchor, {}), 'component', App, 26, 2, { componentTag: 'CompoundCreator' });
 			};
 
 			var consequent_1 = ($$anchor) => {
-				add_svelte_meta(() => Scientist_timeline($$anchor, {}), 'component', App, 27, 2, { componentTag: 'Timeline' });
+				add_svelte_meta(() => Scientist_timeline($$anchor, {}), 'component', App, 28, 2, { componentTag: 'Timeline' });
 			};
 
 			var consequent_2 = ($$anchor) => {
-				add_svelte_meta(() => Battle($$anchor, {}), 'component', App, 29, 2, { componentTag: 'Battle' });
+				add_svelte_meta(() => Battle($$anchor, {}), 'component', App, 30, 2, { componentTag: 'Battle' });
 			};
 
 			var consequent_3 = ($$anchor) => {
-				add_svelte_meta(() => Balance_equation($$anchor, {}), 'component', App, 31, 2, { componentTag: 'BalanceEquation' });
+				add_svelte_meta(() => Balance_equation($$anchor, {}), 'component', App, 32, 2, { componentTag: 'BalanceEquation' });
 			};
 
 			var consequent_4 = ($$anchor) => {
-				add_svelte_meta(() => Story_scene($$anchor, {}), 'component', App, 33, 2, { componentTag: 'Story' });
+				add_svelte_meta(() => Story_scene($$anchor, {}), 'component', App, 34, 2, { componentTag: 'Story' });
+			};
+
+			var consequent_5 = ($$anchor) => {
+				add_svelte_meta(() => Workshop($$anchor, {}), 'component', App, 36, 2, { componentTag: 'Workshop' });
 			};
 
 			var alternate = ($$anchor) => {
@@ -67762,11 +68420,14 @@ var app = (function () {
 					)) $$render(consequent_3, 3); else if ((
 						$current_scene(),
 						untrack(() => strict_equals($current_scene(), possible_scenes.Story))
-					)) $$render(consequent_4, 4); else $$render(alternate, -1);
+					)) $$render(consequent_4, 4); else if ((
+						$current_scene(),
+						untrack(() => strict_equals($current_scene(), possible_scenes.Workshop))
+					)) $$render(consequent_5, 5); else $$render(alternate, -1);
 				}),
 				'if',
 				App,
-				24,
+				25,
 				1
 			);
 		}
@@ -67774,7 +68435,7 @@ var app = (function () {
 		var node_1 = sibling(node, 2);
 
 		{
-			var consequent_5 = ($$anchor) => {
+			var consequent_6 = ($$anchor) => {
 				var div = root_1();
 				var p_1 = child(div);
 				var text = child(p_1);
@@ -67798,11 +68459,11 @@ var app = (function () {
 
 			add_svelte_meta(
 				() => if_block(node_1, ($$render) => {
-					if (get$1(show_battle_preload)) $$render(consequent_5);
+					if (get$1(show_battle_preload)) $$render(consequent_6);
 				}),
 				'if',
 				App,
-				38,
+				41,
 				1
 			);
 		}

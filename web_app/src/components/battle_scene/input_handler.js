@@ -2,7 +2,11 @@ import { get } from 'svelte/store';
 import * as THREE from 'three';
 import { store } from './store.js'
 import {jump, rotate_on_mouse_move} from './camera.js';
-import { try_to_fire_player_weapon } from './gun.js';
+import {
+    try_to_fire_player_weapon,
+    start_flask_charge_indicator,
+    stop_flask_charge_indicator,
+} from './gun.js';
 import {
     movement_keys,
     compound_selection_keys,
@@ -10,6 +14,7 @@ import {
     axe_swing_key,
     pause_keys,
 } from './constants.js';
+import { has_upgrade, UPGRADE_IDS } from '../../upgrades.js';
 
 
 export function init_pressed_keys() {
@@ -70,33 +75,49 @@ export function reset_pressed_keys() {
 
 
 export class InputHandler {
+    constructor() {
+        this._charge_started_at = null;
+    }
+
     on_mouse_move(event){
         if (!is_playing()) return;
         rotate_on_mouse_move(event)
     }
 
-    on_mouse_click(event) {
+    on_mouse_down(event) {
         if (!is_playing()) return;
-        // this next line helps debug. Previously we were getting different positions because the renderer was expecting
-        // a larger size (it looks for the window size) but we had another div pushing the threejs window down and smaller
-        // scene.add(new THREE.ArrowHelper(mouse_ray.ray.direction, mouse_ray.ray.origin, 300, 0xff0000) );
-        
-        
-        // let children = []
-        // for (let c=0; c<scene.children.length; c++) {
-        //     children.push(scene.children[c])
-        // }
-        // for (let e=0; e<earth.children.length; e++) {
-        //     children.push(earth.children[e])
-        // }
-        // let intersects = unique(mouse_ray.intersectObjects( children, false ), (o) => o.object.uuid);
-        // let intersects_with_click = intersects.filter(intersect => intersect.object.onclick);
-        // if (intersects_with_click.length) {
-        //     intersects_with_click.forEach(intersect => intersect.object.onclick())  // removed interesct, i dont think it did anything
-        // }
-    
+        if (event.button !== 0) return;
+        this._charge_started_at = performance.now();
+        if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
+            this._fire_selected_compound(0);
+            this._charge_started_at = null;
+            return;
+        }
+        start_flask_charge_indicator();
+    }
+
+    on_mouse_up(event) {
+        if (!is_playing()) return;
+        if (event.button !== 0) return;
+        if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
+            this._charge_started_at = null;
+            return;
+        }
+        if (this._charge_started_at == null) return;
+        const held_seconds = (performance.now() - this._charge_started_at) / 1000;
+        const charge = Math.min(1, Math.max(0, held_seconds));
+        this._charge_started_at = null;
+        this._fire_selected_compound(charge);
+    }
+
+    cancel_flask_charge() {
+        this._charge_started_at = null;
+        stop_flask_charge_indicator();
+    }
+
+    _fire_selected_compound(charge) {
         let compound = get(store.key_to_compound)[get(store.selected_compound_index)]
-        try_to_fire_player_weapon(compound)
+        try_to_fire_player_weapon(compound, { charge })
     }
 
     on_keydown(e) {

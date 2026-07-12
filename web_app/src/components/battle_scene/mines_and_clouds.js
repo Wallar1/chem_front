@@ -9,7 +9,7 @@ import {
     get_random_gas_element,
     dispose_material
 } from '../../helper_functions.js';
-
+import { has_upgrade, UPGRADE_IDS } from '../../upgrades.js';
 
 const mine_geometry = new THREE.ConeGeometry( 50, 100, 32 );
 const mine_piece_geometry = new THREE.SphereGeometry( 2, 10, 10 );
@@ -70,7 +70,8 @@ class Mine extends GameObj {
         let atoms_added = Math.ceil(Math.random() * this.max_atoms_added_per_hit)
         store.current_element_counts.update(this.element, atoms_added)
         this.hits_taken += 1;
-        if (this.hits_taken >= this.hits_possible) {
+        const hits_needed = has_upgrade(UPGRADE_IDS.SHARP_AXE) ? 1 : this.hits_possible;
+        if (this.hits_taken >= hits_needed) {
             delete_mine(this);
         }
 

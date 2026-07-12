@@ -1,5 +1,9 @@
-import { writable, derived } from 'svelte/store';
-import { scientists } from './components/scientist_timeline/scientists.js';
+import { writable } from 'svelte/store';
+import {
+    joules,
+    owned_upgrades,
+    upgrade_debug_toggles,
+} from './upgrades.js';
 
 
 const possible_scenes = Object.freeze({
@@ -9,10 +13,11 @@ const possible_scenes = Object.freeze({
     'CompoundCreator': Symbol('compound creator'),
     'BalanceEquation': Symbol('balance equation'),
     'Story': Symbol('story'),
+    'Workshop': Symbol('workshop'),
 });
 // export const current_scene = writable(possible_scenes.Story);
-const current_scene = writable(possible_scenes.Battle);
-// export const current_scene = writable(possible_scenes.Timeline);
+// const current_scene = writable(possible_scenes.Battle);
+const current_scene = writable(possible_scenes.Timeline);
 // export const current_scene = writable(possible_scenes.CompoundCreator);
 // export const current_scene = writable(possible_scenes.BalanceEquation);
 
@@ -54,4 +59,7 @@ export const global_store = {
     atoms,
     current_scene,
     possible_scenes,
+    joules,
+    owned_upgrades,
+    upgrade_debug_toggles,
 }

@@ -7,7 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CraigDragControls } from './craig_drag_controls.js';
 import { CSVLoader } from '../../../public/lib/csv_molecule_loader.js';
 import { store } from './store.js';
-
+import { award_joule } from '../../upgrades.js';
 
 function initialize_vars(){
     store.draggable_objects = [];
@@ -239,6 +239,9 @@ export function end_scene(GameState){
         state['state'] = GameState;
         return state;
     });
+    if (GameState === store.GameStates.GAMEWON) {
+        award_joule(1);
+    }
     dispose_group(store.scene);
     dispose_renderer(store.renderer);
 }
