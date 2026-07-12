@@ -10,9 +10,16 @@ import { earth_radius } from './constants.js';
 import { get_random_from_probilities } from '../../helper_functions.js'
 import { blast_projectile } from './projectile.js';
 import { spawn_lab_at_surface_quaternion } from './lab.js';
+import {
+    apply_surface_knockback,
+    get_chase_target_with_angle_offset as chase_target_with_angle_offset,
+    rotate_parent_toward_world_point as rotate_parent_on_surface,
+} from './enemy-surface.js';
 
-const AXE_DAMAGE = 8;
-const AXE_KNOCKBACK_RADIANS = 0.08;
+const AXE_DAMAGE = 5;
+const AXE_KNOCKBACK_RADIANS = 0.1;
+const AXE_KNOCKBACK_DURATION = 0.28;
+const AXE_KNOCKBACK_LIFT = 50;
 const AXE_STUN_SECONDS = 0.35;
 const _zone_center_vector = new THREE.Vector3(0, 0, earth_radius);
 
@@ -144,6 +151,7 @@ const MODEL_CONFIGS = [
         'health_bar_z': -120,
         'damage': 15,
         'probability': 10,
+        'movement_pattern': 'jump',
     },
     {
         'model_name': 'Professor Gold',
@@ -152,7 +160,8 @@ const MODEL_CONFIGS = [
         'initial_health': 200,
         'health_bar_z': -180,
         'damage': 10,
-        'probability': 5
+        'probability': 5,
+        'movement_pattern': 'weave',
     },
     {
         'model_name': 'Male Blue',
@@ -162,6 +171,7 @@ const MODEL_CONFIGS = [
         'health_bar_z': -70,
         'damage': 12,
         'probability': 20,
+        'movement_pattern': 'fast',
     },
     {
         'model_name': 'Robot 4 Blue',
@@ -171,6 +181,7 @@ const MODEL_CONFIGS = [
         'health_bar_z': -270,
         'damage': 15,
         'probability': 1,
+        'movement_pattern': 'jerky',
     },
 ]
 
@@ -188,9 +199,12 @@ class Enemy extends GameObj {
             scale,
             initial_health,
             health_bar_z,
-            damage
+            damage,
+            movement_pattern,
         } = this.get_random_model()
         this.damage = damage;
+        this.movement_pattern = movement_pattern ?? 'smooth';
+        this.health = this.full_health = initial_health;
 
         load_model(model_name, scale)
             .then(fbx_model => update_animation(fbx_model, animation_name))
@@ -216,6 +230,9 @@ class Enemy extends GameObj {
     }
 
     take_damage(dmg) {
+        if (typeof this.health !== 'number' || Number.isNaN(this.health)) {
+            return;
+        }
         this.health -= dmg
         if (this.health <= 0) {
             store.player_score += 1;
@@ -225,7 +242,9 @@ class Enemy extends GameObj {
             this.should_delete = true;
             return
         }
-        this.health_bar.scale.set(1, this.health/this.full_health, 1)
+        if (this.health_bar) {
+            this.health_bar.scale.set(1, this.health/this.full_health, 1)
+        }
     }
 
     collide(collided_obj) {
@@ -254,14 +273,14 @@ class Enemy extends GameObj {
 
     rotate_parent_toward_world_point(target_world_pos, earth_radius, time_delta, speed_multiplier = 1) {
         const enemy_world_pos = this.getWorldPosition(new THREE.Vector3());
-        const dir_to_target_world = new THREE.Vector3().subVectors(target_world_pos, enemy_world_pos);
-        const up_local_parent = new THREE.Vector3(0, 0, earth_radius);
-        const dir_to_target_local_parent = this.parent.worldToLocal(dir_to_target_world.clone()).normalize();
-        const axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, dir_to_target_local_parent).normalize();
-        const radians = speed_multiplier * Math.PI * time_delta / 100;
-        const quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, radians);
-        this.parent.quaternion.multiply(quaternion);
-        this.parent.updateMatrixWorld(true);
+        rotate_parent_on_surface(
+            this.parent,
+            enemy_world_pos,
+            target_world_pos,
+            earth_radius,
+            time_delta,
+            speed_multiplier,
+        );
     }
 
     face_toward_camera(dir_to_camera_world) {
@@ -293,21 +312,153 @@ class Enemy extends GameObj {
         return state;
     }
 
+    get_chase_target_with_angle_offset(target_world_pos, angle_offset_radians) {
+        const enemy_world_pos = this.getWorldPosition(new THREE.Vector3());
+        return chase_target_with_angle_offset(enemy_world_pos, target_world_pos, angle_offset_radians);
+    }
+
+    move_toward_target(target_world_pos, earth_radius, time_delta, speed_multiplier) {
+        this.rotate_parent_toward_world_point(target_world_pos, earth_radius, time_delta, speed_multiplier);
+    }
+
+    apply_movement_pattern(pattern, target_world_pos, earth_radius, time_delta, state) {
+        switch (pattern) {
+            case 'jerky':
+                return this.move_jerky(target_world_pos, earth_radius, time_delta, state);
+            case 'fast':
+                this.move_toward_target(target_world_pos, earth_radius, time_delta, 2.1);
+                return state;
+            case 'jump':
+                return this.move_jumping(target_world_pos, earth_radius, time_delta, state);
+            case 'weave':
+                return this.move_weaving(target_world_pos, earth_radius, time_delta, state);
+            default:
+                this.move_toward_target(target_world_pos, earth_radius, time_delta, 1);
+                return state;
+        }
+    }
+
+    move_jerky(target_world_pos, earth_radius, time_delta, state) {
+        state.jerky_timer = (state.jerky_timer ?? 0) + time_delta;
+        const phase_duration = state.jerky_bursting
+            ? (state.jerky_burst_duration ?? 0.18)
+            : (state.jerky_pause_duration ?? 0.8);
+
+        if (state.jerky_timer >= phase_duration) {
+            state.jerky_bursting = !state.jerky_bursting;
+            state.jerky_timer = 0;
+            if (state.jerky_bursting) {
+                state.jerky_burst_duration = 0.1 + Math.random() * 0.15;
+            } else {
+                state.jerky_pause_duration = 0.5 + Math.random() * 0.7;
+            }
+        }
+
+        if (state.jerky_bursting) {
+            this.move_toward_target(target_world_pos, earth_radius, time_delta, 1.1);
+        }
+        return state;
+    }
+
+    move_jumping(target_world_pos, earth_radius, time_delta, state) {
+        if (state.base_z === undefined) {
+            state.base_z = this.position.z;
+        }
+        state.jump_timer = (state.jump_timer ?? 0) + time_delta;
+
+        if (!state.jump_airborne) {
+            this.position.z = state.base_z;
+            if (state.jump_timer >= (state.jump_cooldown ?? 0.55)) {
+                state.jump_airborne = true;
+                state.jump_timer = 0;
+                state.jump_duration = 0.26 + Math.random() * 0.2;
+                state.jump_angle = (Math.random() - 0.5) * 0.9;
+                state.jump_lift = 45 + Math.random() * 25;
+            }
+            return state;
+        }
+
+        const jump_progress = state.jump_timer / state.jump_duration;
+        if (jump_progress >= 1) {
+            state.jump_airborne = false;
+            state.jump_timer = 0;
+            state.jump_cooldown = 0.5 + Math.random() * 0.4;
+            this.position.z = state.base_z;
+            return state;
+        }
+
+        const angled_target = this.get_chase_target_with_angle_offset(target_world_pos, state.jump_angle);
+        this.move_toward_target(angled_target, earth_radius, time_delta, 4.6);
+        this.position.z = state.base_z + Math.sin(jump_progress * Math.PI) * state.jump_lift;
+        return state;
+    }
+
+    move_weaving(target_world_pos, earth_radius, time_delta, state) {
+        state.weave_timer = (state.weave_timer ?? 0) + time_delta;
+        const weave_period = 1.4;
+        const weave_angle = Math.sin((state.weave_timer / weave_period) * Math.PI * 2) * 0.45;
+        const woven_target = this.get_chase_target_with_angle_offset(target_world_pos, weave_angle);
+        this.move_toward_target(woven_target, earth_radius, time_delta, 0.85);
+        return state;
+    }
+
+    apply_axe_knockback(tangent_knockback_world) {
+        if (tangent_knockback_world.lengthSq() < 1e-6) {
+            return;
+        }
+        if (this.knockback_updater) {
+            this.knockback_updater.state.finished = true;
+        }
+
+        const enemy = this;
+        const tangent = tangent_knockback_world.clone().normalize();
+        const updater = new Updater((state, time_delta) => {
+            if (enemy.should_delete) {
+                enemy.position.z = state.base_z;
+                return { ...state, finished: true };
+            }
+
+            state.elapsed += time_delta;
+            const linear_progress = Math.min(state.elapsed / AXE_KNOCKBACK_DURATION, 1);
+            const eased_progress = 1 - Math.pow(1 - linear_progress, 2);
+            const delta_radians = AXE_KNOCKBACK_RADIANS * (eased_progress - state.eased_progress);
+
+            if (delta_radians > 0) {
+                apply_surface_knockback(enemy.parent, tangent, earth_radius, delta_radians);
+                state.eased_progress = eased_progress;
+            }
+
+            enemy.position.z = state.base_z + Math.sin(linear_progress * Math.PI) * AXE_KNOCKBACK_LIFT;
+
+            if (linear_progress >= 1) {
+                enemy.position.z = state.base_z;
+                return { ...state, finished: true };
+            }
+            return state;
+        }, {
+            finished: false,
+            elapsed: 0,
+            eased_progress: 0,
+            base_z: this.position.z,
+        });
+
+        store.global_updates_queue.push(updater);
+        this.knockback_updater = updater;
+    }
+
     hit_by_axe() {
         this.take_damage(AXE_DAMAGE);
         if (this.should_delete) {
             return;
         }
 
-        const camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3());
         const enemy_world_pos = this.getWorldPosition(new THREE.Vector3());
-        const knockback_dir_world = new THREE.Vector3().subVectors(enemy_world_pos, camera_world_pos);
-        const up_local_parent = new THREE.Vector3(0, 0, earth_radius);
-        const knockback_dir_local = this.parent.worldToLocal(knockback_dir_world.clone()).normalize();
-        const axis_of_rotation = new THREE.Vector3().crossVectors(up_local_parent, knockback_dir_local).normalize();
-        const quaternion = new THREE.Quaternion().setFromAxisAngle(axis_of_rotation, -AXE_KNOCKBACK_RADIANS);
-        this.parent.quaternion.multiply(quaternion);
-        this.parent.updateMatrixWorld(true);
+        const surface_normal = enemy_world_pos.clone().normalize();
+        const player_facing_world = store.camera.getWorldDirection(new THREE.Vector3());
+        const tangent_knockback = player_facing_world.clone().projectOnPlane(surface_normal);
+        if (tangent_knockback.lengthSq() >= 1e-6) {
+            this.apply_axe_knockback(tangent_knockback);
+        }
 
         if (this.movement_updater) {
             this.movement_updater.state.stunned = true;
@@ -325,7 +476,6 @@ class Enemy extends GameObj {
     }
 
     start_moving(earth_radius) {
-        // TODO: make it so the enemies dont move in a perfectly straight line, they zig zag. Also they jump
         function move_enemy(state, time_delta) {
             /*
             The up direction is the plane's normal (the plane that is tangent to the earth at the enemy's position).
@@ -345,18 +495,33 @@ class Enemy extends GameObj {
             // cant move or hurt player when stunned
             if (stunned) return state;
 
+            let camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3())
+
+            const advance_airborne_jump = () => {
+                if (enemy.movement_pattern === 'jump' && state.jump_airborne) {
+                    state = enemy.move_jumping(camera_world_pos, earth_radius, time_delta, state);
+                }
+            };
+
             if (!enemy.is_player_in_zone()) {
+                advance_airborne_jump();
                 return enemy.guard_zone(state, time_delta, earth_radius);
             }
 
-            let camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3())
             let enemy_world_pos = enemy.getWorldPosition(new THREE.Vector3())
             let dir_to_camera_world = new THREE.Vector3().subVectors(camera_world_pos, enemy_world_pos)
             const chase_radius = enemy.zone?.aggro_radius ?? earth_radius;
             if (dir_to_camera_world.lengthSq() > Math.pow(chase_radius, 2)) {
+                advance_airborne_jump();
                 return state
             }
-            enemy.rotate_parent_toward_world_point(camera_world_pos, earth_radius, time_delta);
+            state = enemy.apply_movement_pattern(
+                enemy.movement_pattern,
+                camera_world_pos,
+                earth_radius,
+                time_delta,
+                state,
+            );
             enemy.face_toward_camera(dir_to_camera_world);
             let collisions = enemy.check_collisions([store.camera]);
             if (collisions.length) {
@@ -440,6 +605,17 @@ function fire_enemy_projectile(){
 }
 
 
-export { create_enemy, MODEL_CONFIGS, load_texture, load_model, update_animation, preload_battle_assets }
+export {
+    create_enemy,
+    MODEL_CONFIGS,
+    load_texture,
+    load_model,
+    update_animation,
+    preload_battle_assets,
+    Enemy,
+    AXE_DAMAGE,
+    AXE_KNOCKBACK_RADIANS,
+    AXE_KNOCKBACK_DURATION,
+}
 
 

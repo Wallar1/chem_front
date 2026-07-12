@@ -6,15 +6,14 @@ services:
         build:
             # you need to have the context outside of web_app so you can copy ./scripts
             context: ./web_app
-        # binding this volume should make changes in the container appear outside of it
-        # volumes:
-        #     - type: bind
-        #       source: ./web_app
-        #       target: /web_app
+        # Bind-mount source for live edit. Keep node_modules in a named Linux
+        # volume: Rancher Desktop's fuse.sshfs host mount cannot read npm's
+        # .bin symlinks (readlink → EPERM → "rollup: Operation not permitted").
         volumes:
             - ./web_app:/web_app:delegated
-            - ./web_app/src:/web_app/src:delegated
-        command: npm run dev
+            - chem_node_modules:/web_app/node_modules
+        # Install into the volume on start (no-op when lockfile is unchanged).
+        command: sh -c "npm install && npm run dev"
         ports:
             - "8082:8082"
             - "35729:35729"  # Expose livereload port
@@ -42,3 +41,6 @@ services:
 networks:
     mynet:
         driver: bridge
+
+volumes:
+    chem_node_modules:

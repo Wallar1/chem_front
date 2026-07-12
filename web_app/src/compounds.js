@@ -12,7 +12,10 @@ Copper: electric shock that jumps from enemy to enemy
 */
 
 import * as THREE from 'three';
+import { get } from 'svelte/store';
 import { get_font_text_mesh } from './helper_functions.js';
+import { global_store } from './global_store.js';
+import { store as compound_creator_store } from './components/compound_creator/store.js';
 
 
 
@@ -135,7 +138,7 @@ export class Compound {
             const csv_atom = csv_atoms[i];
             const element = csv_atom.element
             if (!materials[element.toLowerCase()]) {
-                let color_info = get(atoms)[element]['color']
+                let color_info = get(global_store.atoms)[element]['color']
                 let color = new THREE.Color(`rgb(${color_info[0]}, ${color_info[1]}, ${color_info[2]})`);
                 materials[element.toLowerCase()] = new THREE.MeshToonMaterial( { color: color } );
             }
@@ -154,7 +157,7 @@ export class Compound {
             }
             atom_obj.scale.set( ATOM_SIZE, ATOM_SIZE, ATOM_SIZE );
             atom_obj.onclick = () => {
-                if (element === get(selected_atom)) {
+                if (element === get(compound_creator_store.selected_atom)) {
                     atom_obj.material = materials[element.toLowerCase()];
                     atom_obj.correct_material = true;
                 }
