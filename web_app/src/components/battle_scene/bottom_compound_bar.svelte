@@ -8,7 +8,7 @@
 	let selected_compound_index = store.selected_compound_index;
 
 	$: keyboard_compounds = Object.entries($key_to_compound).filter(
-		([key]) => ['1', '2', '3', '4', '5'].includes(key)
+		([key, compound]) => ['1', '2', '3', '4', '5'].includes(key) && compound
 	);
 	$: max_by_compound = $max_number_possible_for_each_compound;
 	$: selected_key = $selected_compound_index;

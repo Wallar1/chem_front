@@ -4,6 +4,7 @@ import { Updater, check_collisions, GameObj, proxy_handler } from './objects';
 import { store } from './store.js';
 import { projectile_material_map, formula_to_damage_dict } from '../../compounds.js';
 import { earth_radius, burn_duration, burn_pulse_damage, stun_time } from './constants.js';
+import { apply_molecule_hit_effect, MOLECULE_HIT_EFFECTS } from './molecule_effects.js';
 
 
 var size = new THREE.Vector3(50, 50, 50)
@@ -85,8 +86,10 @@ export function blast_projectile(state, time_delta){
     mesh.position.add(direction)
 
     let collisions = projectile.check_collisions(store.enemies);
+    const impact_world_pos = mesh.getWorldPosition(new THREE.Vector3());
     collisions.forEach(collided_obj => {
         collided_obj.collide(projectile);
+        apply_molecule_hit_effect(projectile, collided_obj, impact_world_pos);
         if (store.lab_effects['electrical'] > 0) {
             const stun_update_helper = (state, time_delta) => {
                 let {total_time} = state;
@@ -170,7 +173,7 @@ class Methane extends Projectile {
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Methane'
         this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
+        this.effects = [MOLECULE_HIT_EFFECTS.CH4]
     }
 }
 
@@ -180,7 +183,7 @@ class Ammonia extends Projectile {
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Ammonia'
         this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
+        this.effects = [MOLECULE_HIT_EFFECTS.NH3]
     }
 }
 
@@ -190,7 +193,7 @@ class Cyanide extends Projectile {
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Cyanide'
         this.damage = formula_to_damage_dict[this.formula]
-        this.effects = []
+        this.effects = [MOLECULE_HIT_EFFECTS.CN]
     }
 }
 
@@ -200,6 +203,16 @@ class Water extends Projectile {
         super({formula, initial_pos, velocity, onclick})
         this.name = 'Water'
         this.damage = formula_to_damage_dict[this.formula]
+        this.effects = [MOLECULE_HIT_EFFECTS.H2O]
+    }
+}
+
+/** Fallback for battle-usable formulas without a dedicated subclass. */
+class GenericMolecule extends Projectile {
+    constructor({formula, initial_pos, velocity, onclick}) {
+        super({formula, initial_pos, velocity, onclick})
+        this.name = formula
+        this.damage = formula_to_damage_dict[this.formula] ?? 10
         this.effects = []
     }
 }
@@ -214,27 +227,10 @@ const compound_name_to_class = {
 
 export function create_projectile(compound_name, arg_dict) {
     let klass = compound_name_to_class[compound_name]
-    let projectile = new klass(arg_dict)
+    let projectile = klass
+        ? new klass(arg_dict)
+        : new GenericMolecule({ ...arg_dict, formula: compound_name })
     let proxy = new Proxy(projectile, proxy_handler('mesh'))
     proxy.position.copy(arg_dict['initial_pos'])
     return proxy
-}
-
-function poison({dmg, enemy, framerate, initial_time, total_time, seconds_between_poison, number_of_ticks}) {
-    if (!initial_time) initial_time = store.global_clock.elapsedTime
-    if (!total_time) total_time = 0;
-    total_time += store.global_clock.elapsedTime - initial_time;
-    let half_frame_rate = framerate / 2
-    let should_tick = Math.round((total_time * half_frame_rate) % (seconds_between_poison * half_frame_rate)) === 0
-    if (should_tick) {
-        enemy.take_damage(dmg)
-        number_of_ticks -= 1
-        initial_time = total_time
-    }
-    let finished = false;
-    if (number_of_ticks <= 0) {
-        finished = true
-        return {finished}
-    }
-    return {dmg, enemy, framerate, initial_time, total_time, seconds_between_poison, number_of_ticks}
 }

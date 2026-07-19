@@ -8,24 +8,13 @@ import {
     buy_upgrade,
     has_upgrade,
     toggle_upgrade_debug,
+    reset_upgrades,
     UPGRADE_IDS,
 } from './upgrades.js';
 
 describe('upgrades', () => {
     beforeEach(() => {
-        joules.set(0);
-        owned_upgrades.set({
-            [UPGRADE_IDS.LAB_COAT]: false,
-            [UPGRADE_IDS.SHARP_AXE]: false,
-            [UPGRADE_IDS.ERLENMEYER_FLASK]: false,
-            [UPGRADE_IDS.SEPARATING_FUNNEL]: false,
-        });
-        upgrade_debug_toggles.set({
-            [UPGRADE_IDS.LAB_COAT]: false,
-            [UPGRADE_IDS.SHARP_AXE]: false,
-            [UPGRADE_IDS.ERLENMEYER_FLASK]: false,
-            [UPGRADE_IDS.SEPARATING_FUNNEL]: false,
-        });
+        reset_upgrades();
     });
 
     it('awards joules', () => {

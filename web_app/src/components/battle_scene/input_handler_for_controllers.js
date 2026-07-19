@@ -89,6 +89,8 @@ export class ContollerInputHandler {
     }
     
     update() {
+        // XR controllers are handled by XRInputHandler while presenting.
+        if (store.renderer?.xr?.isPresenting) return;
         this.update_pressed_values();
         this.act_on_pressed_buttons();
     }
@@ -121,7 +123,7 @@ export class ContollerInputHandler {
             } else if ([right_lower_trigger, right_upper_trigger, left_lower_trigger, left_upper_trigger].indexOf(i) > -1) {
                 let keys_to_compound = get(store.key_to_compound)
                 let compound = keys_to_compound[i]
-                try_to_fire_player_weapon(compound)
+                if (compound) try_to_fire_player_weapon(compound)
             } else if (i === left_stick_push || i === right_stick_push) {
                 store.axe.try_to_swing();
             }

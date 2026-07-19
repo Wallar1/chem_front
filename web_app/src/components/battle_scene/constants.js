@@ -18,6 +18,19 @@ export const stun_time = 1;
 export const burn_duration = 5;
 export const burn_pulse_damage = 15;
 
+/** Ammonia / cyanide poison DoT (pulses after the initial hit). */
+export const poison_duration = 4;
+export const poison_pulse_damage = 10;
+
+/** Water splash onto nearby enemies (world units). */
+export const splash_radius = 220;
+export const splash_damage_ratio = 0.5;
+
+/** Methane explosion AoE + knockback. */
+export const explode_radius = 320;
+export const explode_damage_ratio = 0.65;
+export const explode_knockback_radians = 0.12;
+
 
 
 // Input constants

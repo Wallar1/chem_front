@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { get } from 'svelte/store';
 
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
+import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 // import * as AmmoLib from '../lib/ammo.js';
 import { Updater } from './objects.js';
 import { create_mine, create_cloud } from './mines_and_clouds.js';
@@ -10,10 +13,17 @@ import { add_energy_effect_updater } from './lab.js';
 import { create_enemy } from './enemies.js';
 import { InputHandler, init_pressed_keys, reset_pressed_keys } from './input_handler.js';
 import { ContollerInputHandler, init_pushed_buttons } from './input_handler_for_controllers.js';
+import { XRInputHandler } from './input_handler_for_xr.js';
 import { store } from './store.js';
 import { earth_radius, initial_object_count, include_enemies, count_to_spawn, seconds_between_spawns, pause_keys } from './constants.js';
 import { create_earth } from './earth.js';
-import { create_camera, move_camera, rotate_on_controller_move } from './camera.js';
+import {
+    create_camera,
+    move_camera,
+    rotate_on_controller_move,
+    enter_xr_camera_rig,
+    exit_xr_camera_rig,
+} from './camera.js';
 import { create_gun } from './gun.js';
 import {
     get_random_from_probilities,
@@ -54,6 +64,9 @@ function initialize_vars(){
     store.lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
     store.current_direction_vector = new THREE.Vector3(0, 0, 0);
     store.jump_in_progress = false;
+    store.xr_controllers = [];
+    store.xr_controller_grips = [];
+    store.player_rig = null;
 }
 
 export class BattleScene {
@@ -70,6 +83,16 @@ export class BattleScene {
         
         const canvas_container = document.getElementById('canvas-container')
         canvas_container.appendChild(store.renderer.domElement);
+
+        this._vr_button = VRButton.createButton(store.renderer);
+        this._vr_button.id = 'VRButton';
+        this._ar_button = ARButton.createButton(store.renderer, {
+            optionalFeatures: ['dom-overlay', 'local-floor'],
+            domOverlay: { root: document.body },
+        });
+        this._ar_button.id = 'ARButton';
+        canvas_container.appendChild(this._vr_button);
+        canvas_container.appendChild(this._ar_button);
 
         store.scene = new THREE.Scene()
 
@@ -92,7 +115,112 @@ export class BattleScene {
 
         this.input_handler = new InputHandler();
         this.controller_input_handler = new ContollerInputHandler();
+        this.xr_input_handler = new XRInputHandler();
         store.battle_scene = this;
+
+        this._on_xr_session_start = this.on_xr_session_start.bind(this);
+        this._on_xr_session_end = this.on_xr_session_end.bind(this);
+        store.renderer.xr.addEventListener('sessionstart', this._on_xr_session_start);
+        store.renderer.xr.addEventListener('sessionend', this._on_xr_session_end);
+        this.init_xr_controllers();
+    }
+
+    on_xr_session_start() {
+        store.xr_presenting = true;
+        const session = store.renderer.xr.getSession();
+        // Passthrough / AR: drop the cubemap so the real world can show through.
+        if (session?.environmentBlendMode && session.environmentBlendMode !== 'opaque') {
+            store.scene.background = null;
+        }
+
+        const rig = enter_xr_camera_rig();
+        for (const controller of store.xr_controllers) {
+            rig.add(controller);
+        }
+        for (const grip of store.xr_controller_grips) {
+            rig.add(grip);
+        }
+
+        // FPS gun/axe sit on the desktop camera; hide them in immersive mode.
+        if (store.gun) store.gun.visible = false;
+        if (store.axe) store.axe.visible = false;
+
+        document.exitPointerLock?.();
+        this.xr_input_handler.reset();
+
+        // Entering VR from the start overlay should begin play without a mouse click.
+        const state = get(store.game_state).state;
+        if (state === store.GameStates.STARTING) {
+            store.game_state.update((current) => {
+                current.state = store.GameStates.PLAYING;
+                return current;
+            });
+            this.add_event_listeners();
+            this.animate();
+        } else if (state === store.GameStates.PAUSED) {
+            this.unpause();
+        } else if (state === store.GameStates.PLAYING) {
+            // Ensure the XR-paced loop is running.
+            this.animate();
+        }
+    }
+
+    on_xr_session_end() {
+        store.xr_presenting = false;
+        store.scene.background = create_background();
+        this.xr_input_handler.reset();
+
+        for (const controller of store.xr_controllers) {
+            store.scene.add(controller);
+        }
+        for (const grip of store.xr_controller_grips) {
+            store.scene.add(grip);
+        }
+        exit_xr_camera_rig();
+
+        if (store.gun) store.gun.visible = true;
+        if (store.axe) store.axe.visible = true;
+    }
+
+    init_xr_controllers() {
+        const controllerModelFactory = new XRControllerModelFactory();
+        store.xr_controllers = [];
+        store.xr_controller_grips = [];
+
+        for (let i = 0; i < 2; i++) {
+            const controller = store.renderer.xr.getController(i);
+            controller.addEventListener('connected', (event) => {
+                controller.userData.handedness = event.data?.handedness;
+                controller.userData.targetRayMode = event.data?.targetRayMode;
+                if (!controller.userData.ray) {
+                    const geometry = new THREE.BufferGeometry().setFromPoints([
+                        new THREE.Vector3(0, 0, 0),
+                        new THREE.Vector3(0, 0, -1),
+                    ]);
+                    const line = new THREE.Line(geometry);
+                    line.scale.z = 5;
+                    line.name = 'xr-ray';
+                    controller.add(line);
+                    controller.userData.ray = line;
+                }
+            });
+            controller.addEventListener('disconnected', () => {
+                const line = controller.userData.ray;
+                if (line) {
+                    controller.remove(line);
+                    line.geometry?.dispose?.();
+                    line.material?.dispose?.();
+                    controller.userData.ray = null;
+                }
+            });
+            store.scene.add(controller);
+            store.xr_controllers.push(controller);
+
+            const grip = store.renderer.xr.getControllerGrip(i);
+            grip.add(controllerModelFactory.createControllerModel(grip));
+            store.scene.add(grip);
+            store.xr_controller_grips.push(grip);
+        }
     }
 
     pause() {
@@ -103,6 +231,7 @@ export class BattleScene {
         });
         reset_pressed_keys();
         this.input_handler?.cancel_flask_charge?.();
+        this.xr_input_handler?.reset?.();
         document.exitPointerLock();
         this.remove_event_listeners();
         this.add_pause_listener();
@@ -118,8 +247,10 @@ export class BattleScene {
         this.add_event_listeners();
         store.global_clock.getDelta();
         this.animate();
-        const canvas = document.getElementById('canvas-container')?.firstChild;
-        canvas?.requestPointerLock?.({ unadjustedMovement: true });
+        if (!store.renderer?.xr?.isPresenting) {
+            const canvas = document.getElementById('canvas-container')?.firstChild;
+            canvas?.requestPointerLock?.({ unadjustedMovement: true });
+        }
     }
 
     add_pause_listener() {
@@ -186,25 +317,39 @@ export class BattleScene {
     destroy() {
         this.remove_event_listeners();
         this.remove_pause_listener();
+        store.renderer?.setAnimationLoop?.(null);
+        if (store.renderer?.xr) {
+            store.renderer.xr.removeEventListener('sessionstart', this._on_xr_session_start);
+            store.renderer.xr.removeEventListener('sessionend', this._on_xr_session_end);
+        }
+        this.xr_input_handler?.reset?.();
         store.battle_scene = null;
+        store.xr_presenting = false;
     }
 
     animate(){
-        requestAnimationFrame(()=>{
+        // setAnimationFrame is required for WebXR frame pacing; also works on desktop.
+        store.renderer.setAnimationLoop(() => {
             let _game_state = get(store.game_state)
             if (_game_state['state'] === store.GameStates.GAMELOST || _game_state['state'] === store.GameStates.GAMEWON) {
                 store.global_updates_queue = []
+                store.renderer.setAnimationLoop(null);
                 return;
             }
             if (_game_state['state'] === store.GameStates.PAUSED) {
+                // Keep the XR session painted, but freeze simulation.
+                if (store.renderer.xr.isPresenting) {
+                    store.renderer.render(store.scene, store.camera);
+                }
                 return;
             }
-            if (this.controller_input_handler?.connected) {
+            const time_delta = store.global_clock.getDelta();
+            if (store.renderer.xr.isPresenting) {
+                this.xr_input_handler.update(time_delta);
+            } else if (this.controller_input_handler?.connected) {
                 this.controller_input_handler.update();
             }
-            this.animate()
             store.stats.begin();
-            const time_delta = store.global_clock.getDelta();
             let next_updates = []
             for (let i=0; i<store.global_updates_queue.length; i++) {
                 let updater = store.global_updates_queue[i]
@@ -244,11 +389,14 @@ function create_renderer(){
     store.renderer = new THREE.WebGLRenderer({
         antialias: false,
         powerPreference: "high-performance",
+        alpha: true, // needed for immersive-ar / passthrough clear
     });
     store.renderer.outputEncoding = THREE.sRGBEncoding;
     store.renderer.shadowMap.enabled = false;
     store.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     store.renderer.setSize(window.innerWidth, window.innerHeight);
+    store.renderer.xr.enabled = true;
+    store.renderer.xr.setReferenceSpaceType('local-floor');
 }
 
 

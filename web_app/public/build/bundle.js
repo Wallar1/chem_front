@@ -6656,6 +6656,26 @@ var app = (function () {
 	}
 
 	/**
+	 * @returns {TemplateNode | DocumentFragment}
+	 */
+	function comment() {
+		// we're not delegating to `template` here for performance reasons
+		if (hydrating) {
+			assign_nodes(hydrate_node, null);
+			return hydrate_node;
+		}
+
+		var frag = document.createDocumentFragment();
+		var start = document.createComment('');
+		var anchor = create_text();
+		frag.append(start, anchor);
+
+		assign_nodes(start, anchor);
+
+		return frag;
+	}
+
+	/**
 	 * Assign the created (or in hydration mode, traversed) dom elements to the current block
 	 * and insert the elements into the dom (in client mode).
 	 * @param {Text | Comment | Element} anchor
@@ -9600,7 +9620,7 @@ var app = (function () {
 	    },
 	]);
 
-	function empty_upgrade_flags() {
+	function empty_upgrade_flags$1() {
 	    return {
 	        [UPGRADE_IDS.LAB_COAT]: false,
 	        [UPGRADE_IDS.SHARP_AXE]: false,
@@ -9609,9 +9629,9 @@ var app = (function () {
 	    };
 	}
 
-	const joules = writable(0);
-	const owned_upgrades = writable(empty_upgrade_flags());
-	const upgrade_debug_toggles = writable(empty_upgrade_flags());
+	const joules = writable(5);
+	const owned_upgrades = writable(empty_upgrade_flags$1());
+	const upgrade_debug_toggles = writable(empty_upgrade_flags$1());
 
 	function award_joule(amount = 1) {
 	    joules.update((n) => n + amount);
@@ -9855,6 +9875,8 @@ var app = (function () {
 	const NormalAnimationBlendMode = 2500;
 	const AdditiveAnimationBlendMode = 2501;
 	const TrianglesDrawMode = 0;
+	const TriangleStripDrawMode = 1;
+	const TriangleFanDrawMode = 2;
 	const LinearEncoding = 3000;
 	const sRGBEncoding = 3001;
 	const GammaEncoding = 3007;
@@ -52432,6 +52454,19 @@ var app = (function () {
 	const burn_duration = 5;
 	const burn_pulse_damage = 15;
 
+	/** Ammonia / cyanide poison DoT (pulses after the initial hit). */
+	const poison_duration = 4;
+	const poison_pulse_damage = 10;
+
+	/** Water splash onto nearby enemies (world units). */
+	const splash_radius = 220;
+	const splash_damage_ratio = 0.5;
+
+	/** Methane explosion AoE + knockback. */
+	const explode_radius = 320;
+	const explode_damage_ratio = 0.65;
+	const explode_knockback_radians = 0.12;
+
 
 
 	// Input constants
@@ -52459,190 +52494,6 @@ var app = (function () {
 	const right_stick_push = 11;
 	const home_button = 12;
 	const picture_thing = 13;
-
-	const key_to_compound = writable({
-	    '1': 'H2',
-	    '2': 'CH4',
-	    '3': 'NH3',
-	    '4': 'CN',
-	    '5': 'H2O',
-	    [right_upper_trigger]: 'CH4',
-	    [left_lower_trigger]: 'NH3',
-	    [right_lower_trigger]: 'CN',
-	    [left_upper_trigger]: 'H2O'
-	});
-	const selected_compound_index = writable('1');
-
-
-	const GameStates$2 = Object.freeze({
-	    'STARTING': Symbol('starting'),
-	    'PLAYING': Symbol('playing'),
-	    'PAUSED': Symbol('paused'),
-	    'GAMELOST': Symbol('game_over'),
-	    'GAMEWON': Symbol('game won'),
-	});
-
-	const game_state$2 = writable({
-	    'state': GameStates$2.STARTING,
-	    'level': 1,
-	});
-
-	const battle_assets_preload = writable({
-	    loaded: 0,
-	    total: 0,
-	    complete: false,
-	});
-
-
-	let initial_counts = {
-	    'H': {
-	        count: 20,
-	        last_updated: performance.now(),
-	    }
-	};
-	function create_current_counts_store() {
-	    const { subscribe, set: originalSet, update } = writable(window.structuredClone(initial_counts));
-
-	    return {
-	        subscribe,
-	        update: (element, added_amount) => {
-	            update(counts => {
-	                if (!counts[element]) {
-	                    counts[element] = { count: 0, last_updated: performance.now() };
-	                }
-	                counts[element]['count'] += added_amount;
-	                counts[element]['last_updated'] = performance.now();
-	                return { ...counts };
-	            });
-	        },
-	        set: (element, new_count) => {
-	            update(counts => {
-	                if (!counts[element]) {
-	                    counts[element] = { count: 0, last_updated: performance.now() };
-	                }
-	                counts[element]['count'] = new_count;
-	                counts[element]['last_updated'] = performance.now();
-	                return { ...counts };
-	            });
-	        },
-	        reset: () => {
-	            const initial_with_updated_date = window.structuredClone(initial_counts);
-	            initial_with_updated_date['H']['last_updated'] = performance.now();
-	            originalSet(initial_with_updated_date);
-	        }
-	    };
-	}
-	const current_element_counts = create_current_counts_store();
-
-
-	/*
-	Tell you how many CH3 (for example) you can make. Maybe you can make 5 of that compound
-	*/
-	const max_number_possible_for_each_compound = derived$1(
-	    [key_to_compound, current_element_counts],
-	    ([$key_to_compound, $current_element_counts]) => {
-	        let max_possible_by_compound = {};
-	        let compounds = Object.values($key_to_compound);
-	        for (let i=0; i<compounds.length; i++) {
-	            let current_max_count = Infinity;
-	            let compound = compounds[i];
-	            let entries = Object.entries(parse_formula_to_dict(compound));
-	            for (let i=0; i<entries.length; i++) {
-	                let [element, count_needed] = entries[i];
-	                if ($current_element_counts[element] === undefined) {
-	                    current_max_count = 0;
-	                } else {
-	                    let max_possible = Math.floor($current_element_counts[element]['count'] / count_needed);
-	                    current_max_count = Math.min(max_possible, current_max_count);
-	                }
-	            }
-	            max_possible_by_compound[compound] = current_max_count;
-	        }
-	        return max_possible_by_compound
-	    }
-	);
-
-	const element_colors = { h: [ 20, 20, 20 ], he: [ 217, 255, 255 ], li: [ 204, 128, 255 ], be: [ 194, 255, 0 ], b: [ 255, 181, 181 ], c: [ 144, 144, 144 ], n: [ 48, 80, 248 ], o: [ 255, 13, 13 ], f: [ 144, 224, 80 ], ne: [ 179, 227, 245 ], na: [ 171, 92, 242 ], mg: [ 138, 255, 0 ], al: [ 191, 166, 166 ], si: [ 240, 200, 160 ], p: [ 255, 128, 0 ], s: [ 255, 255, 48 ], cl: [ 31, 240, 31 ], ar: [ 128, 209, 227 ], k: [ 143, 64, 212 ], ca: [ 61, 255, 0 ], sc: [ 230, 230, 230 ], ti: [ 191, 194, 199 ], v: [ 166, 166, 171 ], cr: [ 138, 153, 199 ], mn: [ 156, 122, 199 ], fe: [ 224, 102, 51 ], co: [ 240, 144, 160 ], ni: [ 80, 208, 80 ], cu: [ 200, 128, 51 ], zn: [ 125, 128, 176 ], ga: [ 194, 143, 143 ], ge: [ 102, 143, 143 ], as: [ 189, 128, 227 ], se: [ 255, 161, 0 ], br: [ 166, 41, 41 ], kr: [ 92, 184, 209 ], rb: [ 112, 46, 176 ], sr: [ 0, 255, 0 ], y: [ 148, 255, 255 ], zr: [ 148, 224, 224 ], nb: [ 115, 194, 201 ], mo: [ 84, 181, 181 ], tc: [ 59, 158, 158 ], ru: [ 36, 143, 143 ], rh: [ 10, 125, 140 ], pd: [ 0, 105, 133 ], ag: [ 192, 192, 192 ], cd: [ 255, 217, 143 ], in: [ 166, 117, 115 ], sn: [ 102, 128, 128 ], sb: [ 158, 99, 181 ], te: [ 212, 122, 0 ], i: [ 148, 0, 148 ], xe: [ 66, 158, 176 ], cs: [ 87, 23, 143 ], ba: [ 0, 201, 0 ], la: [ 112, 212, 255 ], ce: [ 255, 255, 199 ], pr: [ 217, 255, 199 ], nd: [ 199, 255, 199 ], pm: [ 163, 255, 199 ], sm: [ 143, 255, 199 ], eu: [ 97, 255, 199 ], gd: [ 69, 255, 199 ], tb: [ 48, 255, 199 ], dy: [ 31, 255, 199 ], ho: [ 0, 255, 156 ], er: [ 0, 230, 117 ], tm: [ 0, 212, 82 ], yb: [ 0, 191, 56 ], lu: [ 0, 171, 36 ], hf: [ 77, 194, 255 ], ta: [ 77, 166, 255 ], w: [ 33, 148, 214 ], re: [ 38, 125, 171 ], os: [ 38, 102, 150 ], ir: [ 23, 84, 135 ], pt: [ 208, 208, 224 ], au: [ 255, 209, 35 ], hg: [ 184, 184, 208 ], tl: [ 166, 84, 77 ], pb: [ 87, 89, 97 ], bi: [ 158, 79, 181 ], po: [ 171, 92, 0 ], at: [ 117, 79, 69 ], rn: [ 66, 130, 150 ], fr: [ 66, 0, 102 ], ra: [ 0, 125, 0 ], ac: [ 112, 171, 250 ], th: [ 0, 186, 255 ], pa: [ 0, 161, 255 ], u: [ 0, 143, 255 ], np: [ 0, 128, 255 ], pu: [ 0, 107, 255 ], am: [ 84, 92, 242 ], cm: [ 120, 92, 227 ], bk: [ 138, 79, 227 ], cf: [ 161, 54, 212 ], es: [ 179, 31, 212 ], fm: [ 179, 31, 186 ], md: [ 179, 13, 166 ], no: [ 189, 13, 135 ], lr: [ 199, 0, 102 ], rf: [ 204, 0, 89 ], db: [ 209, 0, 79 ], sg: [ 217, 0, 69 ], bh: [ 224, 0, 56 ], hs: [ 230, 0, 46 ], mt: [ 235, 0, 38 ], ds: [ 235, 0, 38 ], rg: [ 235, 0, 38 ], cn: [ 235, 0, 38 ], uut: [ 235, 0, 38 ], uuq: [ 235, 0, 38 ], uup: [ 235, 0, 38 ], uuh: [ 235, 0, 38 ], uus: [ 235, 0, 38 ], uuo: [ 235, 0, 38 ] };
-
-
-
-
-	let global_updates_queue$1 = [];
-	const initial_player_health = 100;
-	const player_health = writable(initial_player_health);
-	let player_is_invincible = false;
-	let player_score = 0;
-	let global_clock$1 = new Clock();
-	// let time_delta = 
-	let earth = undefined;
-	let scene$2 = undefined;
-	let renderer$2 = undefined;
-	let camera$2 = undefined;
-	let camera_parent = undefined;
-	let axe = undefined;
-	let gun = undefined;
-	let mouse_ray$2 = undefined;
-	let mouse$2 = undefined;
-	let enemy_models = {
-	    'texture': undefined,
-	    'material': undefined,
-	};
-	let enemies = [];
-	let clouds = [];
-	let labs = [];
-	let mines = [];
-	let stats = undefined;
-	let lab_effects = undefined;
-	let current_direction_vector = undefined;
-
-	let pushed_buttons = undefined;
-	let pressed_keys = undefined;
-	let jump_in_progress = false;
-	let battle_scene = null;
-
-	const store$3 = {
-	    selected_compound_index,
-	    key_to_compound,
-	    game_state: game_state$2,
-	    battle_assets_preload,
-	    GameStates: GameStates$2,
-	    current_element_counts,
-	    max_number_possible_for_each_compound,
-	    element_colors,
-	    //
-	    global_updates_queue: global_updates_queue$1,
-	    initial_player_health,
-	    player_health,
-	    player_is_invincible,
-	    player_score,
-	    global_clock: global_clock$1,
-	    earth,
-	    scene: scene$2,
-	    renderer: renderer$2,
-	    camera: camera$2,
-	    camera_parent,
-	    axe,
-	    gun,
-	    mouse_ray: mouse_ray$2,
-	    mouse: mouse$2,
-	    enemy_models,
-	    enemies,
-	    clouds,
-	    labs,
-	    mines,
-	    stats,
-	    lab_effects,
-	    current_direction_vector,
-	    pushed_buttons,
-	    pressed_keys,
-	    jump_in_progress,
-	    get battle_scene() {
-	        return battle_scene;
-	    },
-	    set battle_scene(instance) {
-	        battle_scene = instance;
-	    },
-	};
 
 	/*
 	    'ErnestRutherford': {
@@ -52726,6 +52577,559 @@ var app = (function () {
 	    }
 	};
 
+	/** Timeline order — first entry starts unlocked. */
+	const SCIENTIST_ORDER = Object.freeze(Object.keys(scientists));
+
+	/**
+	 * Molecule rewarded when that scientist is beaten.
+	 * Edit this map to change which discovery each scientist unlocks.
+	 */
+	const SCIENTIST_REWARD_MOLECULE = Object.freeze({
+	    Democritus: 'NH3',
+	    Geber: 'CH4',
+	    SirFrancisBacon: 'CN',
+	    RobertBoyle: 'CO',
+	    AlessandroVolta: 'O2',
+	    Lavoisier: 'Na',
+	    DuPont: 'Cl',
+	    JohnDalton: 'Au',
+	    Berzelius: 'Ag',
+	    HumphryDavy: 'Ca',
+	});
+
+	const STARTING_MOLECULES = Object.freeze(['H2', 'H2O']);
+	const MAX_BATTLE_MOLECULES = 5;
+
+	/** Formulas that have battle projectiles today. */
+	const BATTLE_USABLE_MOLECULES = Object.freeze([
+	    'H2', 'H2O', 'NH3', 'CH4', 'CN', 'CO', 'O2', 'Na', 'Cl', 'Au', 'Ag', 'Ca',
+	]);
+
+	/**
+	 * Pokédex / workshop metadata.
+	 * Keep damage in sync with formula_to_damage_dict in compounds.js.
+	 */
+	const MOLECULE_CATALOG = Object.freeze({
+	    H2: {
+	        formula: 'H2',
+	        name: 'Hydrogen gas',
+	        damage: 10,
+	        effect: 'Light basic projectile.',
+	    },
+	    H2O: {
+	        formula: 'H2O',
+	        name: 'Water',
+	        damage: 40,
+	        effect: 'Splashes nearby enemies for half damage.',
+	    },
+	    NH3: {
+	        formula: 'NH3',
+	        name: 'Ammonia',
+	        damage: 50,
+	        effect: 'Poisons the target over time.',
+	    },
+	    CH4: {
+	        formula: 'CH4',
+	        name: 'Methane',
+	        damage: 40,
+	        effect: 'Explodes on impact: area damage and knockback.',
+	    },
+	    CN: {
+	        formula: 'CN',
+	        name: 'Cyanide',
+	        damage: 40,
+	        effect: 'Poisons the target over time.',
+	    },
+	    CO: {
+	        formula: 'CO',
+	        name: 'Carbon Monoxide',
+	        damage: 30,
+	        effect: 'Invisible gas projectile.',
+	    },
+	    O2: {
+	        formula: 'O2',
+	        name: 'Oxygen gas',
+	        damage: 10,
+	        effect: 'Light oxidizer shot.',
+	    },
+	    Na: {
+	        formula: 'Na',
+	        name: 'Sodium',
+	        damage: 90,
+	        effect: 'Explodes on neighbors.',
+	    },
+	    Cl: {
+	        formula: 'Cl',
+	        name: 'Chlorine',
+	        damage: 90,
+	        effect: 'Poison gas.',
+	    },
+	    Au: {
+	        formula: 'Au',
+	        name: 'Gold',
+	        damage: 80,
+	        effect: 'Heavy metal strike; grants extra attacks.',
+	    },
+	    Ag: {
+	        formula: 'Ag',
+	        name: 'Silver',
+	        damage: 40,
+	        effect: 'Metal strike; grants an extra attack.',
+	    },
+	    Ca: {
+	        formula: 'Ca',
+	        name: 'Calcium',
+	        damage: 40,
+	        effect: 'Makes the player stronger.',
+	    },
+	});
+
+	function initial_unlocked_scientists$1() {
+	    const first = SCIENTIST_ORDER[0];
+	    return first ? { [first]: true } : {};
+	}
+
+	function initial_discovered_molecules() {
+	    const discovered = {};
+	    for (const formula of STARTING_MOLECULES) {
+	        discovered[formula] = true;
+	    }
+	    return discovered;
+	}
+
+	const unlocked_scientists = writable(initial_unlocked_scientists$1());
+	const discovered_molecules = writable(initial_discovered_molecules());
+	/**
+	 * Player-chosen battle loadout (formulas). Empty means “use automatic first 5”.
+	 * Only relevant once more than MAX_BATTLE_MOLECULES battle-usable molecules are owned.
+	 */
+	const selected_battle_molecules = writable([]);
+	/** Scientist id currently being fought (timeline key, e.g. 'Democritus'). */
+	const active_scientist_id = writable(null);
+
+	function molecule_info(formula) {
+	    const entry = MOLECULE_CATALOG[formula];
+	    if (!entry) {
+	        return {
+	            formula,
+	            name: formula,
+	            damage: 0,
+	            effect: 'Unknown effect.',
+	            battle_usable: BATTLE_USABLE_MOLECULES.includes(formula),
+	        };
+	    }
+	    return {
+	        ...entry,
+	        battle_usable: BATTLE_USABLE_MOLECULES.includes(formula),
+	    };
+	}
+
+	function is_scientist_unlocked(scientist_id) {
+	    return !!get$2(unlocked_scientists)[scientist_id];
+	}
+
+	function is_molecule_discovered(formula) {
+	    return !!get$2(discovered_molecules)[formula];
+	}
+
+	function scientist_id_for(scientist) {
+	    if (!scientist) return null;
+	    if (typeof scientist === 'string') {
+	        if (scientists[scientist]) return scientist;
+	        return Object.keys(scientists).find((id) => scientists[id].name === scientist) ?? null;
+	    }
+	    return Object.keys(scientists).find((id) => scientists[id] === scientist || scientists[id].name === scientist.name) ?? null;
+	}
+
+	function next_scientist_id(scientist_id) {
+	    const index = SCIENTIST_ORDER.indexOf(scientist_id);
+	    if (index < 0 || index >= SCIENTIST_ORDER.length - 1) return null;
+	    return SCIENTIST_ORDER[index + 1];
+	}
+
+	/** Preferred unlock order for auto loadout / candidates. */
+	function preferred_molecule_order() {
+	    const preferred = [...STARTING_MOLECULES];
+	    for (const scientist_id of SCIENTIST_ORDER) {
+	        const reward = SCIENTIST_REWARD_MOLECULE[scientist_id];
+	        if (reward && !preferred.includes(reward)) preferred.push(reward);
+	    }
+	    for (const formula of BATTLE_USABLE_MOLECULES) {
+	        if (!preferred.includes(formula)) preferred.push(formula);
+	    }
+	    return preferred;
+	}
+
+	/**
+	 * All discovered ∩ battle-usable molecules in preferred order (uncapped).
+	 */
+	function battle_candidate_formulas(discovered = get$2(discovered_molecules)) {
+	    const candidates = [];
+	    for (const formula of preferred_molecule_order()) {
+	        if (!discovered[formula]) continue;
+	        if (!BATTLE_USABLE_MOLECULES.includes(formula)) continue;
+	        candidates.push(formula);
+	    }
+	    return candidates;
+	}
+
+	/**
+	 * Molecules equipped for battle.
+	 * When ≤5 candidates, all are used. When >5, uses the player's selection
+	 * (falling back to the first 5 if selection is empty/invalid).
+	 */
+	function resolve_battle_loadout(
+	    discovered = get$2(discovered_molecules),
+	    selected = get$2(selected_battle_molecules),
+	) {
+	    const candidates = battle_candidate_formulas(discovered);
+	    if (candidates.length <= MAX_BATTLE_MOLECULES) {
+	        return candidates;
+	    }
+	    const chosen = selected.filter((formula) => candidates.includes(formula));
+	    const unique = [...new Set(chosen)].slice(0, MAX_BATTLE_MOLECULES);
+	    if (unique.length > 0) {
+	        return unique;
+	    }
+	    return candidates.slice(0, MAX_BATTLE_MOLECULES);
+	}
+
+	function toggle_battle_molecule(formula) {
+	    if (!BATTLE_USABLE_MOLECULES.includes(formula)) {
+	        return { ok: false, reason: 'not_usable' };
+	    }
+	    if (!is_molecule_discovered(formula)) {
+	        return { ok: false, reason: 'undiscovered' };
+	    }
+
+	    const candidates = battle_candidate_formulas();
+	    if (candidates.length <= MAX_BATTLE_MOLECULES) {
+	        return { ok: false, reason: 'selection_not_needed' };
+	    }
+
+	    const current = get$2(selected_battle_molecules);
+	    // If the player hasn't customized yet, seed from the auto loadout so toggles
+	    // feel like editing the current fight set rather than starting from empty.
+	    const working = current.length > 0
+	        ? [...current]
+	        : resolve_battle_loadout(get$2(discovered_molecules), []).slice();
+
+	    const index = working.indexOf(formula);
+	    if (index >= 0) {
+	        working.splice(index, 1);
+	        selected_battle_molecules.set(working);
+	        return { ok: true, selected: working, action: 'removed' };
+	    }
+
+	    if (working.length >= MAX_BATTLE_MOLECULES) {
+	        return { ok: false, reason: 'full', selected: working };
+	    }
+
+	    working.push(formula);
+	    selected_battle_molecules.set(working);
+	    return { ok: true, selected: working, action: 'added' };
+	}
+
+	const battle_loadout = derived$1(
+	    [discovered_molecules, selected_battle_molecules],
+	    ([$discovered, $selected]) => resolve_battle_loadout($discovered, $selected),
+	);
+
+	const battle_candidates = derived$1(discovered_molecules, ($discovered) =>
+	    battle_candidate_formulas($discovered),
+	);
+
+	const needs_battle_loadout_selection = derived$1(
+	    battle_candidates,
+	    ($candidates) => $candidates.length > MAX_BATTLE_MOLECULES,
+	);
+
+	const discovered_molecule_list = derived$1(
+	    [discovered_molecules, selected_battle_molecules, needs_battle_loadout_selection],
+	    ([$discovered, $selected, $needs_selection]) => {
+	        const order = preferred_molecule_order();
+	        for (const formula of Object.keys(MOLECULE_CATALOG)) {
+	            if (!order.includes(formula)) order.push(formula);
+	        }
+	        const equipped = new Set(
+	            $needs_selection
+	                ? resolve_battle_loadout($discovered, $selected)
+	                : battle_candidate_formulas($discovered),
+	        );
+	        return order
+	            .filter((formula) => $discovered[formula])
+	            .map((formula) => ({
+	                ...molecule_info(formula),
+	                equipped: equipped.has(formula),
+	            }));
+	    },
+	);
+
+	/**
+	 * Call when the player beats the active scientist.
+	 * Unlocks the next scientist and the reward molecule for the beaten one.
+	 */
+	function defeat_scientist(scientist_id = get$2(active_scientist_id)) {
+	    if (!scientist_id || !scientists[scientist_id]) {
+	        return { ok: false, reason: 'unknown' };
+	    }
+	    if (!is_scientist_unlocked(scientist_id)) {
+	        return { ok: false, reason: 'locked' };
+	    }
+
+	    const unlocked_molecule = SCIENTIST_REWARD_MOLECULE[scientist_id] ?? null;
+	    if (unlocked_molecule) {
+	        discovered_molecules.update((flags) => ({
+	            ...flags,
+	            [unlocked_molecule]: true,
+	        }));
+	        selected_battle_molecules.update((selected) => {
+	            const discovered = get$2(discovered_molecules);
+	            return selected.filter(
+	                (formula) => discovered[formula] && BATTLE_USABLE_MOLECULES.includes(formula),
+	            );
+	        });
+	    }
+
+	    const next_id = next_scientist_id(scientist_id);
+	    if (next_id) {
+	        unlocked_scientists.update((flags) => ({
+	            ...flags,
+	            [next_id]: true,
+	        }));
+	    }
+
+	    return {
+	        ok: true,
+	        unlocked_molecule,
+	        unlocked_scientist: next_id,
+	    };
+	}
+
+	function build_key_to_compound(formulas) {
+	    const map = {
+	        '1': null,
+	        '2': null,
+	        '3': null,
+	        '4': null,
+	        '5': null,
+	        [right_upper_trigger]: null,
+	        [left_lower_trigger]: null,
+	        [right_lower_trigger]: null,
+	        [left_upper_trigger]: null,
+	    };
+	    const keys = ['1', '2', '3', '4', '5'];
+	    const trigger_keys = [
+	        right_upper_trigger,
+	        left_lower_trigger,
+	        right_lower_trigger,
+	        left_upper_trigger,
+	    ];
+	    formulas.forEach((formula, index) => {
+	        if (index < keys.length) map[keys[index]] = formula;
+	        // Gamepad triggers map to slots 2–5 (same as the previous hard-coded layout).
+	        if (index >= 1 && index - 1 < trigger_keys.length) {
+	            map[trigger_keys[index - 1]] = formula;
+	        }
+	    });
+	    return map;
+	}
+
+	const selected_compound_index = writable('1');
+	const key_to_compound = writable(build_key_to_compound(get$2(battle_loadout)));
+
+	battle_loadout.subscribe((formulas) => {
+	    key_to_compound.set(build_key_to_compound(formulas));
+	    const selected = get$2(selected_compound_index);
+	    const map = get$2(key_to_compound);
+	    if (!map[selected]) {
+	        selected_compound_index.set('1');
+	    }
+	});
+
+
+	const GameStates$2 = Object.freeze({
+	    'STARTING': Symbol('starting'),
+	    'PLAYING': Symbol('playing'),
+	    'PAUSED': Symbol('paused'),
+	    'GAMELOST': Symbol('game_over'),
+	    'GAMEWON': Symbol('game won'),
+	});
+
+	const game_state$2 = writable({
+	    'state': GameStates$2.STARTING,
+	    'level': 1,
+	});
+
+	const battle_assets_preload = writable({
+	    loaded: 0,
+	    total: 0,
+	    complete: false,
+	});
+
+
+	let initial_counts = {
+	    'H': {
+	        count: 20,
+	        last_updated: performance.now(),
+	    }
+	};
+	function clone_counts(value) {
+	    if (typeof structuredClone === 'function') return structuredClone(value);
+	    return JSON.parse(JSON.stringify(value));
+	}
+	function create_current_counts_store() {
+	    const { subscribe, set: originalSet, update } = writable(clone_counts(initial_counts));
+
+	    return {
+	        subscribe,
+	        update: (element, added_amount) => {
+	            update(counts => {
+	                if (!counts[element]) {
+	                    counts[element] = { count: 0, last_updated: performance.now() };
+	                }
+	                counts[element]['count'] += added_amount;
+	                counts[element]['last_updated'] = performance.now();
+	                return { ...counts };
+	            });
+	        },
+	        set: (element, new_count) => {
+	            update(counts => {
+	                if (!counts[element]) {
+	                    counts[element] = { count: 0, last_updated: performance.now() };
+	                }
+	                counts[element]['count'] = new_count;
+	                counts[element]['last_updated'] = performance.now();
+	                return { ...counts };
+	            });
+	        },
+	        reset: () => {
+	            const initial_with_updated_date = clone_counts(initial_counts);
+	            initial_with_updated_date['H']['last_updated'] = performance.now();
+	            originalSet(initial_with_updated_date);
+	        }
+	    };
+	}
+	const current_element_counts = create_current_counts_store();
+
+
+	/*
+	Tell you how many CH3 (for example) you can make. Maybe you can make 5 of that compound
+	*/
+	const max_number_possible_for_each_compound = derived$1(
+	    [key_to_compound, current_element_counts],
+	    ([$key_to_compound, $current_element_counts]) => {
+	        let max_possible_by_compound = {};
+	        let compounds = Object.values($key_to_compound).filter(Boolean);
+	        for (let i=0; i<compounds.length; i++) {
+	            let current_max_count = Infinity;
+	            let compound = compounds[i];
+	            let entries = Object.entries(parse_formula_to_dict(compound));
+	            for (let i=0; i<entries.length; i++) {
+	                let [element, count_needed] = entries[i];
+	                if ($current_element_counts[element] === undefined) {
+	                    current_max_count = 0;
+	                } else {
+	                    let max_possible = Math.floor($current_element_counts[element]['count'] / count_needed);
+	                    current_max_count = Math.min(max_possible, current_max_count);
+	                }
+	            }
+	            max_possible_by_compound[compound] = current_max_count;
+	        }
+	        return max_possible_by_compound
+	    }
+	);
+
+	const element_colors = { h: [ 20, 20, 20 ], he: [ 217, 255, 255 ], li: [ 204, 128, 255 ], be: [ 194, 255, 0 ], b: [ 255, 181, 181 ], c: [ 144, 144, 144 ], n: [ 48, 80, 248 ], o: [ 255, 13, 13 ], f: [ 144, 224, 80 ], ne: [ 179, 227, 245 ], na: [ 171, 92, 242 ], mg: [ 138, 255, 0 ], al: [ 191, 166, 166 ], si: [ 240, 200, 160 ], p: [ 255, 128, 0 ], s: [ 255, 255, 48 ], cl: [ 31, 240, 31 ], ar: [ 128, 209, 227 ], k: [ 143, 64, 212 ], ca: [ 61, 255, 0 ], sc: [ 230, 230, 230 ], ti: [ 191, 194, 199 ], v: [ 166, 166, 171 ], cr: [ 138, 153, 199 ], mn: [ 156, 122, 199 ], fe: [ 224, 102, 51 ], co: [ 240, 144, 160 ], ni: [ 80, 208, 80 ], cu: [ 200, 128, 51 ], zn: [ 125, 128, 176 ], ga: [ 194, 143, 143 ], ge: [ 102, 143, 143 ], as: [ 189, 128, 227 ], se: [ 255, 161, 0 ], br: [ 166, 41, 41 ], kr: [ 92, 184, 209 ], rb: [ 112, 46, 176 ], sr: [ 0, 255, 0 ], y: [ 148, 255, 255 ], zr: [ 148, 224, 224 ], nb: [ 115, 194, 201 ], mo: [ 84, 181, 181 ], tc: [ 59, 158, 158 ], ru: [ 36, 143, 143 ], rh: [ 10, 125, 140 ], pd: [ 0, 105, 133 ], ag: [ 192, 192, 192 ], cd: [ 255, 217, 143 ], in: [ 166, 117, 115 ], sn: [ 102, 128, 128 ], sb: [ 158, 99, 181 ], te: [ 212, 122, 0 ], i: [ 148, 0, 148 ], xe: [ 66, 158, 176 ], cs: [ 87, 23, 143 ], ba: [ 0, 201, 0 ], la: [ 112, 212, 255 ], ce: [ 255, 255, 199 ], pr: [ 217, 255, 199 ], nd: [ 199, 255, 199 ], pm: [ 163, 255, 199 ], sm: [ 143, 255, 199 ], eu: [ 97, 255, 199 ], gd: [ 69, 255, 199 ], tb: [ 48, 255, 199 ], dy: [ 31, 255, 199 ], ho: [ 0, 255, 156 ], er: [ 0, 230, 117 ], tm: [ 0, 212, 82 ], yb: [ 0, 191, 56 ], lu: [ 0, 171, 36 ], hf: [ 77, 194, 255 ], ta: [ 77, 166, 255 ], w: [ 33, 148, 214 ], re: [ 38, 125, 171 ], os: [ 38, 102, 150 ], ir: [ 23, 84, 135 ], pt: [ 208, 208, 224 ], au: [ 255, 209, 35 ], hg: [ 184, 184, 208 ], tl: [ 166, 84, 77 ], pb: [ 87, 89, 97 ], bi: [ 158, 79, 181 ], po: [ 171, 92, 0 ], at: [ 117, 79, 69 ], rn: [ 66, 130, 150 ], fr: [ 66, 0, 102 ], ra: [ 0, 125, 0 ], ac: [ 112, 171, 250 ], th: [ 0, 186, 255 ], pa: [ 0, 161, 255 ], u: [ 0, 143, 255 ], np: [ 0, 128, 255 ], pu: [ 0, 107, 255 ], am: [ 84, 92, 242 ], cm: [ 120, 92, 227 ], bk: [ 138, 79, 227 ], cf: [ 161, 54, 212 ], es: [ 179, 31, 212 ], fm: [ 179, 31, 186 ], md: [ 179, 13, 166 ], no: [ 189, 13, 135 ], lr: [ 199, 0, 102 ], rf: [ 204, 0, 89 ], db: [ 209, 0, 79 ], sg: [ 217, 0, 69 ], bh: [ 224, 0, 56 ], hs: [ 230, 0, 46 ], mt: [ 235, 0, 38 ], ds: [ 235, 0, 38 ], rg: [ 235, 0, 38 ], cn: [ 235, 0, 38 ], uut: [ 235, 0, 38 ], uuq: [ 235, 0, 38 ], uup: [ 235, 0, 38 ], uuh: [ 235, 0, 38 ], uus: [ 235, 0, 38 ], uuo: [ 235, 0, 38 ] };
+
+
+
+
+	let global_updates_queue$1 = [];
+	const initial_player_health = 100;
+	const player_health = writable(initial_player_health);
+	let player_is_invincible = false;
+	let player_score = 0;
+	let global_clock$1 = new Clock();
+	// let time_delta = 
+	let earth = undefined;
+	let scene$2 = undefined;
+	let renderer$2 = undefined;
+	let camera$2 = undefined;
+	let camera_parent = undefined;
+	let axe = undefined;
+	let gun = undefined;
+	let mouse_ray$2 = undefined;
+	let mouse$2 = undefined;
+	let enemy_models = {
+	    'texture': undefined,
+	    'material': undefined,
+	};
+	let enemies = [];
+	let clouds = [];
+	let labs = [];
+	let mines = [];
+	let stats = undefined;
+	let lab_effects = undefined;
+	let current_direction_vector = undefined;
+
+	let pushed_buttons = undefined;
+	let pressed_keys = undefined;
+	let jump_in_progress = false;
+	let battle_scene = null;
+	let player_rig = null;
+	let xr_controllers = [];
+	let xr_controller_grips = [];
+	let xr_presenting = false;
+
+	const store$3 = {
+	    selected_compound_index,
+	    key_to_compound,
+	    game_state: game_state$2,
+	    battle_assets_preload,
+	    GameStates: GameStates$2,
+	    current_element_counts,
+	    max_number_possible_for_each_compound,
+	    element_colors,
+	    //
+	    global_updates_queue: global_updates_queue$1,
+	    initial_player_health,
+	    player_health,
+	    player_is_invincible,
+	    player_score,
+	    global_clock: global_clock$1,
+	    earth,
+	    scene: scene$2,
+	    renderer: renderer$2,
+	    camera: camera$2,
+	    camera_parent,
+	    player_rig,
+	    axe,
+	    gun,
+	    mouse_ray: mouse_ray$2,
+	    mouse: mouse$2,
+	    enemy_models,
+	    enemies,
+	    clouds,
+	    labs,
+	    mines,
+	    stats,
+	    lab_effects,
+	    current_direction_vector,
+	    pushed_buttons,
+	    pressed_keys,
+	    jump_in_progress,
+	    xr_controllers,
+	    xr_controller_grips,
+	    xr_presenting,
+	    get battle_scene() {
+	        return battle_scene;
+	    },
+	    set battle_scene(instance) {
+	        battle_scene = instance;
+	    },
+	};
+
 	const current_scientist = writable(scientists.RobertBoyle);
 
 	const store$2 = {
@@ -52734,39 +53138,71 @@ var app = (function () {
 
 	Scientist_card[FILENAME] = 'src/components/scientist_timeline/scientist_card.svelte';
 
-	var root$g = add_locations(from_html(`<div class="card svelte-xbmljw" role="button" tabindex="0"><img/> <div class="text svelte-xbmljw"><div class="story svelte-xbmljw"><p class="svelte-xbmljw"> </p> <button type="button" class="button svelte-xbmljw">Battle!</button></div> <p class="svelte-xbmljw"> </p></div></div>`), Scientist_card[FILENAME], [
+	var root$g = add_locations(from_html(`<p class="reward-hint svelte-xbmljw"> </p>`), Scientist_card[FILENAME], [[51, 20]]);
+
+	var root_1$9 = add_locations(from_html(`<div class="card svelte-xbmljw" role="button" tabindex="0"><img/> <div class="text svelte-xbmljw"><div class="story svelte-xbmljw"><p class="svelte-xbmljw"> </p> <!> <button type="button" class="button svelte-xbmljw">Battle!</button></div> <p class="svelte-xbmljw"> </p></div></div>`), Scientist_card[FILENAME], [
 		[
-			27,
-			0,
-			[[28, 4], [29, 4, [[30, 8, [[31, 12], [32, 12]]], [34, 8]]]]
+			38,
+			4,
+			[[46, 8], [47, 8, [[48, 12, [[49, 16], [53, 16]]], [55, 12]]]]
 		]
 	]);
+
+	var root_2$5 = add_locations(from_html(`<div class="card locked svelte-xbmljw"><div class="locked-panel svelte-xbmljw"><span class="lock-badge svelte-xbmljw" aria-hidden="true">Locked</span> <p class="locked-copy svelte-xbmljw"> </p></div> <p class="locked-name svelte-xbmljw"> </p></div>`), Scientist_card[FILENAME], [[59, 4, [[60, 8, [[61, 12], [62, 12]]], [64, 8]]]]);
 
 	function Scientist_card($$anchor, $$props) {
 		if (new.target) return createClassComponent({ component: Scientist_card, ...$$anchor });
 
 		push($$props, false, Scientist_card);
 
+		const $unlocked_scientists = () => (
+			validate_store(unlocked_scientists, 'unlocked_scientists'),
+			store_get(unlocked_scientists, '$unlocked_scientists', $$stores)
+		);
+
+		const [$$stores, $$cleanup] = setup_stores();
+		const scientist_id = mutable_source();
+		const unlocked = mutable_source();
+		const reward_formula = mutable_source();
+		const reward = mutable_source();
 		let scientist = prop($$props, 'scientist', 12);
 
-		function start_battle(scientist) {
-			store$2.current_scientist.set(scientist.name);
-			global_store.current_scene.set(global_store.possible_scenes.Battle);
+		function start_battle() {
+			if (!get$1(unlocked) || !get$1(scientist_id)) return;
 
-			// game_state.update(currentState => {
-			//     currentState.state = GameStates.STARTING;
-			//     return currentState;
-			// });
+			store$2.current_scientist.set(scientist().name);
+			active_scientist_id.set(get$1(scientist_id));
+			global_store.current_scene.set(global_store.possible_scenes.Battle);
 		}
 
 		let hide_image = tag(mutable_source(false), 'hide_image');
 
 		function handle_card_keydown(e) {
+			if (!get$1(unlocked)) return;
+
 			if (strict_equals(e.key, 'Enter') || strict_equals(e.key, ' ')) {
 				e.preventDefault();
 				set(hide_image, !get$1(hide_image));
 			}
 		}
+
+		legacy_pre_effect(() => (deep_read_state(scientist())), () => {
+			set(scientist_id, scientist_id_for(scientist()));
+		});
+
+		legacy_pre_effect(() => (get$1(scientist_id), $unlocked_scientists()), () => {
+			set(unlocked, get$1(scientist_id) ? !!$unlocked_scientists()[get$1(scientist_id)] : false);
+		});
+
+		legacy_pre_effect(() => (get$1(scientist_id), SCIENTIST_REWARD_MOLECULE), () => {
+			set(reward_formula, get$1(scientist_id) ? SCIENTIST_REWARD_MOLECULE[get$1(scientist_id)] : null);
+		});
+
+		legacy_pre_effect(() => (get$1(reward_formula), molecule_info), () => {
+			set(reward, get$1(reward_formula) ? molecule_info(get$1(reward_formula)) : null);
+		});
+
+		legacy_pre_effect_reset();
 
 		var $$exports = {
 			get scientist() {
@@ -52783,62 +53219,143 @@ var app = (function () {
 
 		init$1();
 
-		var div = root$g();
-		var img = child(div);
-		let classes;
-		var div_1 = sibling(img, 2);
-		var div_2 = child(div_1);
-		var p = child(div_2);
-		var text = child(p, true);
+		var fragment = comment();
+		var node = first_child(fragment);
 
-		reset(p);
+		{
+			var consequent_1 = ($$anchor) => {
+				var div = root_1$9();
+				var img = child(div);
+				let classes;
+				var div_1 = sibling(img, 2);
+				var div_2 = child(div_1);
+				var p = child(div_2);
+				var text = child(p, true);
 
-		var button = sibling(p, 2);
+				reset(p);
 
-		reset(div_2);
+				var node_1 = sibling(p, 2);
 
-		var p_1 = sibling(div_2, 2);
-		var text_1 = child(p_1, true);
+				{
+					var consequent = ($$anchor) => {
+						var p_1 = root$g();
+						var text_1 = child(p_1);
 
-		reset(p_1);
-		reset(div_1);
-		reset(div);
+						reset(p_1);
+						template_effect(() => set_text(text_1, `Victory unlocks ${(get$1(reward), untrack(() => get$1(reward).name)) ?? ''} (${(get$1(reward), untrack(() => get$1(reward).formula)) ?? ''})`));
+						append$1($$anchor, p_1);
+					};
 
-		template_effect(() => {
-			set_attribute(div, 'aria-label', `Toggle ${(
-			deep_read_state(scientist()),
-			untrack(() => scientist().name)
-		) ?? ''} card`);
+					add_svelte_meta(
+						() => if_block(node_1, ($$render) => {
+							if (get$1(reward)) $$render(consequent);
+						}),
+						'if',
+						Scientist_card,
+						50,
+						16
+					);
+				}
 
-			set_attribute(img, 'src', (
-				deep_read_state(scientist()),
-				untrack(() => scientist().src)
-			));
+				var button = sibling(node_1, 2);
 
-			set_attribute(img, 'alt', (
-				deep_read_state(scientist()),
-				untrack(() => scientist().name)
-			));
+				reset(div_2);
 
-			classes = set_class(img, 1, 'svelte-xbmljw', null, classes, { hide_image: get$1(hide_image) });
+				var p_2 = sibling(div_2, 2);
+				var text_2 = child(p_2, true);
 
-			set_text(text, (
-				deep_read_state(scientist()),
-				untrack(() => scientist().story)
-			));
+				reset(p_2);
+				reset(div_1);
+				reset(div);
 
-			set_text(text_1, (
-				deep_read_state(scientist()),
-				untrack(() => scientist().name)
-			));
-		});
+				template_effect(() => {
+					set_attribute(div, 'aria-label', `Toggle ${(
+					deep_read_state(scientist()),
+					untrack(() => scientist().name)
+				) ?? ''} card`);
 
-		event('click', button, stopPropagation((e) => start_battle(scientist())));
-		event('click', div, stopPropagation((_) => set(hide_image, !get$1(hide_image))));
-		event('keydown', div, handle_card_keydown);
-		append$1($$anchor, div);
+					set_attribute(img, 'src', (
+						deep_read_state(scientist()),
+						untrack(() => scientist().src)
+					));
 
-		return pop($$exports);
+					set_attribute(img, 'alt', (
+						deep_read_state(scientist()),
+						untrack(() => scientist().name)
+					));
+
+					classes = set_class(img, 1, 'svelte-xbmljw', null, classes, { hide_image: get$1(hide_image) });
+
+					set_text(text, (
+						deep_read_state(scientist()),
+						untrack(() => scientist().story)
+					));
+
+					set_text(text_2, (
+						deep_read_state(scientist()),
+						untrack(() => scientist().name)
+					));
+				});
+
+				event('click', button, stopPropagation(start_battle));
+				event('click', div, stopPropagation((_) => set(hide_image, !get$1(hide_image))));
+				event('keydown', div, handle_card_keydown);
+				append$1($$anchor, div);
+			};
+
+			var alternate = ($$anchor) => {
+				var div_3 = root_2$5();
+				var div_4 = child(div_3);
+				var p_3 = sibling(child(div_4), 2);
+				var text_3 = child(p_3);
+
+				reset(p_3);
+				reset(div_4);
+
+				var p_4 = sibling(div_4, 2);
+				var text_4 = child(p_4, true);
+
+				reset(p_4);
+				reset(div_3);
+
+				template_effect(() => {
+					set_attribute(div_3, 'aria-label', `${(
+					deep_read_state(scientist()),
+					untrack(() => scientist().name)
+				) ?? ''} locked`);
+
+					set_text(text_3, `Beat the previous scientist to unlock ${(
+					deep_read_state(scientist()),
+					untrack(() => scientist().name)
+				) ?? ''}.`);
+
+					set_text(text_4, (
+						deep_read_state(scientist()),
+						untrack(() => scientist().name)
+					));
+				});
+
+				append$1($$anchor, div_3);
+			};
+
+			add_svelte_meta(
+				() => if_block(node, ($$render) => {
+					if (get$1(unlocked)) $$render(consequent_1); else $$render(alternate, -1);
+				}),
+				'if',
+				Scientist_card,
+				37,
+				0
+			);
+		}
+
+		append$1($$anchor, fragment);
+
+		var $$pop = pop($$exports);
+
+		$$cleanup();
+
+		return $$pop;
 	}
 
 	Joules_display[FILENAME] = 'src/components/joules_display.svelte';
@@ -54190,6 +54707,5005 @@ var app = (function () {
 
 	}
 
+	class VRButton {
+
+		static createButton( renderer, options ) {
+
+			if ( options ) {
+
+				console.error( 'THREE.VRButton: The "options" parameter has been removed. Please set the reference space type via renderer.xr.setReferenceSpaceType() instead.' );
+
+			}
+
+			const button = document.createElement( 'button' );
+
+			function showEnterVR( /*device*/ ) {
+
+				let currentSession = null;
+
+				async function onSessionStarted( session ) {
+
+					session.addEventListener( 'end', onSessionEnded );
+
+					await renderer.xr.setSession( session );
+					button.textContent = 'EXIT VR';
+
+					currentSession = session;
+
+				}
+
+				function onSessionEnded( /*event*/ ) {
+
+					currentSession.removeEventListener( 'end', onSessionEnded );
+
+					button.textContent = 'ENTER VR';
+
+					currentSession = null;
+
+				}
+
+				//
+
+				button.style.display = '';
+
+				button.style.cursor = 'pointer';
+				button.style.left = 'calc(50% - 50px)';
+				button.style.width = '100px';
+
+				button.textContent = 'ENTER VR';
+
+				button.onmouseenter = function () {
+
+					button.style.opacity = '1.0';
+
+				};
+
+				button.onmouseleave = function () {
+
+					button.style.opacity = '0.5';
+
+				};
+
+				button.onclick = function () {
+
+					if ( currentSession === null ) {
+
+						// WebXR's requestReferenceSpace only works if the corresponding feature
+						// was requested at session creation time. For simplicity, just ask for
+						// the interesting ones as optional features, but be aware that the
+						// requestReferenceSpace call will fail if it turns out to be unavailable.
+						// ('local' is always available for immersive sessions and doesn't need to
+						// be requested separately.)
+
+						const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor', 'hand-tracking' ] };
+						navigator.xr.requestSession( 'immersive-vr', sessionInit ).then( onSessionStarted );
+
+					} else {
+
+						currentSession.end();
+
+					}
+
+				};
+
+			}
+
+			function disableButton() {
+
+				button.style.display = '';
+
+				button.style.cursor = 'auto';
+				button.style.left = 'calc(50% - 75px)';
+				button.style.width = '150px';
+
+				button.onmouseenter = null;
+				button.onmouseleave = null;
+
+				button.onclick = null;
+
+			}
+
+			function showWebXRNotFound() {
+
+				disableButton();
+
+				button.textContent = 'VR NOT SUPPORTED';
+
+			}
+
+			function stylizeElement( element ) {
+
+				element.style.position = 'absolute';
+				element.style.bottom = '20px';
+				element.style.padding = '12px 6px';
+				element.style.border = '1px solid #fff';
+				element.style.borderRadius = '4px';
+				element.style.background = 'rgba(0,0,0,0.1)';
+				element.style.color = '#fff';
+				element.style.font = 'normal 13px sans-serif';
+				element.style.textAlign = 'center';
+				element.style.opacity = '0.5';
+				element.style.outline = 'none';
+				element.style.zIndex = '999';
+
+			}
+
+			if ( 'xr' in navigator ) {
+
+				button.id = 'VRButton';
+				button.style.display = 'none';
+
+				stylizeElement( button );
+
+				navigator.xr.isSessionSupported( 'immersive-vr' ).then( function ( supported ) {
+
+					supported ? showEnterVR() : showWebXRNotFound();
+
+				} );
+
+				return button;
+
+			} else {
+
+				const message = document.createElement( 'a' );
+
+				if ( window.isSecureContext === false ) {
+
+					message.href = document.location.href.replace( /^http:/, 'https:' );
+					message.innerHTML = 'WEBXR NEEDS HTTPS'; // TODO Improve message
+
+				} else {
+
+					message.href = 'https://immersiveweb.dev/';
+					message.innerHTML = 'WEBXR NOT AVAILABLE';
+
+				}
+
+				message.style.left = 'calc(50% - 90px)';
+				message.style.width = '180px';
+				message.style.textDecoration = 'none';
+
+				stylizeElement( message );
+
+				return message;
+
+			}
+
+		}
+
+	}
+
+	class ARButton {
+
+		static createButton( renderer, sessionInit = {} ) {
+
+			const button = document.createElement( 'button' );
+
+			function showStartAR( /*device*/ ) {
+
+				if ( sessionInit.domOverlay === undefined ) {
+
+					var overlay = document.createElement( 'div' );
+					overlay.style.display = 'none';
+					document.body.appendChild( overlay );
+
+					var svg = document.createElementNS( 'http://www.w3.org/2000/svg', 'svg' );
+					svg.setAttribute( 'width', 38 );
+					svg.setAttribute( 'height', 38 );
+					svg.style.position = 'absolute';
+					svg.style.right = '20px';
+					svg.style.top = '20px';
+					svg.addEventListener( 'click', function () {
+
+						currentSession.end();
+
+					} );
+					overlay.appendChild( svg );
+
+					var path = document.createElementNS( 'http://www.w3.org/2000/svg', 'path' );
+					path.setAttribute( 'd', 'M 12,12 L 28,28 M 28,12 12,28' );
+					path.setAttribute( 'stroke', '#fff' );
+					path.setAttribute( 'stroke-width', 2 );
+					svg.appendChild( path );
+
+					if ( sessionInit.optionalFeatures === undefined ) {
+
+						sessionInit.optionalFeatures = [];
+
+					}
+
+					sessionInit.optionalFeatures.push( 'dom-overlay' );
+					sessionInit.domOverlay = { root: overlay };
+
+				}
+
+				//
+
+				let currentSession = null;
+
+				async function onSessionStarted( session ) {
+
+					session.addEventListener( 'end', onSessionEnded );
+
+					renderer.xr.setReferenceSpaceType( 'local' );
+
+					await renderer.xr.setSession( session );
+
+					button.textContent = 'STOP AR';
+					sessionInit.domOverlay.root.style.display = '';
+
+					currentSession = session;
+
+				}
+
+				function onSessionEnded( /*event*/ ) {
+
+					currentSession.removeEventListener( 'end', onSessionEnded );
+
+					button.textContent = 'START AR';
+					sessionInit.domOverlay.root.style.display = 'none';
+
+					currentSession = null;
+
+				}
+
+				//
+
+				button.style.display = '';
+
+				button.style.cursor = 'pointer';
+				button.style.left = 'calc(50% - 50px)';
+				button.style.width = '100px';
+
+				button.textContent = 'START AR';
+
+				button.onmouseenter = function () {
+
+					button.style.opacity = '1.0';
+
+				};
+
+				button.onmouseleave = function () {
+
+					button.style.opacity = '0.5';
+
+				};
+
+				button.onclick = function () {
+
+					if ( currentSession === null ) {
+
+						navigator.xr.requestSession( 'immersive-ar', sessionInit ).then( onSessionStarted );
+
+					} else {
+
+						currentSession.end();
+
+					}
+
+				};
+
+			}
+
+			function disableButton() {
+
+				button.style.display = '';
+
+				button.style.cursor = 'auto';
+				button.style.left = 'calc(50% - 75px)';
+				button.style.width = '150px';
+
+				button.onmouseenter = null;
+				button.onmouseleave = null;
+
+				button.onclick = null;
+
+			}
+
+			function showARNotSupported() {
+
+				disableButton();
+
+				button.textContent = 'AR NOT SUPPORTED';
+
+			}
+
+			function stylizeElement( element ) {
+
+				element.style.position = 'absolute';
+				element.style.bottom = '20px';
+				element.style.padding = '12px 6px';
+				element.style.border = '1px solid #fff';
+				element.style.borderRadius = '4px';
+				element.style.background = 'rgba(0,0,0,0.1)';
+				element.style.color = '#fff';
+				element.style.font = 'normal 13px sans-serif';
+				element.style.textAlign = 'center';
+				element.style.opacity = '0.5';
+				element.style.outline = 'none';
+				element.style.zIndex = '999';
+
+			}
+
+			if ( 'xr' in navigator ) {
+
+				button.id = 'ARButton';
+				button.style.display = 'none';
+
+				stylizeElement( button );
+
+				navigator.xr.isSessionSupported( 'immersive-ar' ).then( function ( supported ) {
+
+					supported ? showStartAR() : showARNotSupported();
+
+				} ).catch( showARNotSupported );
+
+				return button;
+
+			} else {
+
+				const message = document.createElement( 'a' );
+
+				if ( window.isSecureContext === false ) {
+
+					message.href = document.location.href.replace( /^http:/, 'https:' );
+					message.innerHTML = 'WEBXR NEEDS HTTPS'; // TODO Improve message
+
+				} else {
+
+					message.href = 'https://immersiveweb.dev/';
+					message.innerHTML = 'WEBXR NOT AVAILABLE';
+
+				}
+
+				message.style.left = 'calc(50% - 90px)';
+				message.style.width = '180px';
+				message.style.textDecoration = 'none';
+
+				stylizeElement( message );
+
+				return message;
+
+			}
+
+		}
+
+	}
+
+	class GLTFLoader extends Loader {
+
+		constructor( manager ) {
+
+			super( manager );
+
+			this.dracoLoader = null;
+			this.ktx2Loader = null;
+			this.meshoptDecoder = null;
+
+			this.pluginCallbacks = [];
+
+			this.register( function ( parser ) {
+
+				return new GLTFMaterialsClearcoatExtension( parser );
+
+			} );
+
+			this.register( function ( parser ) {
+
+				return new GLTFTextureBasisUExtension( parser );
+
+			} );
+
+			this.register( function ( parser ) {
+
+				return new GLTFTextureWebPExtension( parser );
+
+			} );
+
+			this.register( function ( parser ) {
+
+				return new GLTFMaterialsTransmissionExtension( parser );
+
+			} );
+
+			this.register( function ( parser ) {
+
+				return new GLTFLightsExtension( parser );
+
+			} );
+
+			this.register( function ( parser ) {
+
+				return new GLTFMeshoptCompression( parser );
+
+			} );
+
+		}
+
+		load( url, onLoad, onProgress, onError ) {
+
+			const scope = this;
+
+			let resourcePath;
+
+			if ( this.resourcePath !== '' ) {
+
+				resourcePath = this.resourcePath;
+
+			} else if ( this.path !== '' ) {
+
+				resourcePath = this.path;
+
+			} else {
+
+				resourcePath = LoaderUtils.extractUrlBase( url );
+
+			}
+
+			// Tells the LoadingManager to track an extra item, which resolves after
+			// the model is fully loaded. This means the count of items loaded will
+			// be incorrect, but ensures manager.onLoad() does not fire early.
+			this.manager.itemStart( url );
+
+			const _onError = function ( e ) {
+
+				if ( onError ) {
+
+					onError( e );
+
+				} else {
+
+					console.error( e );
+
+				}
+
+				scope.manager.itemError( url );
+				scope.manager.itemEnd( url );
+
+			};
+
+			const loader = new FileLoader( this.manager );
+
+			loader.setPath( this.path );
+			loader.setResponseType( 'arraybuffer' );
+			loader.setRequestHeader( this.requestHeader );
+			loader.setWithCredentials( this.withCredentials );
+
+			loader.load( url, function ( data ) {
+
+				try {
+
+					scope.parse( data, resourcePath, function ( gltf ) {
+
+						onLoad( gltf );
+
+						scope.manager.itemEnd( url );
+
+					}, _onError );
+
+				} catch ( e ) {
+
+					_onError( e );
+
+				}
+
+			}, onProgress, _onError );
+
+		}
+
+		setDRACOLoader( dracoLoader ) {
+
+			this.dracoLoader = dracoLoader;
+			return this;
+
+		}
+
+		setDDSLoader() {
+
+			throw new Error(
+
+				'THREE.GLTFLoader: "MSFT_texture_dds" no longer supported. Please update to "KHR_texture_basisu".'
+
+			);
+
+		}
+
+		setKTX2Loader( ktx2Loader ) {
+
+			this.ktx2Loader = ktx2Loader;
+			return this;
+
+		}
+
+		setMeshoptDecoder( meshoptDecoder ) {
+
+			this.meshoptDecoder = meshoptDecoder;
+			return this;
+
+		}
+
+		register( callback ) {
+
+			if ( this.pluginCallbacks.indexOf( callback ) === - 1 ) {
+
+				this.pluginCallbacks.push( callback );
+
+			}
+
+			return this;
+
+		}
+
+		unregister( callback ) {
+
+			if ( this.pluginCallbacks.indexOf( callback ) !== - 1 ) {
+
+				this.pluginCallbacks.splice( this.pluginCallbacks.indexOf( callback ), 1 );
+
+			}
+
+			return this;
+
+		}
+
+		parse( data, path, onLoad, onError ) {
+
+			let content;
+			const extensions = {};
+			const plugins = {};
+
+			if ( typeof data === 'string' ) {
+
+				content = data;
+
+			} else {
+
+				const magic = LoaderUtils.decodeText( new Uint8Array( data, 0, 4 ) );
+
+				if ( magic === BINARY_EXTENSION_HEADER_MAGIC ) {
+
+					try {
+
+						extensions[ EXTENSIONS.KHR_BINARY_GLTF ] = new GLTFBinaryExtension( data );
+
+					} catch ( error ) {
+
+						if ( onError ) onError( error );
+						return;
+
+					}
+
+					content = extensions[ EXTENSIONS.KHR_BINARY_GLTF ].content;
+
+				} else {
+
+					content = LoaderUtils.decodeText( new Uint8Array( data ) );
+
+				}
+
+			}
+
+			const json = JSON.parse( content );
+
+			if ( json.asset === undefined || json.asset.version[ 0 ] < 2 ) {
+
+				if ( onError ) onError( new Error( 'THREE.GLTFLoader: Unsupported asset. glTF versions >=2.0 are supported.' ) );
+				return;
+
+			}
+
+			const parser = new GLTFParser( json, {
+
+				path: path || this.resourcePath || '',
+				crossOrigin: this.crossOrigin,
+				requestHeader: this.requestHeader,
+				manager: this.manager,
+				ktx2Loader: this.ktx2Loader,
+				meshoptDecoder: this.meshoptDecoder
+
+			} );
+
+			parser.fileLoader.setRequestHeader( this.requestHeader );
+
+			for ( let i = 0; i < this.pluginCallbacks.length; i ++ ) {
+
+				const plugin = this.pluginCallbacks[ i ]( parser );
+				plugins[ plugin.name ] = plugin;
+
+				// Workaround to avoid determining as unknown extension
+				// in addUnknownExtensionsToUserData().
+				// Remove this workaround if we move all the existing
+				// extension handlers to plugin system
+				extensions[ plugin.name ] = true;
+
+			}
+
+			if ( json.extensionsUsed ) {
+
+				for ( let i = 0; i < json.extensionsUsed.length; ++ i ) {
+
+					const extensionName = json.extensionsUsed[ i ];
+					const extensionsRequired = json.extensionsRequired || [];
+
+					switch ( extensionName ) {
+
+						case EXTENSIONS.KHR_MATERIALS_UNLIT:
+							extensions[ extensionName ] = new GLTFMaterialsUnlitExtension();
+							break;
+
+						case EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS:
+							extensions[ extensionName ] = new GLTFMaterialsPbrSpecularGlossinessExtension();
+							break;
+
+						case EXTENSIONS.KHR_DRACO_MESH_COMPRESSION:
+							extensions[ extensionName ] = new GLTFDracoMeshCompressionExtension( json, this.dracoLoader );
+							break;
+
+						case EXTENSIONS.KHR_TEXTURE_TRANSFORM:
+							extensions[ extensionName ] = new GLTFTextureTransformExtension();
+							break;
+
+						case EXTENSIONS.KHR_MESH_QUANTIZATION:
+							extensions[ extensionName ] = new GLTFMeshQuantizationExtension();
+							break;
+
+						default:
+
+							if ( extensionsRequired.indexOf( extensionName ) >= 0 && plugins[ extensionName ] === undefined ) {
+
+								console.warn( 'THREE.GLTFLoader: Unknown extension "' + extensionName + '".' );
+
+							}
+
+					}
+
+				}
+
+			}
+
+			parser.setExtensions( extensions );
+			parser.setPlugins( plugins );
+			parser.parse( onLoad, onError );
+
+		}
+
+	}
+
+	/* GLTFREGISTRY */
+
+	function GLTFRegistry() {
+
+		let objects = {};
+
+		return	{
+
+			get: function ( key ) {
+
+				return objects[ key ];
+
+			},
+
+			add: function ( key, object ) {
+
+				objects[ key ] = object;
+
+			},
+
+			remove: function ( key ) {
+
+				delete objects[ key ];
+
+			},
+
+			removeAll: function () {
+
+				objects = {};
+
+			}
+
+		};
+
+	}
+
+	/*********************************/
+	/********** EXTENSIONS ***********/
+	/*********************************/
+
+	const EXTENSIONS = {
+		KHR_BINARY_GLTF: 'KHR_binary_glTF',
+		KHR_DRACO_MESH_COMPRESSION: 'KHR_draco_mesh_compression',
+		KHR_LIGHTS_PUNCTUAL: 'KHR_lights_punctual',
+		KHR_MATERIALS_CLEARCOAT: 'KHR_materials_clearcoat',
+		KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS: 'KHR_materials_pbrSpecularGlossiness',
+		KHR_MATERIALS_TRANSMISSION: 'KHR_materials_transmission',
+		KHR_MATERIALS_UNLIT: 'KHR_materials_unlit',
+		KHR_TEXTURE_BASISU: 'KHR_texture_basisu',
+		KHR_TEXTURE_TRANSFORM: 'KHR_texture_transform',
+		KHR_MESH_QUANTIZATION: 'KHR_mesh_quantization',
+		EXT_TEXTURE_WEBP: 'EXT_texture_webp',
+		EXT_MESHOPT_COMPRESSION: 'EXT_meshopt_compression'
+	};
+
+	/**
+	 * Punctual Lights Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_lights_punctual
+	 */
+	class GLTFLightsExtension {
+
+		constructor( parser ) {
+
+			this.parser = parser;
+			this.name = EXTENSIONS.KHR_LIGHTS_PUNCTUAL;
+
+			// Object3D instance caches
+			this.cache = { refs: {}, uses: {} };
+
+		}
+
+		_markDefs() {
+
+			const parser = this.parser;
+			const nodeDefs = this.parser.json.nodes || [];
+
+			for ( let nodeIndex = 0, nodeLength = nodeDefs.length; nodeIndex < nodeLength; nodeIndex ++ ) {
+
+				const nodeDef = nodeDefs[ nodeIndex ];
+
+				if ( nodeDef.extensions
+						&& nodeDef.extensions[ this.name ]
+						&& nodeDef.extensions[ this.name ].light !== undefined ) {
+
+					parser._addNodeRef( this.cache, nodeDef.extensions[ this.name ].light );
+
+				}
+
+			}
+
+		}
+
+		_loadLight( lightIndex ) {
+
+			const parser = this.parser;
+			const cacheKey = 'light:' + lightIndex;
+			let dependency = parser.cache.get( cacheKey );
+
+			if ( dependency ) return dependency;
+
+			const json = parser.json;
+			const extensions = ( json.extensions && json.extensions[ this.name ] ) || {};
+			const lightDefs = extensions.lights || [];
+			const lightDef = lightDefs[ lightIndex ];
+			let lightNode;
+
+			const color = new Color( 0xffffff );
+
+			if ( lightDef.color !== undefined ) color.fromArray( lightDef.color );
+
+			const range = lightDef.range !== undefined ? lightDef.range : 0;
+
+			switch ( lightDef.type ) {
+
+				case 'directional':
+					lightNode = new DirectionalLight( color );
+					lightNode.target.position.set( 0, 0, - 1 );
+					lightNode.add( lightNode.target );
+					break;
+
+				case 'point':
+					lightNode = new PointLight( color );
+					lightNode.distance = range;
+					break;
+
+				case 'spot':
+					lightNode = new SpotLight( color );
+					lightNode.distance = range;
+					// Handle spotlight properties.
+					lightDef.spot = lightDef.spot || {};
+					lightDef.spot.innerConeAngle = lightDef.spot.innerConeAngle !== undefined ? lightDef.spot.innerConeAngle : 0;
+					lightDef.spot.outerConeAngle = lightDef.spot.outerConeAngle !== undefined ? lightDef.spot.outerConeAngle : Math.PI / 4.0;
+					lightNode.angle = lightDef.spot.outerConeAngle;
+					lightNode.penumbra = 1.0 - lightDef.spot.innerConeAngle / lightDef.spot.outerConeAngle;
+					lightNode.target.position.set( 0, 0, - 1 );
+					lightNode.add( lightNode.target );
+					break;
+
+				default:
+					throw new Error( 'THREE.GLTFLoader: Unexpected light type: ' + lightDef.type );
+
+			}
+
+			// Some lights (e.g. spot) default to a position other than the origin. Reset the position
+			// here, because node-level parsing will only override position if explicitly specified.
+			lightNode.position.set( 0, 0, 0 );
+
+			lightNode.decay = 2;
+
+			if ( lightDef.intensity !== undefined ) lightNode.intensity = lightDef.intensity;
+
+			lightNode.name = parser.createUniqueName( lightDef.name || ( 'light_' + lightIndex ) );
+
+			dependency = Promise.resolve( lightNode );
+
+			parser.cache.add( cacheKey, dependency );
+
+			return dependency;
+
+		}
+
+		createNodeAttachment( nodeIndex ) {
+
+			const self = this;
+			const parser = this.parser;
+			const json = parser.json;
+			const nodeDef = json.nodes[ nodeIndex ];
+			const lightDef = ( nodeDef.extensions && nodeDef.extensions[ this.name ] ) || {};
+			const lightIndex = lightDef.light;
+
+			if ( lightIndex === undefined ) return null;
+
+			return this._loadLight( lightIndex ).then( function ( light ) {
+
+				return parser._getNodeRef( self.cache, lightIndex, light );
+
+			} );
+
+		}
+
+	}
+
+	/**
+	 * Unlit Materials Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_unlit
+	 */
+	class GLTFMaterialsUnlitExtension {
+
+		constructor() {
+
+			this.name = EXTENSIONS.KHR_MATERIALS_UNLIT;
+
+		}
+
+		getMaterialType() {
+
+			return MeshBasicMaterial;
+
+		}
+
+		extendParams( materialParams, materialDef, parser ) {
+
+			const pending = [];
+
+			materialParams.color = new Color( 1.0, 1.0, 1.0 );
+			materialParams.opacity = 1.0;
+
+			const metallicRoughness = materialDef.pbrMetallicRoughness;
+
+			if ( metallicRoughness ) {
+
+				if ( Array.isArray( metallicRoughness.baseColorFactor ) ) {
+
+					const array = metallicRoughness.baseColorFactor;
+
+					materialParams.color.fromArray( array );
+					materialParams.opacity = array[ 3 ];
+
+				}
+
+				if ( metallicRoughness.baseColorTexture !== undefined ) {
+
+					pending.push( parser.assignTexture( materialParams, 'map', metallicRoughness.baseColorTexture ) );
+
+				}
+
+			}
+
+			return Promise.all( pending );
+
+		}
+
+	}
+
+	/**
+	 * Clearcoat Materials Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_clearcoat
+	 */
+	class GLTFMaterialsClearcoatExtension {
+
+		constructor( parser ) {
+
+			this.parser = parser;
+			this.name = EXTENSIONS.KHR_MATERIALS_CLEARCOAT;
+
+		}
+
+		getMaterialType( materialIndex ) {
+
+			const parser = this.parser;
+			const materialDef = parser.json.materials[ materialIndex ];
+
+			if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) return null;
+
+			return MeshPhysicalMaterial;
+
+		}
+
+		extendMaterialParams( materialIndex, materialParams ) {
+
+			const parser = this.parser;
+			const materialDef = parser.json.materials[ materialIndex ];
+
+			if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) {
+
+				return Promise.resolve();
+
+			}
+
+			const pending = [];
+
+			const extension = materialDef.extensions[ this.name ];
+
+			if ( extension.clearcoatFactor !== undefined ) {
+
+				materialParams.clearcoat = extension.clearcoatFactor;
+
+			}
+
+			if ( extension.clearcoatTexture !== undefined ) {
+
+				pending.push( parser.assignTexture( materialParams, 'clearcoatMap', extension.clearcoatTexture ) );
+
+			}
+
+			if ( extension.clearcoatRoughnessFactor !== undefined ) {
+
+				materialParams.clearcoatRoughness = extension.clearcoatRoughnessFactor;
+
+			}
+
+			if ( extension.clearcoatRoughnessTexture !== undefined ) {
+
+				pending.push( parser.assignTexture( materialParams, 'clearcoatRoughnessMap', extension.clearcoatRoughnessTexture ) );
+
+			}
+
+			if ( extension.clearcoatNormalTexture !== undefined ) {
+
+				pending.push( parser.assignTexture( materialParams, 'clearcoatNormalMap', extension.clearcoatNormalTexture ) );
+
+				if ( extension.clearcoatNormalTexture.scale !== undefined ) {
+
+					const scale = extension.clearcoatNormalTexture.scale;
+
+					// https://github.com/mrdoob/three.js/issues/11438#issuecomment-507003995
+					materialParams.clearcoatNormalScale = new Vector2( scale, - scale );
+
+				}
+
+			}
+
+			return Promise.all( pending );
+
+		}
+
+	}
+
+	/**
+	 * Transmission Materials Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_transmission
+	 * Draft: https://github.com/KhronosGroup/glTF/pull/1698
+	 */
+	class GLTFMaterialsTransmissionExtension {
+
+		constructor( parser ) {
+
+			this.parser = parser;
+			this.name = EXTENSIONS.KHR_MATERIALS_TRANSMISSION;
+
+		}
+
+		getMaterialType( materialIndex ) {
+
+			const parser = this.parser;
+			const materialDef = parser.json.materials[ materialIndex ];
+
+			if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) return null;
+
+			return MeshPhysicalMaterial;
+
+		}
+
+		extendMaterialParams( materialIndex, materialParams ) {
+
+			const parser = this.parser;
+			const materialDef = parser.json.materials[ materialIndex ];
+
+			if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) {
+
+				return Promise.resolve();
+
+			}
+
+			const pending = [];
+
+			const extension = materialDef.extensions[ this.name ];
+
+			if ( extension.transmissionFactor !== undefined ) {
+
+				materialParams.transmission = extension.transmissionFactor;
+
+			}
+
+			if ( extension.transmissionTexture !== undefined ) {
+
+				pending.push( parser.assignTexture( materialParams, 'transmissionMap', extension.transmissionTexture ) );
+
+			}
+
+			return Promise.all( pending );
+
+		}
+
+	}
+
+	/**
+	 * BasisU Texture Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_texture_basisu
+	 */
+	class GLTFTextureBasisUExtension {
+
+		constructor( parser ) {
+
+			this.parser = parser;
+			this.name = EXTENSIONS.KHR_TEXTURE_BASISU;
+
+		}
+
+		loadTexture( textureIndex ) {
+
+			const parser = this.parser;
+			const json = parser.json;
+
+			const textureDef = json.textures[ textureIndex ];
+
+			if ( ! textureDef.extensions || ! textureDef.extensions[ this.name ] ) {
+
+				return null;
+
+			}
+
+			const extension = textureDef.extensions[ this.name ];
+			const source = json.images[ extension.source ];
+			const loader = parser.options.ktx2Loader;
+
+			if ( ! loader ) {
+
+				if ( json.extensionsRequired && json.extensionsRequired.indexOf( this.name ) >= 0 ) {
+
+					throw new Error( 'THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures' );
+
+				} else {
+
+					// Assumes that the extension is optional and that a fallback texture is present
+					return null;
+
+				}
+
+			}
+
+			return parser.loadTextureImage( textureIndex, source, loader );
+
+		}
+
+	}
+
+	/**
+	 * WebP Texture Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Vendor/EXT_texture_webp
+	 */
+	class GLTFTextureWebPExtension {
+
+		constructor( parser ) {
+
+			this.parser = parser;
+			this.name = EXTENSIONS.EXT_TEXTURE_WEBP;
+			this.isSupported = null;
+
+		}
+
+		loadTexture( textureIndex ) {
+
+			const name = this.name;
+			const parser = this.parser;
+			const json = parser.json;
+
+			const textureDef = json.textures[ textureIndex ];
+
+			if ( ! textureDef.extensions || ! textureDef.extensions[ name ] ) {
+
+				return null;
+
+			}
+
+			const extension = textureDef.extensions[ name ];
+			const source = json.images[ extension.source ];
+
+			let loader = parser.textureLoader;
+			if ( source.uri ) {
+
+				const handler = parser.options.manager.getHandler( source.uri );
+				if ( handler !== null ) loader = handler;
+
+			}
+
+			return this.detectSupport().then( function ( isSupported ) {
+
+				if ( isSupported ) return parser.loadTextureImage( textureIndex, source, loader );
+
+				if ( json.extensionsRequired && json.extensionsRequired.indexOf( name ) >= 0 ) {
+
+					throw new Error( 'THREE.GLTFLoader: WebP required by asset but unsupported.' );
+
+				}
+
+				// Fall back to PNG or JPEG.
+				return parser.loadTexture( textureIndex );
+
+			} );
+
+		}
+
+		detectSupport() {
+
+			if ( ! this.isSupported ) {
+
+				this.isSupported = new Promise( function ( resolve ) {
+
+					const image = new Image();
+
+					// Lossy test image. Support for lossy images doesn't guarantee support for all
+					// WebP images, unfortunately.
+					image.src = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA';
+
+					image.onload = image.onerror = function () {
+
+						resolve( image.height === 1 );
+
+					};
+
+				} );
+
+			}
+
+			return this.isSupported;
+
+		}
+
+	}
+
+	/**
+	 * meshopt BufferView Compression Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Vendor/EXT_meshopt_compression
+	 */
+	class GLTFMeshoptCompression {
+
+		constructor( parser ) {
+
+			this.name = EXTENSIONS.EXT_MESHOPT_COMPRESSION;
+			this.parser = parser;
+
+		}
+
+		loadBufferView( index ) {
+
+			const json = this.parser.json;
+			const bufferView = json.bufferViews[ index ];
+
+			if ( bufferView.extensions && bufferView.extensions[ this.name ] ) {
+
+				const extensionDef = bufferView.extensions[ this.name ];
+
+				const buffer = this.parser.getDependency( 'buffer', extensionDef.buffer );
+				const decoder = this.parser.options.meshoptDecoder;
+
+				if ( ! decoder || ! decoder.supported ) {
+
+					if ( json.extensionsRequired && json.extensionsRequired.indexOf( this.name ) >= 0 ) {
+
+						throw new Error( 'THREE.GLTFLoader: setMeshoptDecoder must be called before loading compressed files' );
+
+					} else {
+
+						// Assumes that the extension is optional and that fallback buffer data is present
+						return null;
+
+					}
+
+				}
+
+				return Promise.all( [ buffer, decoder.ready ] ).then( function ( res ) {
+
+					const byteOffset = extensionDef.byteOffset || 0;
+					const byteLength = extensionDef.byteLength || 0;
+
+					const count = extensionDef.count;
+					const stride = extensionDef.byteStride;
+
+					const result = new ArrayBuffer( count * stride );
+					const source = new Uint8Array( res[ 0 ], byteOffset, byteLength );
+
+					decoder.decodeGltfBuffer( new Uint8Array( result ), count, stride, source, extensionDef.mode, extensionDef.filter );
+					return result;
+
+				} );
+
+			} else {
+
+				return null;
+
+			}
+
+		}
+
+	}
+
+	/* BINARY EXTENSION */
+	const BINARY_EXTENSION_HEADER_MAGIC = 'glTF';
+	const BINARY_EXTENSION_HEADER_LENGTH = 12;
+	const BINARY_EXTENSION_CHUNK_TYPES = { JSON: 0x4E4F534A, BIN: 0x004E4942 };
+
+	class GLTFBinaryExtension {
+
+		constructor( data ) {
+
+			this.name = EXTENSIONS.KHR_BINARY_GLTF;
+			this.content = null;
+			this.body = null;
+
+			const headerView = new DataView( data, 0, BINARY_EXTENSION_HEADER_LENGTH );
+
+			this.header = {
+				magic: LoaderUtils.decodeText( new Uint8Array( data.slice( 0, 4 ) ) ),
+				version: headerView.getUint32( 4, true ),
+				length: headerView.getUint32( 8, true )
+			};
+
+			if ( this.header.magic !== BINARY_EXTENSION_HEADER_MAGIC ) {
+
+				throw new Error( 'THREE.GLTFLoader: Unsupported glTF-Binary header.' );
+
+			} else if ( this.header.version < 2.0 ) {
+
+				throw new Error( 'THREE.GLTFLoader: Legacy binary file detected.' );
+
+			}
+
+			const chunkContentsLength = this.header.length - BINARY_EXTENSION_HEADER_LENGTH;
+			const chunkView = new DataView( data, BINARY_EXTENSION_HEADER_LENGTH );
+			let chunkIndex = 0;
+
+			while ( chunkIndex < chunkContentsLength ) {
+
+				const chunkLength = chunkView.getUint32( chunkIndex, true );
+				chunkIndex += 4;
+
+				const chunkType = chunkView.getUint32( chunkIndex, true );
+				chunkIndex += 4;
+
+				if ( chunkType === BINARY_EXTENSION_CHUNK_TYPES.JSON ) {
+
+					const contentArray = new Uint8Array( data, BINARY_EXTENSION_HEADER_LENGTH + chunkIndex, chunkLength );
+					this.content = LoaderUtils.decodeText( contentArray );
+
+				} else if ( chunkType === BINARY_EXTENSION_CHUNK_TYPES.BIN ) {
+
+					const byteOffset = BINARY_EXTENSION_HEADER_LENGTH + chunkIndex;
+					this.body = data.slice( byteOffset, byteOffset + chunkLength );
+
+				}
+
+				// Clients must ignore chunks with unknown types.
+
+				chunkIndex += chunkLength;
+
+			}
+
+			if ( this.content === null ) {
+
+				throw new Error( 'THREE.GLTFLoader: JSON content not found.' );
+
+			}
+
+		}
+
+	}
+
+	/**
+	 * DRACO Mesh Compression Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_draco_mesh_compression
+	 */
+	class GLTFDracoMeshCompressionExtension {
+
+		constructor( json, dracoLoader ) {
+
+			if ( ! dracoLoader ) {
+
+				throw new Error( 'THREE.GLTFLoader: No DRACOLoader instance provided.' );
+
+			}
+
+			this.name = EXTENSIONS.KHR_DRACO_MESH_COMPRESSION;
+			this.json = json;
+			this.dracoLoader = dracoLoader;
+			this.dracoLoader.preload();
+
+		}
+
+		decodePrimitive( primitive, parser ) {
+
+			const json = this.json;
+			const dracoLoader = this.dracoLoader;
+			const bufferViewIndex = primitive.extensions[ this.name ].bufferView;
+			const gltfAttributeMap = primitive.extensions[ this.name ].attributes;
+			const threeAttributeMap = {};
+			const attributeNormalizedMap = {};
+			const attributeTypeMap = {};
+
+			for ( const attributeName in gltfAttributeMap ) {
+
+				const threeAttributeName = ATTRIBUTES[ attributeName ] || attributeName.toLowerCase();
+
+				threeAttributeMap[ threeAttributeName ] = gltfAttributeMap[ attributeName ];
+
+			}
+
+			for ( const attributeName in primitive.attributes ) {
+
+				const threeAttributeName = ATTRIBUTES[ attributeName ] || attributeName.toLowerCase();
+
+				if ( gltfAttributeMap[ attributeName ] !== undefined ) {
+
+					const accessorDef = json.accessors[ primitive.attributes[ attributeName ] ];
+					const componentType = WEBGL_COMPONENT_TYPES[ accessorDef.componentType ];
+
+					attributeTypeMap[ threeAttributeName ] = componentType;
+					attributeNormalizedMap[ threeAttributeName ] = accessorDef.normalized === true;
+
+				}
+
+			}
+
+			return parser.getDependency( 'bufferView', bufferViewIndex ).then( function ( bufferView ) {
+
+				return new Promise( function ( resolve ) {
+
+					dracoLoader.decodeDracoFile( bufferView, function ( geometry ) {
+
+						for ( const attributeName in geometry.attributes ) {
+
+							const attribute = geometry.attributes[ attributeName ];
+							const normalized = attributeNormalizedMap[ attributeName ];
+
+							if ( normalized !== undefined ) attribute.normalized = normalized;
+
+						}
+
+						resolve( geometry );
+
+					}, threeAttributeMap, attributeTypeMap );
+
+				} );
+
+			} );
+
+		}
+
+	}
+
+	/**
+	 * Texture Transform Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_texture_transform
+	 */
+	class GLTFTextureTransformExtension {
+
+		constructor() {
+
+			this.name = EXTENSIONS.KHR_TEXTURE_TRANSFORM;
+
+		}
+
+		extendTexture( texture, transform ) {
+
+			if ( transform.texCoord !== undefined ) {
+
+				console.warn( 'THREE.GLTFLoader: Custom UV sets in "' + this.name + '" extension not yet supported.' );
+
+			}
+
+			if ( transform.offset === undefined && transform.rotation === undefined && transform.scale === undefined ) {
+
+				// See https://github.com/mrdoob/three.js/issues/21819.
+				return texture;
+
+			}
+
+			texture = texture.clone();
+
+			if ( transform.offset !== undefined ) {
+
+				texture.offset.fromArray( transform.offset );
+
+			}
+
+			if ( transform.rotation !== undefined ) {
+
+				texture.rotation = transform.rotation;
+
+			}
+
+			if ( transform.scale !== undefined ) {
+
+				texture.repeat.fromArray( transform.scale );
+
+			}
+
+			texture.needsUpdate = true;
+
+			return texture;
+
+		}
+
+	}
+
+	/**
+	 * Specular-Glossiness Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_pbrSpecularGlossiness
+	 */
+
+	/**
+	 * A sub class of StandardMaterial with some of the functionality
+	 * changed via the `onBeforeCompile` callback
+	 * @pailhead
+	 */
+	class GLTFMeshStandardSGMaterial extends MeshStandardMaterial {
+
+		constructor( params ) {
+
+			super();
+
+			this.isGLTFSpecularGlossinessMaterial = true;
+
+			//various chunks that need replacing
+			const specularMapParsFragmentChunk = [
+				'#ifdef USE_SPECULARMAP',
+				'	uniform sampler2D specularMap;',
+				'#endif'
+			].join( '\n' );
+
+			const glossinessMapParsFragmentChunk = [
+				'#ifdef USE_GLOSSINESSMAP',
+				'	uniform sampler2D glossinessMap;',
+				'#endif'
+			].join( '\n' );
+
+			const specularMapFragmentChunk = [
+				'vec3 specularFactor = specular;',
+				'#ifdef USE_SPECULARMAP',
+				'	vec4 texelSpecular = texture2D( specularMap, vUv );',
+				'	texelSpecular = sRGBToLinear( texelSpecular );',
+				'	// reads channel RGB, compatible with a glTF Specular-Glossiness (RGBA) texture',
+				'	specularFactor *= texelSpecular.rgb;',
+				'#endif'
+			].join( '\n' );
+
+			const glossinessMapFragmentChunk = [
+				'float glossinessFactor = glossiness;',
+				'#ifdef USE_GLOSSINESSMAP',
+				'	vec4 texelGlossiness = texture2D( glossinessMap, vUv );',
+				'	// reads channel A, compatible with a glTF Specular-Glossiness (RGBA) texture',
+				'	glossinessFactor *= texelGlossiness.a;',
+				'#endif'
+			].join( '\n' );
+
+			const lightPhysicalFragmentChunk = [
+				'PhysicalMaterial material;',
+				'material.diffuseColor = diffuseColor.rgb * ( 1. - max( specularFactor.r, max( specularFactor.g, specularFactor.b ) ) );',
+				'vec3 dxy = max( abs( dFdx( geometryNormal ) ), abs( dFdy( geometryNormal ) ) );',
+				'float geometryRoughness = max( max( dxy.x, dxy.y ), dxy.z );',
+				'material.specularRoughness = max( 1.0 - glossinessFactor, 0.0525 ); // 0.0525 corresponds to the base mip of a 256 cubemap.',
+				'material.specularRoughness += geometryRoughness;',
+				'material.specularRoughness = min( material.specularRoughness, 1.0 );',
+				'material.specularColor = specularFactor;',
+			].join( '\n' );
+
+			const uniforms = {
+				specular: { value: new Color().setHex( 0xffffff ) },
+				glossiness: { value: 1 },
+				specularMap: { value: null },
+				glossinessMap: { value: null }
+			};
+
+			this._extraUniforms = uniforms;
+
+			this.onBeforeCompile = function ( shader ) {
+
+				for ( const uniformName in uniforms ) {
+
+					shader.uniforms[ uniformName ] = uniforms[ uniformName ];
+
+				}
+
+				shader.fragmentShader = shader.fragmentShader
+					.replace( 'uniform float roughness;', 'uniform vec3 specular;' )
+					.replace( 'uniform float metalness;', 'uniform float glossiness;' )
+					.replace( '#include <roughnessmap_pars_fragment>', specularMapParsFragmentChunk )
+					.replace( '#include <metalnessmap_pars_fragment>', glossinessMapParsFragmentChunk )
+					.replace( '#include <roughnessmap_fragment>', specularMapFragmentChunk )
+					.replace( '#include <metalnessmap_fragment>', glossinessMapFragmentChunk )
+					.replace( '#include <lights_physical_fragment>', lightPhysicalFragmentChunk );
+
+			};
+
+			Object.defineProperties( this, {
+
+				specular: {
+					get: function () {
+
+						return uniforms.specular.value;
+
+					},
+					set: function ( v ) {
+
+						uniforms.specular.value = v;
+
+					}
+				},
+
+				specularMap: {
+					get: function () {
+
+						return uniforms.specularMap.value;
+
+					},
+					set: function ( v ) {
+
+						uniforms.specularMap.value = v;
+
+						if ( v ) {
+
+							this.defines.USE_SPECULARMAP = ''; // USE_UV is set by the renderer for specular maps
+
+						} else {
+
+							delete this.defines.USE_SPECULARMAP;
+
+						}
+
+					}
+				},
+
+				glossiness: {
+					get: function () {
+
+						return uniforms.glossiness.value;
+
+					},
+					set: function ( v ) {
+
+						uniforms.glossiness.value = v;
+
+					}
+				},
+
+				glossinessMap: {
+					get: function () {
+
+						return uniforms.glossinessMap.value;
+
+					},
+					set: function ( v ) {
+
+						uniforms.glossinessMap.value = v;
+
+						if ( v ) {
+
+							this.defines.USE_GLOSSINESSMAP = '';
+							this.defines.USE_UV = '';
+
+						} else {
+
+							delete this.defines.USE_GLOSSINESSMAP;
+							delete this.defines.USE_UV;
+
+						}
+
+					}
+				}
+
+			} );
+
+			delete this.metalness;
+			delete this.roughness;
+			delete this.metalnessMap;
+			delete this.roughnessMap;
+
+			this.setValues( params );
+
+		}
+
+		copy( source ) {
+
+			super.copy( source );
+
+			this.specularMap = source.specularMap;
+			this.specular.copy( source.specular );
+			this.glossinessMap = source.glossinessMap;
+			this.glossiness = source.glossiness;
+			delete this.metalness;
+			delete this.roughness;
+			delete this.metalnessMap;
+			delete this.roughnessMap;
+			return this;
+
+		}
+
+	}
+
+
+	class GLTFMaterialsPbrSpecularGlossinessExtension {
+
+		constructor() {
+
+			this.name = EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS;
+
+			this.specularGlossinessParams = [
+				'color',
+				'map',
+				'lightMap',
+				'lightMapIntensity',
+				'aoMap',
+				'aoMapIntensity',
+				'emissive',
+				'emissiveIntensity',
+				'emissiveMap',
+				'bumpMap',
+				'bumpScale',
+				'normalMap',
+				'normalMapType',
+				'displacementMap',
+				'displacementScale',
+				'displacementBias',
+				'specularMap',
+				'specular',
+				'glossinessMap',
+				'glossiness',
+				'alphaMap',
+				'envMap',
+				'envMapIntensity',
+				'refractionRatio',
+			];
+
+		}
+
+		getMaterialType() {
+
+			return GLTFMeshStandardSGMaterial;
+
+		}
+
+		extendParams( materialParams, materialDef, parser ) {
+
+			const pbrSpecularGlossiness = materialDef.extensions[ this.name ];
+
+			materialParams.color = new Color( 1.0, 1.0, 1.0 );
+			materialParams.opacity = 1.0;
+
+			const pending = [];
+
+			if ( Array.isArray( pbrSpecularGlossiness.diffuseFactor ) ) {
+
+				const array = pbrSpecularGlossiness.diffuseFactor;
+
+				materialParams.color.fromArray( array );
+				materialParams.opacity = array[ 3 ];
+
+			}
+
+			if ( pbrSpecularGlossiness.diffuseTexture !== undefined ) {
+
+				pending.push( parser.assignTexture( materialParams, 'map', pbrSpecularGlossiness.diffuseTexture ) );
+
+			}
+
+			materialParams.emissive = new Color( 0.0, 0.0, 0.0 );
+			materialParams.glossiness = pbrSpecularGlossiness.glossinessFactor !== undefined ? pbrSpecularGlossiness.glossinessFactor : 1.0;
+			materialParams.specular = new Color( 1.0, 1.0, 1.0 );
+
+			if ( Array.isArray( pbrSpecularGlossiness.specularFactor ) ) {
+
+				materialParams.specular.fromArray( pbrSpecularGlossiness.specularFactor );
+
+			}
+
+			if ( pbrSpecularGlossiness.specularGlossinessTexture !== undefined ) {
+
+				const specGlossMapDef = pbrSpecularGlossiness.specularGlossinessTexture;
+				pending.push( parser.assignTexture( materialParams, 'glossinessMap', specGlossMapDef ) );
+				pending.push( parser.assignTexture( materialParams, 'specularMap', specGlossMapDef ) );
+
+			}
+
+			return Promise.all( pending );
+
+		}
+
+		createMaterial( materialParams ) {
+
+			const material = new GLTFMeshStandardSGMaterial( materialParams );
+			material.fog = true;
+
+			material.color = materialParams.color;
+
+			material.map = materialParams.map === undefined ? null : materialParams.map;
+
+			material.lightMap = null;
+			material.lightMapIntensity = 1.0;
+
+			material.aoMap = materialParams.aoMap === undefined ? null : materialParams.aoMap;
+			material.aoMapIntensity = 1.0;
+
+			material.emissive = materialParams.emissive;
+			material.emissiveIntensity = 1.0;
+			material.emissiveMap = materialParams.emissiveMap === undefined ? null : materialParams.emissiveMap;
+
+			material.bumpMap = materialParams.bumpMap === undefined ? null : materialParams.bumpMap;
+			material.bumpScale = 1;
+
+			material.normalMap = materialParams.normalMap === undefined ? null : materialParams.normalMap;
+			material.normalMapType = TangentSpaceNormalMap;
+
+			if ( materialParams.normalScale ) material.normalScale = materialParams.normalScale;
+
+			material.displacementMap = null;
+			material.displacementScale = 1;
+			material.displacementBias = 0;
+
+			material.specularMap = materialParams.specularMap === undefined ? null : materialParams.specularMap;
+			material.specular = materialParams.specular;
+
+			material.glossinessMap = materialParams.glossinessMap === undefined ? null : materialParams.glossinessMap;
+			material.glossiness = materialParams.glossiness;
+
+			material.alphaMap = null;
+
+			material.envMap = materialParams.envMap === undefined ? null : materialParams.envMap;
+			material.envMapIntensity = 1.0;
+
+			material.refractionRatio = 0.98;
+
+			return material;
+
+		}
+
+	}
+
+	/**
+	 * Mesh Quantization Extension
+	 *
+	 * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_mesh_quantization
+	 */
+	class GLTFMeshQuantizationExtension {
+
+		constructor() {
+
+			this.name = EXTENSIONS.KHR_MESH_QUANTIZATION;
+
+		}
+
+	}
+
+	/*********************************/
+	/********** INTERPOLATION ********/
+	/*********************************/
+
+	// Spline Interpolation
+	// Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#appendix-c-spline-interpolation
+	class GLTFCubicSplineInterpolant extends Interpolant {
+
+		constructor( parameterPositions, sampleValues, sampleSize, resultBuffer ) {
+
+			super( parameterPositions, sampleValues, sampleSize, resultBuffer );
+
+		}
+
+		copySampleValue_( index ) {
+
+			// Copies a sample value to the result buffer. See description of glTF
+			// CUBICSPLINE values layout in interpolate_() function below.
+
+			const result = this.resultBuffer,
+				values = this.sampleValues,
+				valueSize = this.valueSize,
+				offset = index * valueSize * 3 + valueSize;
+
+			for ( let i = 0; i !== valueSize; i ++ ) {
+
+				result[ i ] = values[ offset + i ];
+
+			}
+
+			return result;
+
+		}
+
+	}
+
+	GLTFCubicSplineInterpolant.prototype.beforeStart_ = GLTFCubicSplineInterpolant.prototype.copySampleValue_;
+
+	GLTFCubicSplineInterpolant.prototype.afterEnd_ = GLTFCubicSplineInterpolant.prototype.copySampleValue_;
+
+	GLTFCubicSplineInterpolant.prototype.interpolate_ = function ( i1, t0, t, t1 ) {
+
+		const result = this.resultBuffer;
+		const values = this.sampleValues;
+		const stride = this.valueSize;
+
+		const stride2 = stride * 2;
+		const stride3 = stride * 3;
+
+		const td = t1 - t0;
+
+		const p = ( t - t0 ) / td;
+		const pp = p * p;
+		const ppp = pp * p;
+
+		const offset1 = i1 * stride3;
+		const offset0 = offset1 - stride3;
+
+		const s2 = - 2 * ppp + 3 * pp;
+		const s3 = ppp - pp;
+		const s0 = 1 - s2;
+		const s1 = s3 - pp + p;
+
+		// Layout of keyframe output values for CUBICSPLINE animations:
+		//   [ inTangent_1, splineVertex_1, outTangent_1, inTangent_2, splineVertex_2, ... ]
+		for ( let i = 0; i !== stride; i ++ ) {
+
+			const p0 = values[ offset0 + i + stride ]; // splineVertex_k
+			const m0 = values[ offset0 + i + stride2 ] * td; // outTangent_k * (t_k+1 - t_k)
+			const p1 = values[ offset1 + i + stride ]; // splineVertex_k+1
+			const m1 = values[ offset1 + i ] * td; // inTangent_k+1 * (t_k+1 - t_k)
+
+			result[ i ] = s0 * p0 + s1 * m0 + s2 * p1 + s3 * m1;
+
+		}
+
+		return result;
+
+	};
+
+	/*********************************/
+	/********** INTERNALS ************/
+	/*********************************/
+
+	/* CONSTANTS */
+
+	const WEBGL_CONSTANTS = {
+		FLOAT: 5126,
+		//FLOAT_MAT2: 35674,
+		FLOAT_MAT3: 35675,
+		FLOAT_MAT4: 35676,
+		FLOAT_VEC2: 35664,
+		FLOAT_VEC3: 35665,
+		FLOAT_VEC4: 35666,
+		LINEAR: 9729,
+		REPEAT: 10497,
+		SAMPLER_2D: 35678,
+		POINTS: 0,
+		LINES: 1,
+		LINE_LOOP: 2,
+		LINE_STRIP: 3,
+		TRIANGLES: 4,
+		TRIANGLE_STRIP: 5,
+		TRIANGLE_FAN: 6,
+		UNSIGNED_BYTE: 5121,
+		UNSIGNED_SHORT: 5123
+	};
+
+	const WEBGL_COMPONENT_TYPES = {
+		5120: Int8Array,
+		5121: Uint8Array,
+		5122: Int16Array,
+		5123: Uint16Array,
+		5125: Uint32Array,
+		5126: Float32Array
+	};
+
+	const WEBGL_FILTERS = {
+		9728: NearestFilter,
+		9729: LinearFilter,
+		9984: NearestMipmapNearestFilter,
+		9985: LinearMipmapNearestFilter,
+		9986: NearestMipmapLinearFilter,
+		9987: LinearMipmapLinearFilter
+	};
+
+	const WEBGL_WRAPPINGS = {
+		33071: ClampToEdgeWrapping,
+		33648: MirroredRepeatWrapping,
+		10497: RepeatWrapping
+	};
+
+	const WEBGL_TYPE_SIZES = {
+		'SCALAR': 1,
+		'VEC2': 2,
+		'VEC3': 3,
+		'VEC4': 4,
+		'MAT2': 4,
+		'MAT3': 9,
+		'MAT4': 16
+	};
+
+	const ATTRIBUTES = {
+		POSITION: 'position',
+		NORMAL: 'normal',
+		TANGENT: 'tangent',
+		TEXCOORD_0: 'uv',
+		TEXCOORD_1: 'uv2',
+		COLOR_0: 'color',
+		WEIGHTS_0: 'skinWeight',
+		JOINTS_0: 'skinIndex',
+	};
+
+	const PATH_PROPERTIES = {
+		scale: 'scale',
+		translation: 'position',
+		rotation: 'quaternion',
+		weights: 'morphTargetInfluences'
+	};
+
+	const INTERPOLATION = {
+		CUBICSPLINE: undefined, // We use a custom interpolant (GLTFCubicSplineInterpolation) for CUBICSPLINE tracks. Each
+			                        // keyframe track will be initialized with a default interpolation type, then modified.
+		LINEAR: InterpolateLinear,
+		STEP: InterpolateDiscrete
+	};
+
+	const ALPHA_MODES = {
+		OPAQUE: 'OPAQUE',
+		MASK: 'MASK',
+		BLEND: 'BLEND'
+	};
+
+	/* UTILITY FUNCTIONS */
+
+	function resolveURL( url, path ) {
+
+		// Invalid URL
+		if ( typeof url !== 'string' || url === '' ) return '';
+
+		// Host Relative URL
+		if ( /^https?:\/\//i.test( path ) && /^\//.test( url ) ) {
+
+			path = path.replace( /(^https?:\/\/[^\/]+).*/i, '$1' );
+
+		}
+
+		// Absolute URL http://,https://,//
+		if ( /^(https?:)?\/\//i.test( url ) ) return url;
+
+		// Data URI
+		if ( /^data:.*,.*$/i.test( url ) ) return url;
+
+		// Blob URL
+		if ( /^blob:.*$/i.test( url ) ) return url;
+
+		// Relative URL
+		return path + url;
+
+	}
+
+	/**
+	 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#default-material
+	 */
+	function createDefaultMaterial( cache ) {
+
+		if ( cache[ 'DefaultMaterial' ] === undefined ) {
+
+			cache[ 'DefaultMaterial' ] = new MeshStandardMaterial( {
+				color: 0xFFFFFF,
+				emissive: 0x000000,
+				metalness: 1,
+				roughness: 1,
+				transparent: false,
+				depthTest: true,
+				side: FrontSide
+			} );
+
+		}
+
+		return cache[ 'DefaultMaterial' ];
+
+	}
+
+	function addUnknownExtensionsToUserData( knownExtensions, object, objectDef ) {
+
+		// Add unknown glTF extensions to an object's userData.
+
+		for ( const name in objectDef.extensions ) {
+
+			if ( knownExtensions[ name ] === undefined ) {
+
+				object.userData.gltfExtensions = object.userData.gltfExtensions || {};
+				object.userData.gltfExtensions[ name ] = objectDef.extensions[ name ];
+
+			}
+
+		}
+
+	}
+
+	/**
+	 * @param {Object3D|Material|BufferGeometry} object
+	 * @param {GLTF.definition} gltfDef
+	 */
+	function assignExtrasToUserData( object, gltfDef ) {
+
+		if ( gltfDef.extras !== undefined ) {
+
+			if ( typeof gltfDef.extras === 'object' ) {
+
+				Object.assign( object.userData, gltfDef.extras );
+
+			} else {
+
+				console.warn( 'THREE.GLTFLoader: Ignoring primitive type .extras, ' + gltfDef.extras );
+
+			}
+
+		}
+
+	}
+
+	/**
+	 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#morph-targets
+	 *
+	 * @param {BufferGeometry} geometry
+	 * @param {Array<GLTF.Target>} targets
+	 * @param {GLTFParser} parser
+	 * @return {Promise<BufferGeometry>}
+	 */
+	function addMorphTargets( geometry, targets, parser ) {
+
+		let hasMorphPosition = false;
+		let hasMorphNormal = false;
+
+		for ( let i = 0, il = targets.length; i < il; i ++ ) {
+
+			const target = targets[ i ];
+
+			if ( target.POSITION !== undefined ) hasMorphPosition = true;
+			if ( target.NORMAL !== undefined ) hasMorphNormal = true;
+
+			if ( hasMorphPosition && hasMorphNormal ) break;
+
+		}
+
+		if ( ! hasMorphPosition && ! hasMorphNormal ) return Promise.resolve( geometry );
+
+		const pendingPositionAccessors = [];
+		const pendingNormalAccessors = [];
+
+		for ( let i = 0, il = targets.length; i < il; i ++ ) {
+
+			const target = targets[ i ];
+
+			if ( hasMorphPosition ) {
+
+				const pendingAccessor = target.POSITION !== undefined
+					? parser.getDependency( 'accessor', target.POSITION )
+					: geometry.attributes.position;
+
+				pendingPositionAccessors.push( pendingAccessor );
+
+			}
+
+			if ( hasMorphNormal ) {
+
+				const pendingAccessor = target.NORMAL !== undefined
+					? parser.getDependency( 'accessor', target.NORMAL )
+					: geometry.attributes.normal;
+
+				pendingNormalAccessors.push( pendingAccessor );
+
+			}
+
+		}
+
+		return Promise.all( [
+			Promise.all( pendingPositionAccessors ),
+			Promise.all( pendingNormalAccessors )
+		] ).then( function ( accessors ) {
+
+			const morphPositions = accessors[ 0 ];
+			const morphNormals = accessors[ 1 ];
+
+			if ( hasMorphPosition ) geometry.morphAttributes.position = morphPositions;
+			if ( hasMorphNormal ) geometry.morphAttributes.normal = morphNormals;
+			geometry.morphTargetsRelative = true;
+
+			return geometry;
+
+		} );
+
+	}
+
+	/**
+	 * @param {Mesh} mesh
+	 * @param {GLTF.Mesh} meshDef
+	 */
+	function updateMorphTargets( mesh, meshDef ) {
+
+		mesh.updateMorphTargets();
+
+		if ( meshDef.weights !== undefined ) {
+
+			for ( let i = 0, il = meshDef.weights.length; i < il; i ++ ) {
+
+				mesh.morphTargetInfluences[ i ] = meshDef.weights[ i ];
+
+			}
+
+		}
+
+		// .extras has user-defined data, so check that .extras.targetNames is an array.
+		if ( meshDef.extras && Array.isArray( meshDef.extras.targetNames ) ) {
+
+			const targetNames = meshDef.extras.targetNames;
+
+			if ( mesh.morphTargetInfluences.length === targetNames.length ) {
+
+				mesh.morphTargetDictionary = {};
+
+				for ( let i = 0, il = targetNames.length; i < il; i ++ ) {
+
+					mesh.morphTargetDictionary[ targetNames[ i ] ] = i;
+
+				}
+
+			} else {
+
+				console.warn( 'THREE.GLTFLoader: Invalid extras.targetNames length. Ignoring names.' );
+
+			}
+
+		}
+
+	}
+
+	function createPrimitiveKey( primitiveDef ) {
+
+		const dracoExtension = primitiveDef.extensions && primitiveDef.extensions[ EXTENSIONS.KHR_DRACO_MESH_COMPRESSION ];
+		let geometryKey;
+
+		if ( dracoExtension ) {
+
+			geometryKey = 'draco:' + dracoExtension.bufferView
+					+ ':' + dracoExtension.indices
+					+ ':' + createAttributesKey( dracoExtension.attributes );
+
+		} else {
+
+			geometryKey = primitiveDef.indices + ':' + createAttributesKey( primitiveDef.attributes ) + ':' + primitiveDef.mode;
+
+		}
+
+		return geometryKey;
+
+	}
+
+	function createAttributesKey( attributes ) {
+
+		let attributesKey = '';
+
+		const keys = Object.keys( attributes ).sort();
+
+		for ( let i = 0, il = keys.length; i < il; i ++ ) {
+
+			attributesKey += keys[ i ] + ':' + attributes[ keys[ i ] ] + ';';
+
+		}
+
+		return attributesKey;
+
+	}
+
+	function getNormalizedComponentScale( constructor ) {
+
+		// Reference:
+		// https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_mesh_quantization#encoding-quantized-data
+
+		switch ( constructor ) {
+
+			case Int8Array:
+				return 1 / 127;
+
+			case Uint8Array:
+				return 1 / 255;
+
+			case Int16Array:
+				return 1 / 32767;
+
+			case Uint16Array:
+				return 1 / 65535;
+
+			default:
+				throw new Error( 'THREE.GLTFLoader: Unsupported normalized accessor component type.' );
+
+		}
+
+	}
+
+	/* GLTF PARSER */
+
+	class GLTFParser {
+
+		constructor( json = {}, options = {} ) {
+
+			this.json = json;
+			this.extensions = {};
+			this.plugins = {};
+			this.options = options;
+
+			// loader object cache
+			this.cache = new GLTFRegistry();
+
+			// associations between Three.js objects and glTF elements
+			this.associations = new Map();
+
+			// BufferGeometry caching
+			this.primitiveCache = {};
+
+			// Object3D instance caches
+			this.meshCache = { refs: {}, uses: {} };
+			this.cameraCache = { refs: {}, uses: {} };
+			this.lightCache = { refs: {}, uses: {} };
+
+			this.textureCache = {};
+
+			// Track node names, to ensure no duplicates
+			this.nodeNamesUsed = {};
+
+			// Use an ImageBitmapLoader if imageBitmaps are supported. Moves much of the
+			// expensive work of uploading a texture to the GPU off the main thread.
+			if ( typeof createImageBitmap !== 'undefined' && /Firefox/.test( navigator.userAgent ) === false ) {
+
+				this.textureLoader = new ImageBitmapLoader( this.options.manager );
+
+			} else {
+
+				this.textureLoader = new TextureLoader( this.options.manager );
+
+			}
+
+			this.textureLoader.setCrossOrigin( this.options.crossOrigin );
+			this.textureLoader.setRequestHeader( this.options.requestHeader );
+
+			this.fileLoader = new FileLoader( this.options.manager );
+			this.fileLoader.setResponseType( 'arraybuffer' );
+
+			if ( this.options.crossOrigin === 'use-credentials' ) {
+
+				this.fileLoader.setWithCredentials( true );
+
+			}
+
+		}
+
+		setExtensions( extensions ) {
+
+			this.extensions = extensions;
+
+		}
+
+		setPlugins( plugins ) {
+
+			this.plugins = plugins;
+
+		}
+
+		parse( onLoad, onError ) {
+
+			const parser = this;
+			const json = this.json;
+			const extensions = this.extensions;
+
+			// Clear the loader cache
+			this.cache.removeAll();
+
+			// Mark the special nodes/meshes in json for efficient parse
+			this._invokeAll( function ( ext ) {
+
+				return ext._markDefs && ext._markDefs();
+
+			} );
+
+			Promise.all( this._invokeAll( function ( ext ) {
+
+				return ext.beforeRoot && ext.beforeRoot();
+
+			} ) ).then( function () {
+
+				return Promise.all( [
+
+					parser.getDependencies( 'scene' ),
+					parser.getDependencies( 'animation' ),
+					parser.getDependencies( 'camera' ),
+
+				] );
+
+			} ).then( function ( dependencies ) {
+
+				const result = {
+					scene: dependencies[ 0 ][ json.scene || 0 ],
+					scenes: dependencies[ 0 ],
+					animations: dependencies[ 1 ],
+					cameras: dependencies[ 2 ],
+					asset: json.asset,
+					parser: parser,
+					userData: {}
+				};
+
+				addUnknownExtensionsToUserData( extensions, result, json );
+
+				assignExtrasToUserData( result, json );
+
+				Promise.all( parser._invokeAll( function ( ext ) {
+
+					return ext.afterRoot && ext.afterRoot( result );
+
+				} ) ).then( function () {
+
+					onLoad( result );
+
+				} );
+
+			} ).catch( onError );
+
+		}
+
+		/**
+		 * Marks the special nodes/meshes in json for efficient parse.
+		 */
+		_markDefs() {
+
+			const nodeDefs = this.json.nodes || [];
+			const skinDefs = this.json.skins || [];
+			const meshDefs = this.json.meshes || [];
+
+			// Nothing in the node definition indicates whether it is a Bone or an
+			// Object3D. Use the skins' joint references to mark bones.
+			for ( let skinIndex = 0, skinLength = skinDefs.length; skinIndex < skinLength; skinIndex ++ ) {
+
+				const joints = skinDefs[ skinIndex ].joints;
+
+				for ( let i = 0, il = joints.length; i < il; i ++ ) {
+
+					nodeDefs[ joints[ i ] ].isBone = true;
+
+				}
+
+			}
+
+			// Iterate over all nodes, marking references to shared resources,
+			// as well as skeleton joints.
+			for ( let nodeIndex = 0, nodeLength = nodeDefs.length; nodeIndex < nodeLength; nodeIndex ++ ) {
+
+				const nodeDef = nodeDefs[ nodeIndex ];
+
+				if ( nodeDef.mesh !== undefined ) {
+
+					this._addNodeRef( this.meshCache, nodeDef.mesh );
+
+					// Nothing in the mesh definition indicates whether it is
+					// a SkinnedMesh or Mesh. Use the node's mesh reference
+					// to mark SkinnedMesh if node has skin.
+					if ( nodeDef.skin !== undefined ) {
+
+						meshDefs[ nodeDef.mesh ].isSkinnedMesh = true;
+
+					}
+
+				}
+
+				if ( nodeDef.camera !== undefined ) {
+
+					this._addNodeRef( this.cameraCache, nodeDef.camera );
+
+				}
+
+			}
+
+		}
+
+		/**
+		 * Counts references to shared node / Object3D resources. These resources
+		 * can be reused, or "instantiated", at multiple nodes in the scene
+		 * hierarchy. Mesh, Camera, and Light instances are instantiated and must
+		 * be marked. Non-scenegraph resources (like Materials, Geometries, and
+		 * Textures) can be reused directly and are not marked here.
+		 *
+		 * Example: CesiumMilkTruck sample model reuses "Wheel" meshes.
+		 */
+		_addNodeRef( cache, index ) {
+
+			if ( index === undefined ) return;
+
+			if ( cache.refs[ index ] === undefined ) {
+
+				cache.refs[ index ] = cache.uses[ index ] = 0;
+
+			}
+
+			cache.refs[ index ] ++;
+
+		}
+
+		/** Returns a reference to a shared resource, cloning it if necessary. */
+		_getNodeRef( cache, index, object ) {
+
+			if ( cache.refs[ index ] <= 1 ) return object;
+
+			const ref = object.clone();
+
+			ref.name += '_instance_' + ( cache.uses[ index ] ++ );
+
+			return ref;
+
+		}
+
+		_invokeOne( func ) {
+
+			const extensions = Object.values( this.plugins );
+			extensions.push( this );
+
+			for ( let i = 0; i < extensions.length; i ++ ) {
+
+				const result = func( extensions[ i ] );
+
+				if ( result ) return result;
+
+			}
+
+			return null;
+
+		}
+
+		_invokeAll( func ) {
+
+			const extensions = Object.values( this.plugins );
+			extensions.unshift( this );
+
+			const pending = [];
+
+			for ( let i = 0; i < extensions.length; i ++ ) {
+
+				const result = func( extensions[ i ] );
+
+				if ( result ) pending.push( result );
+
+			}
+
+			return pending;
+
+		}
+
+		/**
+		 * Requests the specified dependency asynchronously, with caching.
+		 * @param {string} type
+		 * @param {number} index
+		 * @return {Promise<Object3D|Material|THREE.Texture|AnimationClip|ArrayBuffer|Object>}
+		 */
+		getDependency( type, index ) {
+
+			const cacheKey = type + ':' + index;
+			let dependency = this.cache.get( cacheKey );
+
+			if ( ! dependency ) {
+
+				switch ( type ) {
+
+					case 'scene':
+						dependency = this.loadScene( index );
+						break;
+
+					case 'node':
+						dependency = this.loadNode( index );
+						break;
+
+					case 'mesh':
+						dependency = this._invokeOne( function ( ext ) {
+
+							return ext.loadMesh && ext.loadMesh( index );
+
+						} );
+						break;
+
+					case 'accessor':
+						dependency = this.loadAccessor( index );
+						break;
+
+					case 'bufferView':
+						dependency = this._invokeOne( function ( ext ) {
+
+							return ext.loadBufferView && ext.loadBufferView( index );
+
+						} );
+						break;
+
+					case 'buffer':
+						dependency = this.loadBuffer( index );
+						break;
+
+					case 'material':
+						dependency = this._invokeOne( function ( ext ) {
+
+							return ext.loadMaterial && ext.loadMaterial( index );
+
+						} );
+						break;
+
+					case 'texture':
+						dependency = this._invokeOne( function ( ext ) {
+
+							return ext.loadTexture && ext.loadTexture( index );
+
+						} );
+						break;
+
+					case 'skin':
+						dependency = this.loadSkin( index );
+						break;
+
+					case 'animation':
+						dependency = this.loadAnimation( index );
+						break;
+
+					case 'camera':
+						dependency = this.loadCamera( index );
+						break;
+
+					default:
+						throw new Error( 'Unknown type: ' + type );
+
+				}
+
+				this.cache.add( cacheKey, dependency );
+
+			}
+
+			return dependency;
+
+		}
+
+		/**
+		 * Requests all dependencies of the specified type asynchronously, with caching.
+		 * @param {string} type
+		 * @return {Promise<Array<Object>>}
+		 */
+		getDependencies( type ) {
+
+			let dependencies = this.cache.get( type );
+
+			if ( ! dependencies ) {
+
+				const parser = this;
+				const defs = this.json[ type + ( type === 'mesh' ? 'es' : 's' ) ] || [];
+
+				dependencies = Promise.all( defs.map( function ( def, index ) {
+
+					return parser.getDependency( type, index );
+
+				} ) );
+
+				this.cache.add( type, dependencies );
+
+			}
+
+			return dependencies;
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#buffers-and-buffer-views
+		 * @param {number} bufferIndex
+		 * @return {Promise<ArrayBuffer>}
+		 */
+		loadBuffer( bufferIndex ) {
+
+			const bufferDef = this.json.buffers[ bufferIndex ];
+			const loader = this.fileLoader;
+
+			if ( bufferDef.type && bufferDef.type !== 'arraybuffer' ) {
+
+				throw new Error( 'THREE.GLTFLoader: ' + bufferDef.type + ' buffer type is not supported.' );
+
+			}
+
+			// If present, GLB container is required to be the first buffer.
+			if ( bufferDef.uri === undefined && bufferIndex === 0 ) {
+
+				return Promise.resolve( this.extensions[ EXTENSIONS.KHR_BINARY_GLTF ].body );
+
+			}
+
+			const options = this.options;
+
+			return new Promise( function ( resolve, reject ) {
+
+				loader.load( resolveURL( bufferDef.uri, options.path ), resolve, undefined, function () {
+
+					reject( new Error( 'THREE.GLTFLoader: Failed to load buffer "' + bufferDef.uri + '".' ) );
+
+				} );
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#buffers-and-buffer-views
+		 * @param {number} bufferViewIndex
+		 * @return {Promise<ArrayBuffer>}
+		 */
+		loadBufferView( bufferViewIndex ) {
+
+			const bufferViewDef = this.json.bufferViews[ bufferViewIndex ];
+
+			return this.getDependency( 'buffer', bufferViewDef.buffer ).then( function ( buffer ) {
+
+				const byteLength = bufferViewDef.byteLength || 0;
+				const byteOffset = bufferViewDef.byteOffset || 0;
+				return buffer.slice( byteOffset, byteOffset + byteLength );
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#accessors
+		 * @param {number} accessorIndex
+		 * @return {Promise<BufferAttribute|InterleavedBufferAttribute>}
+		 */
+		loadAccessor( accessorIndex ) {
+
+			const parser = this;
+			const json = this.json;
+
+			const accessorDef = this.json.accessors[ accessorIndex ];
+
+			if ( accessorDef.bufferView === undefined && accessorDef.sparse === undefined ) {
+
+				// Ignore empty accessors, which may be used to declare runtime
+				// information about attributes coming from another source (e.g. Draco
+				// compression extension).
+				return Promise.resolve( null );
+
+			}
+
+			const pendingBufferViews = [];
+
+			if ( accessorDef.bufferView !== undefined ) {
+
+				pendingBufferViews.push( this.getDependency( 'bufferView', accessorDef.bufferView ) );
+
+			} else {
+
+				pendingBufferViews.push( null );
+
+			}
+
+			if ( accessorDef.sparse !== undefined ) {
+
+				pendingBufferViews.push( this.getDependency( 'bufferView', accessorDef.sparse.indices.bufferView ) );
+				pendingBufferViews.push( this.getDependency( 'bufferView', accessorDef.sparse.values.bufferView ) );
+
+			}
+
+			return Promise.all( pendingBufferViews ).then( function ( bufferViews ) {
+
+				const bufferView = bufferViews[ 0 ];
+
+				const itemSize = WEBGL_TYPE_SIZES[ accessorDef.type ];
+				const TypedArray = WEBGL_COMPONENT_TYPES[ accessorDef.componentType ];
+
+				// For VEC3: itemSize is 3, elementBytes is 4, itemBytes is 12.
+				const elementBytes = TypedArray.BYTES_PER_ELEMENT;
+				const itemBytes = elementBytes * itemSize;
+				const byteOffset = accessorDef.byteOffset || 0;
+				const byteStride = accessorDef.bufferView !== undefined ? json.bufferViews[ accessorDef.bufferView ].byteStride : undefined;
+				const normalized = accessorDef.normalized === true;
+				let array, bufferAttribute;
+
+				// The buffer is not interleaved if the stride is the item size in bytes.
+				if ( byteStride && byteStride !== itemBytes ) {
+
+					// Each "slice" of the buffer, as defined by 'count' elements of 'byteStride' bytes, gets its own InterleavedBuffer
+					// This makes sure that IBA.count reflects accessor.count properly
+					const ibSlice = Math.floor( byteOffset / byteStride );
+					const ibCacheKey = 'InterleavedBuffer:' + accessorDef.bufferView + ':' + accessorDef.componentType + ':' + ibSlice + ':' + accessorDef.count;
+					let ib = parser.cache.get( ibCacheKey );
+
+					if ( ! ib ) {
+
+						array = new TypedArray( bufferView, ibSlice * byteStride, accessorDef.count * byteStride / elementBytes );
+
+						// Integer parameters to IB/IBA are in array elements, not bytes.
+						ib = new InterleavedBuffer( array, byteStride / elementBytes );
+
+						parser.cache.add( ibCacheKey, ib );
+
+					}
+
+					bufferAttribute = new InterleavedBufferAttribute( ib, itemSize, ( byteOffset % byteStride ) / elementBytes, normalized );
+
+				} else {
+
+					if ( bufferView === null ) {
+
+						array = new TypedArray( accessorDef.count * itemSize );
+
+					} else {
+
+						array = new TypedArray( bufferView, byteOffset, accessorDef.count * itemSize );
+
+					}
+
+					bufferAttribute = new BufferAttribute( array, itemSize, normalized );
+
+				}
+
+				// https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#sparse-accessors
+				if ( accessorDef.sparse !== undefined ) {
+
+					const itemSizeIndices = WEBGL_TYPE_SIZES.SCALAR;
+					const TypedArrayIndices = WEBGL_COMPONENT_TYPES[ accessorDef.sparse.indices.componentType ];
+
+					const byteOffsetIndices = accessorDef.sparse.indices.byteOffset || 0;
+					const byteOffsetValues = accessorDef.sparse.values.byteOffset || 0;
+
+					const sparseIndices = new TypedArrayIndices( bufferViews[ 1 ], byteOffsetIndices, accessorDef.sparse.count * itemSizeIndices );
+					const sparseValues = new TypedArray( bufferViews[ 2 ], byteOffsetValues, accessorDef.sparse.count * itemSize );
+
+					if ( bufferView !== null ) {
+
+						// Avoid modifying the original ArrayBuffer, if the bufferView wasn't initialized with zeroes.
+						bufferAttribute = new BufferAttribute( bufferAttribute.array.slice(), bufferAttribute.itemSize, bufferAttribute.normalized );
+
+					}
+
+					for ( let i = 0, il = sparseIndices.length; i < il; i ++ ) {
+
+						const index = sparseIndices[ i ];
+
+						bufferAttribute.setX( index, sparseValues[ i * itemSize ] );
+						if ( itemSize >= 2 ) bufferAttribute.setY( index, sparseValues[ i * itemSize + 1 ] );
+						if ( itemSize >= 3 ) bufferAttribute.setZ( index, sparseValues[ i * itemSize + 2 ] );
+						if ( itemSize >= 4 ) bufferAttribute.setW( index, sparseValues[ i * itemSize + 3 ] );
+						if ( itemSize >= 5 ) throw new Error( 'THREE.GLTFLoader: Unsupported itemSize in sparse BufferAttribute.' );
+
+					}
+
+				}
+
+				return bufferAttribute;
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#textures
+		 * @param {number} textureIndex
+		 * @return {Promise<THREE.Texture>}
+		 */
+		loadTexture( textureIndex ) {
+
+			const json = this.json;
+			const options = this.options;
+			const textureDef = json.textures[ textureIndex ];
+			const source = json.images[ textureDef.source ];
+
+			let loader = this.textureLoader;
+
+			if ( source.uri ) {
+
+				const handler = options.manager.getHandler( source.uri );
+				if ( handler !== null ) loader = handler;
+
+			}
+
+			return this.loadTextureImage( textureIndex, source, loader );
+
+		}
+
+		loadTextureImage( textureIndex, source, loader ) {
+
+			const parser = this;
+			const json = this.json;
+			const options = this.options;
+
+			const textureDef = json.textures[ textureIndex ];
+
+			const cacheKey = ( source.uri || source.bufferView ) + ':' + textureDef.sampler;
+
+			if ( this.textureCache[ cacheKey ] ) {
+
+				// See https://github.com/mrdoob/three.js/issues/21559.
+				return this.textureCache[ cacheKey ];
+
+			}
+
+			const URL = self.URL || self.webkitURL;
+
+			let sourceURI = source.uri || '';
+			let isObjectURL = false;
+			let hasAlpha = true;
+
+			const isJPEG = sourceURI.search( /\.jpe?g($|\?)/i ) > 0 || sourceURI.search( /^data\:image\/jpeg/ ) === 0;
+
+			if ( source.mimeType === 'image/jpeg' || isJPEG ) hasAlpha = false;
+
+			if ( source.bufferView !== undefined ) {
+
+				// Load binary image data from bufferView, if provided.
+
+				sourceURI = parser.getDependency( 'bufferView', source.bufferView ).then( function ( bufferView ) {
+
+					if ( source.mimeType === 'image/png' ) {
+
+						// Inspect the PNG 'IHDR' chunk to determine whether the image could have an
+						// alpha channel. This check is conservative — the image could have an alpha
+						// channel with all values == 1, and the indexed type (colorType == 3) only
+						// sometimes contains alpha.
+						//
+						// https://en.wikipedia.org/wiki/Portable_Network_Graphics#File_header
+						const colorType = new DataView( bufferView, 25, 1 ).getUint8( 0, false );
+						hasAlpha = colorType === 6 || colorType === 4 || colorType === 3;
+
+					}
+
+					isObjectURL = true;
+					const blob = new Blob( [ bufferView ], { type: source.mimeType } );
+					sourceURI = URL.createObjectURL( blob );
+					return sourceURI;
+
+				} );
+
+			} else if ( source.uri === undefined ) {
+
+				throw new Error( 'THREE.GLTFLoader: Image ' + textureIndex + ' is missing URI and bufferView' );
+
+			}
+
+			const promise = Promise.resolve( sourceURI ).then( function ( sourceURI ) {
+
+				return new Promise( function ( resolve, reject ) {
+
+					let onLoad = resolve;
+
+					if ( loader.isImageBitmapLoader === true ) {
+
+						onLoad = function ( imageBitmap ) {
+
+							resolve( new CanvasTexture( imageBitmap ) );
+
+						};
+
+					}
+
+					loader.load( resolveURL( sourceURI, options.path ), onLoad, undefined, reject );
+
+				} );
+
+			} ).then( function ( texture ) {
+
+				// Clean up resources and configure Texture.
+
+				if ( isObjectURL === true ) {
+
+					URL.revokeObjectURL( sourceURI );
+
+				}
+
+				texture.flipY = false;
+
+				if ( textureDef.name ) texture.name = textureDef.name;
+
+				// When there is definitely no alpha channel in the texture, set RGBFormat to save space.
+				if ( ! hasAlpha ) texture.format = RGBFormat;
+
+				const samplers = json.samplers || {};
+				const sampler = samplers[ textureDef.sampler ] || {};
+
+				texture.magFilter = WEBGL_FILTERS[ sampler.magFilter ] || LinearFilter;
+				texture.minFilter = WEBGL_FILTERS[ sampler.minFilter ] || LinearMipmapLinearFilter;
+				texture.wrapS = WEBGL_WRAPPINGS[ sampler.wrapS ] || RepeatWrapping;
+				texture.wrapT = WEBGL_WRAPPINGS[ sampler.wrapT ] || RepeatWrapping;
+
+				parser.associations.set( texture, {
+					type: 'textures',
+					index: textureIndex
+				} );
+
+				return texture;
+
+			} );
+
+			this.textureCache[ cacheKey ] = promise;
+
+			return promise;
+
+		}
+
+		/**
+		 * Asynchronously assigns a texture to the given material parameters.
+		 * @param {Object} materialParams
+		 * @param {string} mapName
+		 * @param {Object} mapDef
+		 * @return {Promise}
+		 */
+		assignTexture( materialParams, mapName, mapDef ) {
+
+			const parser = this;
+
+			return this.getDependency( 'texture', mapDef.index ).then( function ( texture ) {
+
+				// Materials sample aoMap from UV set 1 and other maps from UV set 0 - this can't be configured
+				// However, we will copy UV set 0 to UV set 1 on demand for aoMap
+				if ( mapDef.texCoord !== undefined && mapDef.texCoord != 0 && ! ( mapName === 'aoMap' && mapDef.texCoord == 1 ) ) {
+
+					console.warn( 'THREE.GLTFLoader: Custom UV set ' + mapDef.texCoord + ' for texture ' + mapName + ' not yet supported.' );
+
+				}
+
+				if ( parser.extensions[ EXTENSIONS.KHR_TEXTURE_TRANSFORM ] ) {
+
+					const transform = mapDef.extensions !== undefined ? mapDef.extensions[ EXTENSIONS.KHR_TEXTURE_TRANSFORM ] : undefined;
+
+					if ( transform ) {
+
+						const gltfReference = parser.associations.get( texture );
+						texture = parser.extensions[ EXTENSIONS.KHR_TEXTURE_TRANSFORM ].extendTexture( texture, transform );
+						parser.associations.set( texture, gltfReference );
+
+					}
+
+				}
+
+				materialParams[ mapName ] = texture;
+
+			} );
+
+		}
+
+		/**
+		 * Assigns final material to a Mesh, Line, or Points instance. The instance
+		 * already has a material (generated from the glTF material options alone)
+		 * but reuse of the same glTF material may require multiple threejs materials
+		 * to accommodate different primitive types, defines, etc. New materials will
+		 * be created if necessary, and reused from a cache.
+		 * @param  {Object3D} mesh Mesh, Line, or Points instance.
+		 */
+		assignFinalMaterial( mesh ) {
+
+			const geometry = mesh.geometry;
+			let material = mesh.material;
+
+			const useVertexTangents = geometry.attributes.tangent !== undefined;
+			const useVertexColors = geometry.attributes.color !== undefined;
+			const useFlatShading = geometry.attributes.normal === undefined;
+			const useMorphTargets = Object.keys( geometry.morphAttributes ).length > 0;
+			const useMorphNormals = useMorphTargets && geometry.morphAttributes.normal !== undefined;
+
+			if ( mesh.isPoints ) {
+
+				const cacheKey = 'PointsMaterial:' + material.uuid;
+
+				let pointsMaterial = this.cache.get( cacheKey );
+
+				if ( ! pointsMaterial ) {
+
+					pointsMaterial = new PointsMaterial();
+					Material.prototype.copy.call( pointsMaterial, material );
+					pointsMaterial.color.copy( material.color );
+					pointsMaterial.map = material.map;
+					pointsMaterial.sizeAttenuation = false; // glTF spec says points should be 1px
+
+					this.cache.add( cacheKey, pointsMaterial );
+
+				}
+
+				material = pointsMaterial;
+
+			} else if ( mesh.isLine ) {
+
+				const cacheKey = 'LineBasicMaterial:' + material.uuid;
+
+				let lineMaterial = this.cache.get( cacheKey );
+
+				if ( ! lineMaterial ) {
+
+					lineMaterial = new LineBasicMaterial();
+					Material.prototype.copy.call( lineMaterial, material );
+					lineMaterial.color.copy( material.color );
+
+					this.cache.add( cacheKey, lineMaterial );
+
+				}
+
+				material = lineMaterial;
+
+			}
+
+			// Clone the material if it will be modified
+			if ( useVertexTangents || useVertexColors || useFlatShading || useMorphTargets ) {
+
+				let cacheKey = 'ClonedMaterial:' + material.uuid + ':';
+
+				if ( material.isGLTFSpecularGlossinessMaterial ) cacheKey += 'specular-glossiness:';
+				if ( useVertexTangents ) cacheKey += 'vertex-tangents:';
+				if ( useVertexColors ) cacheKey += 'vertex-colors:';
+				if ( useFlatShading ) cacheKey += 'flat-shading:';
+				if ( useMorphTargets ) cacheKey += 'morph-targets:';
+				if ( useMorphNormals ) cacheKey += 'morph-normals:';
+
+				let cachedMaterial = this.cache.get( cacheKey );
+
+				if ( ! cachedMaterial ) {
+
+					cachedMaterial = material.clone();
+
+					if ( useVertexColors ) cachedMaterial.vertexColors = true;
+					if ( useFlatShading ) cachedMaterial.flatShading = true;
+					if ( useMorphTargets ) cachedMaterial.morphTargets = true;
+					if ( useMorphNormals ) cachedMaterial.morphNormals = true;
+
+					if ( useVertexTangents ) {
+
+						cachedMaterial.vertexTangents = true;
+
+						// https://github.com/mrdoob/three.js/issues/11438#issuecomment-507003995
+						if ( cachedMaterial.normalScale ) cachedMaterial.normalScale.y *= - 1;
+						if ( cachedMaterial.clearcoatNormalScale ) cachedMaterial.clearcoatNormalScale.y *= - 1;
+
+					}
+
+					this.cache.add( cacheKey, cachedMaterial );
+
+					this.associations.set( cachedMaterial, this.associations.get( material ) );
+
+				}
+
+				material = cachedMaterial;
+
+			}
+
+			// workarounds for mesh and geometry
+
+			if ( material.aoMap && geometry.attributes.uv2 === undefined && geometry.attributes.uv !== undefined ) {
+
+				geometry.setAttribute( 'uv2', geometry.attributes.uv );
+
+			}
+
+			mesh.material = material;
+
+		}
+
+		getMaterialType( /* materialIndex */ ) {
+
+			return MeshStandardMaterial;
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#materials
+		 * @param {number} materialIndex
+		 * @return {Promise<Material>}
+		 */
+		loadMaterial( materialIndex ) {
+
+			const parser = this;
+			const json = this.json;
+			const extensions = this.extensions;
+			const materialDef = json.materials[ materialIndex ];
+
+			let materialType;
+			const materialParams = {};
+			const materialExtensions = materialDef.extensions || {};
+
+			const pending = [];
+
+			if ( materialExtensions[ EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS ] ) {
+
+				const sgExtension = extensions[ EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS ];
+				materialType = sgExtension.getMaterialType();
+				pending.push( sgExtension.extendParams( materialParams, materialDef, parser ) );
+
+			} else if ( materialExtensions[ EXTENSIONS.KHR_MATERIALS_UNLIT ] ) {
+
+				const kmuExtension = extensions[ EXTENSIONS.KHR_MATERIALS_UNLIT ];
+				materialType = kmuExtension.getMaterialType();
+				pending.push( kmuExtension.extendParams( materialParams, materialDef, parser ) );
+
+			} else {
+
+				// Specification:
+				// https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#metallic-roughness-material
+
+				const metallicRoughness = materialDef.pbrMetallicRoughness || {};
+
+				materialParams.color = new Color( 1.0, 1.0, 1.0 );
+				materialParams.opacity = 1.0;
+
+				if ( Array.isArray( metallicRoughness.baseColorFactor ) ) {
+
+					const array = metallicRoughness.baseColorFactor;
+
+					materialParams.color.fromArray( array );
+					materialParams.opacity = array[ 3 ];
+
+				}
+
+				if ( metallicRoughness.baseColorTexture !== undefined ) {
+
+					pending.push( parser.assignTexture( materialParams, 'map', metallicRoughness.baseColorTexture ) );
+
+				}
+
+				materialParams.metalness = metallicRoughness.metallicFactor !== undefined ? metallicRoughness.metallicFactor : 1.0;
+				materialParams.roughness = metallicRoughness.roughnessFactor !== undefined ? metallicRoughness.roughnessFactor : 1.0;
+
+				if ( metallicRoughness.metallicRoughnessTexture !== undefined ) {
+
+					pending.push( parser.assignTexture( materialParams, 'metalnessMap', metallicRoughness.metallicRoughnessTexture ) );
+					pending.push( parser.assignTexture( materialParams, 'roughnessMap', metallicRoughness.metallicRoughnessTexture ) );
+
+				}
+
+				materialType = this._invokeOne( function ( ext ) {
+
+					return ext.getMaterialType && ext.getMaterialType( materialIndex );
+
+				} );
+
+				pending.push( Promise.all( this._invokeAll( function ( ext ) {
+
+					return ext.extendMaterialParams && ext.extendMaterialParams( materialIndex, materialParams );
+
+				} ) ) );
+
+			}
+
+			if ( materialDef.doubleSided === true ) {
+
+				materialParams.side = DoubleSide;
+
+			}
+
+			const alphaMode = materialDef.alphaMode || ALPHA_MODES.OPAQUE;
+
+			if ( alphaMode === ALPHA_MODES.BLEND ) {
+
+				materialParams.transparent = true;
+
+				// See: https://github.com/mrdoob/three.js/issues/17706
+				materialParams.depthWrite = false;
+
+			} else {
+
+				materialParams.transparent = false;
+
+				if ( alphaMode === ALPHA_MODES.MASK ) {
+
+					materialParams.alphaTest = materialDef.alphaCutoff !== undefined ? materialDef.alphaCutoff : 0.5;
+
+				}
+
+			}
+
+			if ( materialDef.normalTexture !== undefined && materialType !== MeshBasicMaterial ) {
+
+				pending.push( parser.assignTexture( materialParams, 'normalMap', materialDef.normalTexture ) );
+
+				// https://github.com/mrdoob/three.js/issues/11438#issuecomment-507003995
+				materialParams.normalScale = new Vector2( 1, - 1 );
+
+				if ( materialDef.normalTexture.scale !== undefined ) {
+
+					materialParams.normalScale.set( materialDef.normalTexture.scale, - materialDef.normalTexture.scale );
+
+				}
+
+			}
+
+			if ( materialDef.occlusionTexture !== undefined && materialType !== MeshBasicMaterial ) {
+
+				pending.push( parser.assignTexture( materialParams, 'aoMap', materialDef.occlusionTexture ) );
+
+				if ( materialDef.occlusionTexture.strength !== undefined ) {
+
+					materialParams.aoMapIntensity = materialDef.occlusionTexture.strength;
+
+				}
+
+			}
+
+			if ( materialDef.emissiveFactor !== undefined && materialType !== MeshBasicMaterial ) {
+
+				materialParams.emissive = new Color().fromArray( materialDef.emissiveFactor );
+
+			}
+
+			if ( materialDef.emissiveTexture !== undefined && materialType !== MeshBasicMaterial ) {
+
+				pending.push( parser.assignTexture( materialParams, 'emissiveMap', materialDef.emissiveTexture ) );
+
+			}
+
+			return Promise.all( pending ).then( function () {
+
+				let material;
+
+				if ( materialType === GLTFMeshStandardSGMaterial ) {
+
+					material = extensions[ EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS ].createMaterial( materialParams );
+
+				} else {
+
+					material = new materialType( materialParams );
+
+				}
+
+				if ( materialDef.name ) material.name = materialDef.name;
+
+				// baseColorTexture, emissiveTexture, and specularGlossinessTexture use sRGB encoding.
+				if ( material.map ) material.map.encoding = sRGBEncoding;
+				if ( material.emissiveMap ) material.emissiveMap.encoding = sRGBEncoding;
+
+				assignExtrasToUserData( material, materialDef );
+
+				parser.associations.set( material, { type: 'materials', index: materialIndex } );
+
+				if ( materialDef.extensions ) addUnknownExtensionsToUserData( extensions, material, materialDef );
+
+				return material;
+
+			} );
+
+		}
+
+		/** When Object3D instances are targeted by animation, they need unique names. */
+		createUniqueName( originalName ) {
+
+			const sanitizedName = PropertyBinding.sanitizeNodeName( originalName || '' );
+
+			let name = sanitizedName;
+
+			for ( let i = 1; this.nodeNamesUsed[ name ]; ++ i ) {
+
+				name = sanitizedName + '_' + i;
+
+			}
+
+			this.nodeNamesUsed[ name ] = true;
+
+			return name;
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#geometry
+		 *
+		 * Creates BufferGeometries from primitives.
+		 *
+		 * @param {Array<GLTF.Primitive>} primitives
+		 * @return {Promise<Array<BufferGeometry>>}
+		 */
+		loadGeometries( primitives ) {
+
+			const parser = this;
+			const extensions = this.extensions;
+			const cache = this.primitiveCache;
+
+			function createDracoPrimitive( primitive ) {
+
+				return extensions[ EXTENSIONS.KHR_DRACO_MESH_COMPRESSION ]
+					.decodePrimitive( primitive, parser )
+					.then( function ( geometry ) {
+
+						return addPrimitiveAttributes( geometry, primitive, parser );
+
+					} );
+
+			}
+
+			const pending = [];
+
+			for ( let i = 0, il = primitives.length; i < il; i ++ ) {
+
+				const primitive = primitives[ i ];
+				const cacheKey = createPrimitiveKey( primitive );
+
+				// See if we've already created this geometry
+				const cached = cache[ cacheKey ];
+
+				if ( cached ) {
+
+					// Use the cached geometry if it exists
+					pending.push( cached.promise );
+
+				} else {
+
+					let geometryPromise;
+
+					if ( primitive.extensions && primitive.extensions[ EXTENSIONS.KHR_DRACO_MESH_COMPRESSION ] ) {
+
+						// Use DRACO geometry if available
+						geometryPromise = createDracoPrimitive( primitive );
+
+					} else {
+
+						// Otherwise create a new geometry
+						geometryPromise = addPrimitiveAttributes( new BufferGeometry(), primitive, parser );
+
+					}
+
+					// Cache this geometry
+					cache[ cacheKey ] = { primitive: primitive, promise: geometryPromise };
+
+					pending.push( geometryPromise );
+
+				}
+
+			}
+
+			return Promise.all( pending );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/blob/master/specification/2.0/README.md#meshes
+		 * @param {number} meshIndex
+		 * @return {Promise<Group|Mesh|SkinnedMesh>}
+		 */
+		loadMesh( meshIndex ) {
+
+			const parser = this;
+			const json = this.json;
+			const extensions = this.extensions;
+
+			const meshDef = json.meshes[ meshIndex ];
+			const primitives = meshDef.primitives;
+
+			const pending = [];
+
+			for ( let i = 0, il = primitives.length; i < il; i ++ ) {
+
+				const material = primitives[ i ].material === undefined
+					? createDefaultMaterial( this.cache )
+					: this.getDependency( 'material', primitives[ i ].material );
+
+				pending.push( material );
+
+			}
+
+			pending.push( parser.loadGeometries( primitives ) );
+
+			return Promise.all( pending ).then( function ( results ) {
+
+				const materials = results.slice( 0, results.length - 1 );
+				const geometries = results[ results.length - 1 ];
+
+				const meshes = [];
+
+				for ( let i = 0, il = geometries.length; i < il; i ++ ) {
+
+					const geometry = geometries[ i ];
+					const primitive = primitives[ i ];
+
+					// 1. create Mesh
+
+					let mesh;
+
+					const material = materials[ i ];
+
+					if ( primitive.mode === WEBGL_CONSTANTS.TRIANGLES ||
+							primitive.mode === WEBGL_CONSTANTS.TRIANGLE_STRIP ||
+							primitive.mode === WEBGL_CONSTANTS.TRIANGLE_FAN ||
+							primitive.mode === undefined ) {
+
+						// .isSkinnedMesh isn't in glTF spec. See ._markDefs()
+						mesh = meshDef.isSkinnedMesh === true
+							? new SkinnedMesh( geometry, material )
+							: new Mesh( geometry, material );
+
+						if ( mesh.isSkinnedMesh === true && ! mesh.geometry.attributes.skinWeight.normalized ) {
+
+							// we normalize floating point skin weight array to fix malformed assets (see #15319)
+							// it's important to skip this for non-float32 data since normalizeSkinWeights assumes non-normalized inputs
+							mesh.normalizeSkinWeights();
+
+						}
+
+						if ( primitive.mode === WEBGL_CONSTANTS.TRIANGLE_STRIP ) {
+
+							mesh.geometry = toTrianglesDrawMode( mesh.geometry, TriangleStripDrawMode );
+
+						} else if ( primitive.mode === WEBGL_CONSTANTS.TRIANGLE_FAN ) {
+
+							mesh.geometry = toTrianglesDrawMode( mesh.geometry, TriangleFanDrawMode );
+
+						}
+
+					} else if ( primitive.mode === WEBGL_CONSTANTS.LINES ) {
+
+						mesh = new LineSegments( geometry, material );
+
+					} else if ( primitive.mode === WEBGL_CONSTANTS.LINE_STRIP ) {
+
+						mesh = new Line( geometry, material );
+
+					} else if ( primitive.mode === WEBGL_CONSTANTS.LINE_LOOP ) {
+
+						mesh = new LineLoop( geometry, material );
+
+					} else if ( primitive.mode === WEBGL_CONSTANTS.POINTS ) {
+
+						mesh = new Points( geometry, material );
+
+					} else {
+
+						throw new Error( 'THREE.GLTFLoader: Primitive mode unsupported: ' + primitive.mode );
+
+					}
+
+					if ( Object.keys( mesh.geometry.morphAttributes ).length > 0 ) {
+
+						updateMorphTargets( mesh, meshDef );
+
+					}
+
+					mesh.name = parser.createUniqueName( meshDef.name || ( 'mesh_' + meshIndex ) );
+
+					assignExtrasToUserData( mesh, meshDef );
+
+					if ( primitive.extensions ) addUnknownExtensionsToUserData( extensions, mesh, primitive );
+
+					parser.assignFinalMaterial( mesh );
+
+					meshes.push( mesh );
+
+				}
+
+				if ( meshes.length === 1 ) {
+
+					return meshes[ 0 ];
+
+				}
+
+				const group = new Group();
+
+				for ( let i = 0, il = meshes.length; i < il; i ++ ) {
+
+					group.add( meshes[ i ] );
+
+				}
+
+				return group;
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#cameras
+		 * @param {number} cameraIndex
+		 * @return {Promise<THREE.Camera>}
+		 */
+		loadCamera( cameraIndex ) {
+
+			let camera;
+			const cameraDef = this.json.cameras[ cameraIndex ];
+			const params = cameraDef[ cameraDef.type ];
+
+			if ( ! params ) {
+
+				console.warn( 'THREE.GLTFLoader: Missing camera parameters.' );
+				return;
+
+			}
+
+			if ( cameraDef.type === 'perspective' ) {
+
+				camera = new PerspectiveCamera( MathUtils.radToDeg( params.yfov ), params.aspectRatio || 1, params.znear || 1, params.zfar || 2e6 );
+
+			} else if ( cameraDef.type === 'orthographic' ) {
+
+				camera = new OrthographicCamera( - params.xmag, params.xmag, params.ymag, - params.ymag, params.znear, params.zfar );
+
+			}
+
+			if ( cameraDef.name ) camera.name = this.createUniqueName( cameraDef.name );
+
+			assignExtrasToUserData( camera, cameraDef );
+
+			return Promise.resolve( camera );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#skins
+		 * @param {number} skinIndex
+		 * @return {Promise<Object>}
+		 */
+		loadSkin( skinIndex ) {
+
+			const skinDef = this.json.skins[ skinIndex ];
+
+			const skinEntry = { joints: skinDef.joints };
+
+			if ( skinDef.inverseBindMatrices === undefined ) {
+
+				return Promise.resolve( skinEntry );
+
+			}
+
+			return this.getDependency( 'accessor', skinDef.inverseBindMatrices ).then( function ( accessor ) {
+
+				skinEntry.inverseBindMatrices = accessor;
+
+				return skinEntry;
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#animations
+		 * @param {number} animationIndex
+		 * @return {Promise<AnimationClip>}
+		 */
+		loadAnimation( animationIndex ) {
+
+			const json = this.json;
+
+			const animationDef = json.animations[ animationIndex ];
+
+			const pendingNodes = [];
+			const pendingInputAccessors = [];
+			const pendingOutputAccessors = [];
+			const pendingSamplers = [];
+			const pendingTargets = [];
+
+			for ( let i = 0, il = animationDef.channels.length; i < il; i ++ ) {
+
+				const channel = animationDef.channels[ i ];
+				const sampler = animationDef.samplers[ channel.sampler ];
+				const target = channel.target;
+				const name = target.node !== undefined ? target.node : target.id; // NOTE: target.id is deprecated.
+				const input = animationDef.parameters !== undefined ? animationDef.parameters[ sampler.input ] : sampler.input;
+				const output = animationDef.parameters !== undefined ? animationDef.parameters[ sampler.output ] : sampler.output;
+
+				pendingNodes.push( this.getDependency( 'node', name ) );
+				pendingInputAccessors.push( this.getDependency( 'accessor', input ) );
+				pendingOutputAccessors.push( this.getDependency( 'accessor', output ) );
+				pendingSamplers.push( sampler );
+				pendingTargets.push( target );
+
+			}
+
+			return Promise.all( [
+
+				Promise.all( pendingNodes ),
+				Promise.all( pendingInputAccessors ),
+				Promise.all( pendingOutputAccessors ),
+				Promise.all( pendingSamplers ),
+				Promise.all( pendingTargets )
+
+			] ).then( function ( dependencies ) {
+
+				const nodes = dependencies[ 0 ];
+				const inputAccessors = dependencies[ 1 ];
+				const outputAccessors = dependencies[ 2 ];
+				const samplers = dependencies[ 3 ];
+				const targets = dependencies[ 4 ];
+
+				const tracks = [];
+
+				for ( let i = 0, il = nodes.length; i < il; i ++ ) {
+
+					const node = nodes[ i ];
+					const inputAccessor = inputAccessors[ i ];
+					const outputAccessor = outputAccessors[ i ];
+					const sampler = samplers[ i ];
+					const target = targets[ i ];
+
+					if ( node === undefined ) continue;
+
+					node.updateMatrix();
+					node.matrixAutoUpdate = true;
+
+					let TypedKeyframeTrack;
+
+					switch ( PATH_PROPERTIES[ target.path ] ) {
+
+						case PATH_PROPERTIES.weights:
+
+							TypedKeyframeTrack = NumberKeyframeTrack;
+							break;
+
+						case PATH_PROPERTIES.rotation:
+
+							TypedKeyframeTrack = QuaternionKeyframeTrack;
+							break;
+
+						case PATH_PROPERTIES.position:
+						case PATH_PROPERTIES.scale:
+						default:
+
+							TypedKeyframeTrack = VectorKeyframeTrack;
+							break;
+
+					}
+
+					const targetName = node.name ? node.name : node.uuid;
+
+					const interpolation = sampler.interpolation !== undefined ? INTERPOLATION[ sampler.interpolation ] : InterpolateLinear;
+
+					const targetNames = [];
+
+					if ( PATH_PROPERTIES[ target.path ] === PATH_PROPERTIES.weights ) {
+
+						// Node may be a Group (glTF mesh with several primitives) or a Mesh.
+						node.traverse( function ( object ) {
+
+							if ( object.isMesh === true && object.morphTargetInfluences ) {
+
+								targetNames.push( object.name ? object.name : object.uuid );
+
+							}
+
+						} );
+
+					} else {
+
+						targetNames.push( targetName );
+
+					}
+
+					let outputArray = outputAccessor.array;
+
+					if ( outputAccessor.normalized ) {
+
+						const scale = getNormalizedComponentScale( outputArray.constructor );
+						const scaled = new Float32Array( outputArray.length );
+
+						for ( let j = 0, jl = outputArray.length; j < jl; j ++ ) {
+
+							scaled[ j ] = outputArray[ j ] * scale;
+
+						}
+
+						outputArray = scaled;
+
+					}
+
+					for ( let j = 0, jl = targetNames.length; j < jl; j ++ ) {
+
+						const track = new TypedKeyframeTrack(
+							targetNames[ j ] + '.' + PATH_PROPERTIES[ target.path ],
+							inputAccessor.array,
+							outputArray,
+							interpolation
+						);
+
+						// Override interpolation with custom factory method.
+						if ( sampler.interpolation === 'CUBICSPLINE' ) {
+
+							track.createInterpolant = function InterpolantFactoryMethodGLTFCubicSpline( result ) {
+
+								// A CUBICSPLINE keyframe in glTF has three output values for each input value,
+								// representing inTangent, splineVertex, and outTangent. As a result, track.getValueSize()
+								// must be divided by three to get the interpolant's sampleSize argument.
+
+								return new GLTFCubicSplineInterpolant( this.times, this.values, this.getValueSize() / 3, result );
+
+							};
+
+							// Mark as CUBICSPLINE. `track.getInterpolation()` doesn't support custom interpolants.
+							track.createInterpolant.isInterpolantFactoryMethodGLTFCubicSpline = true;
+
+						}
+
+						tracks.push( track );
+
+					}
+
+				}
+
+				const name = animationDef.name ? animationDef.name : 'animation_' + animationIndex;
+
+				return new AnimationClip( name, undefined, tracks );
+
+			} );
+
+		}
+
+		createNodeMesh( nodeIndex ) {
+
+			const json = this.json;
+			const parser = this;
+			const nodeDef = json.nodes[ nodeIndex ];
+
+			if ( nodeDef.mesh === undefined ) return null;
+
+			return parser.getDependency( 'mesh', nodeDef.mesh ).then( function ( mesh ) {
+
+				const node = parser._getNodeRef( parser.meshCache, nodeDef.mesh, mesh );
+
+				// if weights are provided on the node, override weights on the mesh.
+				if ( nodeDef.weights !== undefined ) {
+
+					node.traverse( function ( o ) {
+
+						if ( ! o.isMesh ) return;
+
+						for ( let i = 0, il = nodeDef.weights.length; i < il; i ++ ) {
+
+							o.morphTargetInfluences[ i ] = nodeDef.weights[ i ];
+
+						}
+
+					} );
+
+				}
+
+				return node;
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#nodes-and-hierarchy
+		 * @param {number} nodeIndex
+		 * @return {Promise<Object3D>}
+		 */
+		loadNode( nodeIndex ) {
+
+			const json = this.json;
+			const extensions = this.extensions;
+			const parser = this;
+
+			const nodeDef = json.nodes[ nodeIndex ];
+
+			// reserve node's name before its dependencies, so the root has the intended name.
+			const nodeName = nodeDef.name ? parser.createUniqueName( nodeDef.name ) : '';
+
+			return ( function () {
+
+				const pending = [];
+
+				const meshPromise = parser._invokeOne( function ( ext ) {
+
+					return ext.createNodeMesh && ext.createNodeMesh( nodeIndex );
+
+				} );
+
+				if ( meshPromise ) {
+
+					pending.push( meshPromise );
+
+				}
+
+				if ( nodeDef.camera !== undefined ) {
+
+					pending.push( parser.getDependency( 'camera', nodeDef.camera ).then( function ( camera ) {
+
+						return parser._getNodeRef( parser.cameraCache, nodeDef.camera, camera );
+
+					} ) );
+
+				}
+
+				parser._invokeAll( function ( ext ) {
+
+					return ext.createNodeAttachment && ext.createNodeAttachment( nodeIndex );
+
+				} ).forEach( function ( promise ) {
+
+					pending.push( promise );
+
+				} );
+
+				return Promise.all( pending );
+
+			}() ).then( function ( objects ) {
+
+				let node;
+
+				// .isBone isn't in glTF spec. See ._markDefs
+				if ( nodeDef.isBone === true ) {
+
+					node = new Bone();
+
+				} else if ( objects.length > 1 ) {
+
+					node = new Group();
+
+				} else if ( objects.length === 1 ) {
+
+					node = objects[ 0 ];
+
+				} else {
+
+					node = new Object3D();
+
+				}
+
+				if ( node !== objects[ 0 ] ) {
+
+					for ( let i = 0, il = objects.length; i < il; i ++ ) {
+
+						node.add( objects[ i ] );
+
+					}
+
+				}
+
+				if ( nodeDef.name ) {
+
+					node.userData.name = nodeDef.name;
+					node.name = nodeName;
+
+				}
+
+				assignExtrasToUserData( node, nodeDef );
+
+				if ( nodeDef.extensions ) addUnknownExtensionsToUserData( extensions, node, nodeDef );
+
+				if ( nodeDef.matrix !== undefined ) {
+
+					const matrix = new Matrix4();
+					matrix.fromArray( nodeDef.matrix );
+					node.applyMatrix4( matrix );
+
+				} else {
+
+					if ( nodeDef.translation !== undefined ) {
+
+						node.position.fromArray( nodeDef.translation );
+
+					}
+
+					if ( nodeDef.rotation !== undefined ) {
+
+						node.quaternion.fromArray( nodeDef.rotation );
+
+					}
+
+					if ( nodeDef.scale !== undefined ) {
+
+						node.scale.fromArray( nodeDef.scale );
+
+					}
+
+				}
+
+				parser.associations.set( node, { type: 'nodes', index: nodeIndex } );
+
+				return node;
+
+			} );
+
+		}
+
+		/**
+		 * Specification: https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#scenes
+		 * @param {number} sceneIndex
+		 * @return {Promise<Group>}
+		 */
+		loadScene( sceneIndex ) {
+
+			const json = this.json;
+			const extensions = this.extensions;
+			const sceneDef = this.json.scenes[ sceneIndex ];
+			const parser = this;
+
+			// Loader returns Group, not Scene.
+			// See: https://github.com/mrdoob/three.js/issues/18342#issuecomment-578981172
+			const scene = new Group();
+			if ( sceneDef.name ) scene.name = parser.createUniqueName( sceneDef.name );
+
+			assignExtrasToUserData( scene, sceneDef );
+
+			if ( sceneDef.extensions ) addUnknownExtensionsToUserData( extensions, scene, sceneDef );
+
+			const nodeIds = sceneDef.nodes || [];
+
+			const pending = [];
+
+			for ( let i = 0, il = nodeIds.length; i < il; i ++ ) {
+
+				pending.push( buildNodeHierachy( nodeIds[ i ], scene, json, parser ) );
+
+			}
+
+			return Promise.all( pending ).then( function () {
+
+				return scene;
+
+			} );
+
+		}
+
+	}
+
+	function buildNodeHierachy( nodeId, parentObject, json, parser ) {
+
+		const nodeDef = json.nodes[ nodeId ];
+
+		return parser.getDependency( 'node', nodeId ).then( function ( node ) {
+
+			if ( nodeDef.skin === undefined ) return node;
+
+			// build skeleton here as well
+
+			let skinEntry;
+
+			return parser.getDependency( 'skin', nodeDef.skin ).then( function ( skin ) {
+
+				skinEntry = skin;
+
+				const pendingJoints = [];
+
+				for ( let i = 0, il = skinEntry.joints.length; i < il; i ++ ) {
+
+					pendingJoints.push( parser.getDependency( 'node', skinEntry.joints[ i ] ) );
+
+				}
+
+				return Promise.all( pendingJoints );
+
+			} ).then( function ( jointNodes ) {
+
+				node.traverse( function ( mesh ) {
+
+					if ( ! mesh.isMesh ) return;
+
+					const bones = [];
+					const boneInverses = [];
+
+					for ( let j = 0, jl = jointNodes.length; j < jl; j ++ ) {
+
+						const jointNode = jointNodes[ j ];
+
+						if ( jointNode ) {
+
+							bones.push( jointNode );
+
+							const mat = new Matrix4();
+
+							if ( skinEntry.inverseBindMatrices !== undefined ) {
+
+								mat.fromArray( skinEntry.inverseBindMatrices.array, j * 16 );
+
+							}
+
+							boneInverses.push( mat );
+
+						} else {
+
+							console.warn( 'THREE.GLTFLoader: Joint "%s" could not be found.', skinEntry.joints[ j ] );
+
+						}
+
+					}
+
+					mesh.bind( new Skeleton( bones, boneInverses ), mesh.matrixWorld );
+
+				} );
+
+				return node;
+
+			} );
+
+		} ).then( function ( node ) {
+
+			// build node hierachy
+
+			parentObject.add( node );
+
+			const pending = [];
+
+			if ( nodeDef.children ) {
+
+				const children = nodeDef.children;
+
+				for ( let i = 0, il = children.length; i < il; i ++ ) {
+
+					const child = children[ i ];
+					pending.push( buildNodeHierachy( child, node, json, parser ) );
+
+				}
+
+			}
+
+			return Promise.all( pending );
+
+		} );
+
+	}
+
+	/**
+	 * @param {BufferGeometry} geometry
+	 * @param {GLTF.Primitive} primitiveDef
+	 * @param {GLTFParser} parser
+	 */
+	function computeBounds( geometry, primitiveDef, parser ) {
+
+		const attributes = primitiveDef.attributes;
+
+		const box = new Box3();
+
+		if ( attributes.POSITION !== undefined ) {
+
+			const accessor = parser.json.accessors[ attributes.POSITION ];
+
+			const min = accessor.min;
+			const max = accessor.max;
+
+			// glTF requires 'min' and 'max', but VRM (which extends glTF) currently ignores that requirement.
+
+			if ( min !== undefined && max !== undefined ) {
+
+				box.set(
+					new Vector3( min[ 0 ], min[ 1 ], min[ 2 ] ),
+					new Vector3( max[ 0 ], max[ 1 ], max[ 2 ] )
+				);
+
+				if ( accessor.normalized ) {
+
+					const boxScale = getNormalizedComponentScale( WEBGL_COMPONENT_TYPES[ accessor.componentType ] );
+					box.min.multiplyScalar( boxScale );
+					box.max.multiplyScalar( boxScale );
+
+				}
+
+			} else {
+
+				console.warn( 'THREE.GLTFLoader: Missing min/max properties for accessor POSITION.' );
+
+				return;
+
+			}
+
+		} else {
+
+			return;
+
+		}
+
+		const targets = primitiveDef.targets;
+
+		if ( targets !== undefined ) {
+
+			const maxDisplacement = new Vector3();
+			const vector = new Vector3();
+
+			for ( let i = 0, il = targets.length; i < il; i ++ ) {
+
+				const target = targets[ i ];
+
+				if ( target.POSITION !== undefined ) {
+
+					const accessor = parser.json.accessors[ target.POSITION ];
+					const min = accessor.min;
+					const max = accessor.max;
+
+					// glTF requires 'min' and 'max', but VRM (which extends glTF) currently ignores that requirement.
+
+					if ( min !== undefined && max !== undefined ) {
+
+						// we need to get max of absolute components because target weight is [-1,1]
+						vector.setX( Math.max( Math.abs( min[ 0 ] ), Math.abs( max[ 0 ] ) ) );
+						vector.setY( Math.max( Math.abs( min[ 1 ] ), Math.abs( max[ 1 ] ) ) );
+						vector.setZ( Math.max( Math.abs( min[ 2 ] ), Math.abs( max[ 2 ] ) ) );
+
+
+						if ( accessor.normalized ) {
+
+							const boxScale = getNormalizedComponentScale( WEBGL_COMPONENT_TYPES[ accessor.componentType ] );
+							vector.multiplyScalar( boxScale );
+
+						}
+
+						// Note: this assumes that the sum of all weights is at most 1. This isn't quite correct - it's more conservative
+						// to assume that each target can have a max weight of 1. However, for some use cases - notably, when morph targets
+						// are used to implement key-frame animations and as such only two are active at a time - this results in very large
+						// boxes. So for now we make a box that's sometimes a touch too small but is hopefully mostly of reasonable size.
+						maxDisplacement.max( vector );
+
+					} else {
+
+						console.warn( 'THREE.GLTFLoader: Missing min/max properties for accessor POSITION.' );
+
+					}
+
+				}
+
+			}
+
+			// As per comment above this box isn't conservative, but has a reasonable size for a very large number of morph targets.
+			box.expandByVector( maxDisplacement );
+
+		}
+
+		geometry.boundingBox = box;
+
+		const sphere = new Sphere();
+
+		box.getCenter( sphere.center );
+		sphere.radius = box.min.distanceTo( box.max ) / 2;
+
+		geometry.boundingSphere = sphere;
+
+	}
+
+	/**
+	 * @param {BufferGeometry} geometry
+	 * @param {GLTF.Primitive} primitiveDef
+	 * @param {GLTFParser} parser
+	 * @return {Promise<BufferGeometry>}
+	 */
+	function addPrimitiveAttributes( geometry, primitiveDef, parser ) {
+
+		const attributes = primitiveDef.attributes;
+
+		const pending = [];
+
+		function assignAttributeAccessor( accessorIndex, attributeName ) {
+
+			return parser.getDependency( 'accessor', accessorIndex )
+				.then( function ( accessor ) {
+
+					geometry.setAttribute( attributeName, accessor );
+
+				} );
+
+		}
+
+		for ( const gltfAttributeName in attributes ) {
+
+			const threeAttributeName = ATTRIBUTES[ gltfAttributeName ] || gltfAttributeName.toLowerCase();
+
+			// Skip attributes already provided by e.g. Draco extension.
+			if ( threeAttributeName in geometry.attributes ) continue;
+
+			pending.push( assignAttributeAccessor( attributes[ gltfAttributeName ], threeAttributeName ) );
+
+		}
+
+		if ( primitiveDef.indices !== undefined && ! geometry.index ) {
+
+			const accessor = parser.getDependency( 'accessor', primitiveDef.indices ).then( function ( accessor ) {
+
+				geometry.setIndex( accessor );
+
+			} );
+
+			pending.push( accessor );
+
+		}
+
+		assignExtrasToUserData( geometry, primitiveDef );
+
+		computeBounds( geometry, primitiveDef, parser );
+
+		return Promise.all( pending ).then( function () {
+
+			return primitiveDef.targets !== undefined
+				? addMorphTargets( geometry, primitiveDef.targets, parser )
+				: geometry;
+
+		} );
+
+	}
+
+	/**
+	 * @param {BufferGeometry} geometry
+	 * @param {Number} drawMode
+	 * @return {BufferGeometry}
+	 */
+	function toTrianglesDrawMode( geometry, drawMode ) {
+
+		let index = geometry.getIndex();
+
+		// generate index if not present
+
+		if ( index === null ) {
+
+			const indices = [];
+
+			const position = geometry.getAttribute( 'position' );
+
+			if ( position !== undefined ) {
+
+				for ( let i = 0; i < position.count; i ++ ) {
+
+					indices.push( i );
+
+				}
+
+				geometry.setIndex( indices );
+				index = geometry.getIndex();
+
+			} else {
+
+				console.error( 'THREE.GLTFLoader.toTrianglesDrawMode(): Undefined position attribute. Processing not possible.' );
+				return geometry;
+
+			}
+
+		}
+
+		//
+
+		const numberOfTriangles = index.count - 2;
+		const newIndices = [];
+
+		if ( drawMode === TriangleFanDrawMode ) {
+
+			// gl.TRIANGLE_FAN
+
+			for ( let i = 1; i <= numberOfTriangles; i ++ ) {
+
+				newIndices.push( index.getX( 0 ) );
+				newIndices.push( index.getX( i ) );
+				newIndices.push( index.getX( i + 1 ) );
+
+			}
+
+		} else {
+
+			// gl.TRIANGLE_STRIP
+
+			for ( let i = 0; i < numberOfTriangles; i ++ ) {
+
+				if ( i % 2 === 0 ) {
+
+					newIndices.push( index.getX( i ) );
+					newIndices.push( index.getX( i + 1 ) );
+					newIndices.push( index.getX( i + 2 ) );
+
+
+				} else {
+
+					newIndices.push( index.getX( i + 2 ) );
+					newIndices.push( index.getX( i + 1 ) );
+					newIndices.push( index.getX( i ) );
+
+				}
+
+			}
+
+		}
+
+		if ( ( newIndices.length / 3 ) !== numberOfTriangles ) {
+
+			console.error( 'THREE.GLTFLoader.toTrianglesDrawMode(): Unable to generate correct amount of triangles.' );
+
+		}
+
+		// build final geometry
+
+		const newGeometry = geometry.clone();
+		newGeometry.setIndex( newIndices );
+
+		return newGeometry;
+
+	}
+
+	/**
+	 * @webxr-input-profiles/motion-controllers 1.0.0 https://github.com/immersive-web/webxr-input-profiles
+	 */
+
+	const Constants = {
+	  Handedness: Object.freeze({
+	    NONE: 'none',
+	    LEFT: 'left',
+	    RIGHT: 'right'
+	  }),
+
+	  ComponentState: Object.freeze({
+	    DEFAULT: 'default',
+	    TOUCHED: 'touched',
+	    PRESSED: 'pressed'
+	  }),
+
+	  ComponentProperty: Object.freeze({
+	    BUTTON: 'button',
+	    X_AXIS: 'xAxis',
+	    Y_AXIS: 'yAxis',
+	    STATE: 'state'
+	  }),
+
+	  ComponentType: Object.freeze({
+	    TRIGGER: 'trigger',
+	    SQUEEZE: 'squeeze',
+	    TOUCHPAD: 'touchpad',
+	    THUMBSTICK: 'thumbstick',
+	    BUTTON: 'button'
+	  }),
+
+	  ButtonTouchThreshold: 0.05,
+
+	  AxisTouchThreshold: 0.1,
+
+	  VisualResponseProperty: Object.freeze({
+	    TRANSFORM: 'transform',
+	    VISIBILITY: 'visibility'
+	  })
+	};
+
+	/**
+	 * @description Static helper function to fetch a JSON file and turn it into a JS object
+	 * @param {string} path - Path to JSON file to be fetched
+	 */
+	async function fetchJsonFile(path) {
+	  const response = await fetch(path);
+	  if (!response.ok) {
+	    throw new Error(response.statusText);
+	  } else {
+	    return response.json();
+	  }
+	}
+
+	async function fetchProfilesList(basePath) {
+	  if (!basePath) {
+	    throw new Error('No basePath supplied');
+	  }
+
+	  const profileListFileName = 'profilesList.json';
+	  const profilesList = await fetchJsonFile(`${basePath}/${profileListFileName}`);
+	  return profilesList;
+	}
+
+	async function fetchProfile(xrInputSource, basePath, defaultProfile = null, getAssetPath = true) {
+	  if (!xrInputSource) {
+	    throw new Error('No xrInputSource supplied');
+	  }
+
+	  if (!basePath) {
+	    throw new Error('No basePath supplied');
+	  }
+
+	  // Get the list of profiles
+	  const supportedProfilesList = await fetchProfilesList(basePath);
+
+	  // Find the relative path to the first requested profile that is recognized
+	  let match;
+	  xrInputSource.profiles.some((profileId) => {
+	    const supportedProfile = supportedProfilesList[profileId];
+	    if (supportedProfile) {
+	      match = {
+	        profileId,
+	        profilePath: `${basePath}/${supportedProfile.path}`,
+	        deprecated: !!supportedProfile.deprecated
+	      };
+	    }
+	    return !!match;
+	  });
+
+	  if (!match) {
+	    if (!defaultProfile) {
+	      throw new Error('No matching profile name found');
+	    }
+
+	    const supportedProfile = supportedProfilesList[defaultProfile];
+	    if (!supportedProfile) {
+	      throw new Error(`No matching profile name found and default profile "${defaultProfile}" missing.`);
+	    }
+
+	    match = {
+	      profileId: defaultProfile,
+	      profilePath: `${basePath}/${supportedProfile.path}`,
+	      deprecated: !!supportedProfile.deprecated
+	    };
+	  }
+
+	  const profile = await fetchJsonFile(match.profilePath);
+
+	  let assetPath;
+	  if (getAssetPath) {
+	    let layout;
+	    if (xrInputSource.handedness === 'any') {
+	      layout = profile.layouts[Object.keys(profile.layouts)[0]];
+	    } else {
+	      layout = profile.layouts[xrInputSource.handedness];
+	    }
+	    if (!layout) {
+	      throw new Error(
+	        `No matching handedness, ${xrInputSource.handedness}, in profile ${match.profileId}`
+	      );
+	    }
+
+	    if (layout.assetPath) {
+	      assetPath = match.profilePath.replace('profile.json', layout.assetPath);
+	    }
+	  }
+
+	  return { profile, assetPath };
+	}
+
+	/** @constant {Object} */
+	const defaultComponentValues = {
+	  xAxis: 0,
+	  yAxis: 0,
+	  button: 0,
+	  state: Constants.ComponentState.DEFAULT
+	};
+
+	/**
+	 * @description Converts an X, Y coordinate from the range -1 to 1 (as reported by the Gamepad
+	 * API) to the range 0 to 1 (for interpolation). Also caps the X, Y values to be bounded within
+	 * a circle. This ensures that thumbsticks are not animated outside the bounds of their physical
+	 * range of motion and touchpads do not report touch locations off their physical bounds.
+	 * @param {number} x The original x coordinate in the range -1 to 1
+	 * @param {number} y The original y coordinate in the range -1 to 1
+	 */
+	function normalizeAxes(x = 0, y = 0) {
+	  let xAxis = x;
+	  let yAxis = y;
+
+	  // Determine if the point is outside the bounds of the circle
+	  // and, if so, place it on the edge of the circle
+	  const hypotenuse = Math.sqrt((x * x) + (y * y));
+	  if (hypotenuse > 1) {
+	    const theta = Math.atan2(y, x);
+	    xAxis = Math.cos(theta);
+	    yAxis = Math.sin(theta);
+	  }
+
+	  // Scale and move the circle so values are in the interpolation range.  The circle's origin moves
+	  // from (0, 0) to (0.5, 0.5). The circle's radius scales from 1 to be 0.5.
+	  const result = {
+	    normalizedXAxis: (xAxis * 0.5) + 0.5,
+	    normalizedYAxis: (yAxis * 0.5) + 0.5
+	  };
+	  return result;
+	}
+
+	/**
+	 * Contains the description of how the 3D model should visually respond to a specific user input.
+	 * This is accomplished by initializing the object with the name of a node in the 3D model and
+	 * property that need to be modified in response to user input, the name of the nodes representing
+	 * the allowable range of motion, and the name of the input which triggers the change. In response
+	 * to the named input changing, this object computes the appropriate weighting to use for
+	 * interpolating between the range of motion nodes.
+	 */
+	class VisualResponse {
+	  constructor(visualResponseDescription) {
+	    this.componentProperty = visualResponseDescription.componentProperty;
+	    this.states = visualResponseDescription.states;
+	    this.valueNodeName = visualResponseDescription.valueNodeName;
+	    this.valueNodeProperty = visualResponseDescription.valueNodeProperty;
+
+	    if (this.valueNodeProperty === Constants.VisualResponseProperty.TRANSFORM) {
+	      this.minNodeName = visualResponseDescription.minNodeName;
+	      this.maxNodeName = visualResponseDescription.maxNodeName;
+	    }
+
+	    // Initializes the response's current value based on default data
+	    this.value = 0;
+	    this.updateFromComponent(defaultComponentValues);
+	  }
+
+	  /**
+	   * Computes the visual response's interpolation weight based on component state
+	   * @param {Object} componentValues - The component from which to update
+	   * @param {number} xAxis - The reported X axis value of the component
+	   * @param {number} yAxis - The reported Y axis value of the component
+	   * @param {number} button - The reported value of the component's button
+	   * @param {string} state - The component's active state
+	   */
+	  updateFromComponent({
+	    xAxis, yAxis, button, state
+	  }) {
+	    const { normalizedXAxis, normalizedYAxis } = normalizeAxes(xAxis, yAxis);
+	    switch (this.componentProperty) {
+	      case Constants.ComponentProperty.X_AXIS:
+	        this.value = (this.states.includes(state)) ? normalizedXAxis : 0.5;
+	        break;
+	      case Constants.ComponentProperty.Y_AXIS:
+	        this.value = (this.states.includes(state)) ? normalizedYAxis : 0.5;
+	        break;
+	      case Constants.ComponentProperty.BUTTON:
+	        this.value = (this.states.includes(state)) ? button : 0;
+	        break;
+	      case Constants.ComponentProperty.STATE:
+	        if (this.valueNodeProperty === Constants.VisualResponseProperty.VISIBILITY) {
+	          this.value = (this.states.includes(state));
+	        } else {
+	          this.value = this.states.includes(state) ? 1.0 : 0.0;
+	        }
+	        break;
+	      default:
+	        throw new Error(`Unexpected visualResponse componentProperty ${this.componentProperty}`);
+	    }
+	  }
+	}
+
+	class Component {
+	  /**
+	   * @param {Object} componentId - Id of the component
+	   * @param {Object} componentDescription - Description of the component to be created
+	   */
+	  constructor(componentId, componentDescription) {
+	    if (!componentId
+	     || !componentDescription
+	     || !componentDescription.visualResponses
+	     || !componentDescription.gamepadIndices
+	     || Object.keys(componentDescription.gamepadIndices).length === 0) {
+	      throw new Error('Invalid arguments supplied');
+	    }
+
+	    this.id = componentId;
+	    this.type = componentDescription.type;
+	    this.rootNodeName = componentDescription.rootNodeName;
+	    this.touchPointNodeName = componentDescription.touchPointNodeName;
+
+	    // Build all the visual responses for this component
+	    this.visualResponses = {};
+	    Object.keys(componentDescription.visualResponses).forEach((responseName) => {
+	      const visualResponse = new VisualResponse(componentDescription.visualResponses[responseName]);
+	      this.visualResponses[responseName] = visualResponse;
+	    });
+
+	    // Set default values
+	    this.gamepadIndices = Object.assign({}, componentDescription.gamepadIndices);
+
+	    this.values = {
+	      state: Constants.ComponentState.DEFAULT,
+	      button: (this.gamepadIndices.button !== undefined) ? 0 : undefined,
+	      xAxis: (this.gamepadIndices.xAxis !== undefined) ? 0 : undefined,
+	      yAxis: (this.gamepadIndices.yAxis !== undefined) ? 0 : undefined
+	    };
+	  }
+
+	  get data() {
+	    const data = { id: this.id, ...this.values };
+	    return data;
+	  }
+
+	  /**
+	   * @description Poll for updated data based on current gamepad state
+	   * @param {Object} gamepad - The gamepad object from which the component data should be polled
+	   */
+	  updateFromGamepad(gamepad) {
+	    // Set the state to default before processing other data sources
+	    this.values.state = Constants.ComponentState.DEFAULT;
+
+	    // Get and normalize button
+	    if (this.gamepadIndices.button !== undefined
+	        && gamepad.buttons.length > this.gamepadIndices.button) {
+	      const gamepadButton = gamepad.buttons[this.gamepadIndices.button];
+	      this.values.button = gamepadButton.value;
+	      this.values.button = (this.values.button < 0) ? 0 : this.values.button;
+	      this.values.button = (this.values.button > 1) ? 1 : this.values.button;
+
+	      // Set the state based on the button
+	      if (gamepadButton.pressed || this.values.button === 1) {
+	        this.values.state = Constants.ComponentState.PRESSED;
+	      } else if (gamepadButton.touched || this.values.button > Constants.ButtonTouchThreshold) {
+	        this.values.state = Constants.ComponentState.TOUCHED;
+	      }
+	    }
+
+	    // Get and normalize x axis value
+	    if (this.gamepadIndices.xAxis !== undefined
+	        && gamepad.axes.length > this.gamepadIndices.xAxis) {
+	      this.values.xAxis = gamepad.axes[this.gamepadIndices.xAxis];
+	      this.values.xAxis = (this.values.xAxis < -1) ? -1 : this.values.xAxis;
+	      this.values.xAxis = (this.values.xAxis > 1) ? 1 : this.values.xAxis;
+
+	      // If the state is still default, check if the xAxis makes it touched
+	      if (this.values.state === Constants.ComponentState.DEFAULT
+	        && Math.abs(this.values.xAxis) > Constants.AxisTouchThreshold) {
+	        this.values.state = Constants.ComponentState.TOUCHED;
+	      }
+	    }
+
+	    // Get and normalize Y axis value
+	    if (this.gamepadIndices.yAxis !== undefined
+	        && gamepad.axes.length > this.gamepadIndices.yAxis) {
+	      this.values.yAxis = gamepad.axes[this.gamepadIndices.yAxis];
+	      this.values.yAxis = (this.values.yAxis < -1) ? -1 : this.values.yAxis;
+	      this.values.yAxis = (this.values.yAxis > 1) ? 1 : this.values.yAxis;
+
+	      // If the state is still default, check if the yAxis makes it touched
+	      if (this.values.state === Constants.ComponentState.DEFAULT
+	        && Math.abs(this.values.yAxis) > Constants.AxisTouchThreshold) {
+	        this.values.state = Constants.ComponentState.TOUCHED;
+	      }
+	    }
+
+	    // Update the visual response weights based on the current component data
+	    Object.values(this.visualResponses).forEach((visualResponse) => {
+	      visualResponse.updateFromComponent(this.values);
+	    });
+	  }
+	}
+
+	/**
+	  * @description Builds a motion controller with components and visual responses based on the
+	  * supplied profile description. Data is polled from the xrInputSource's gamepad.
+	  * @author Nell Waliczek / https://github.com/NellWaliczek
+	*/
+	class MotionController {
+	  /**
+	   * @param {Object} xrInputSource - The XRInputSource to build the MotionController around
+	   * @param {Object} profile - The best matched profile description for the supplied xrInputSource
+	   * @param {Object} assetUrl
+	   */
+	  constructor(xrInputSource, profile, assetUrl) {
+	    if (!xrInputSource) {
+	      throw new Error('No xrInputSource supplied');
+	    }
+
+	    if (!profile) {
+	      throw new Error('No profile supplied');
+	    }
+
+	    this.xrInputSource = xrInputSource;
+	    this.assetUrl = assetUrl;
+	    this.id = profile.profileId;
+
+	    // Build child components as described in the profile description
+	    this.layoutDescription = profile.layouts[xrInputSource.handedness];
+	    this.components = {};
+	    Object.keys(this.layoutDescription.components).forEach((componentId) => {
+	      const componentDescription = this.layoutDescription.components[componentId];
+	      this.components[componentId] = new Component(componentId, componentDescription);
+	    });
+
+	    // Initialize components based on current gamepad state
+	    this.updateFromGamepad();
+	  }
+
+	  get gripSpace() {
+	    return this.xrInputSource.gripSpace;
+	  }
+
+	  get targetRaySpace() {
+	    return this.xrInputSource.targetRaySpace;
+	  }
+
+	  /**
+	   * @description Returns a subset of component data for simplified debugging
+	   */
+	  get data() {
+	    const data = [];
+	    Object.values(this.components).forEach((component) => {
+	      data.push(component.data);
+	    });
+	    return data;
+	  }
+
+	  /**
+	   * @description Poll for updated data based on current gamepad state
+	   */
+	  updateFromGamepad() {
+	    Object.values(this.components).forEach((component) => {
+	      component.updateFromGamepad(this.xrInputSource.gamepad);
+	    });
+	  }
+	}
+
+	const DEFAULT_PROFILES_PATH = 'https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles';
+	const DEFAULT_PROFILE = 'generic-trigger';
+
+	class XRControllerModel extends Object3D {
+
+		constructor() {
+
+			super();
+
+			this.motionController = null;
+			this.envMap = null;
+
+		}
+
+		setEnvironmentMap( envMap ) {
+
+			if ( this.envMap == envMap ) {
+
+				return this;
+
+			}
+
+			this.envMap = envMap;
+			this.traverse( ( child ) => {
+
+				if ( child.isMesh ) {
+
+					child.material.envMap = this.envMap;
+					child.material.needsUpdate = true;
+
+				}
+
+			} );
+
+			return this;
+
+		}
+
+		/**
+		 * Polls data from the XRInputSource and updates the model's components to match
+		 * the real world data
+		 */
+		updateMatrixWorld( force ) {
+
+			super.updateMatrixWorld( force );
+
+			if ( ! this.motionController ) return;
+
+			// Cause the MotionController to poll the Gamepad for data
+			this.motionController.updateFromGamepad();
+
+			// Update the 3D model to reflect the button, thumbstick, and touchpad state
+			Object.values( this.motionController.components ).forEach( ( component ) => {
+
+				// Update node data based on the visual responses' current states
+				Object.values( component.visualResponses ).forEach( ( visualResponse ) => {
+
+					const { valueNode, minNode, maxNode, value, valueNodeProperty } = visualResponse;
+
+					// Skip if the visual response node is not found. No error is needed,
+					// because it will have been reported at load time.
+					if ( ! valueNode ) return;
+
+					// Calculate the new properties based on the weight supplied
+					if ( valueNodeProperty === Constants.VisualResponseProperty.VISIBILITY ) {
+
+						valueNode.visible = value;
+
+					} else if ( valueNodeProperty === Constants.VisualResponseProperty.TRANSFORM ) {
+
+						valueNode.quaternion.slerpQuaternions(
+							minNode.quaternion,
+							maxNode.quaternion,
+							value
+						);
+
+						valueNode.position.lerpVectors(
+							minNode.position,
+							maxNode.position,
+							value
+						);
+
+					}
+
+				} );
+
+			} );
+
+		}
+
+	}
+
+	/**
+	 * Walks the model's tree to find the nodes needed to animate the components and
+	 * saves them to the motionContoller components for use in the frame loop. When
+	 * touchpads are found, attaches a touch dot to them.
+	 */
+	function findNodes( motionController, scene ) {
+
+		// Loop through the components and find the nodes needed for each components' visual responses
+		Object.values( motionController.components ).forEach( ( component ) => {
+
+			const { type, touchPointNodeName, visualResponses } = component;
+
+			if ( type === Constants.ComponentType.TOUCHPAD ) {
+
+				component.touchPointNode = scene.getObjectByName( touchPointNodeName );
+				if ( component.touchPointNode ) {
+
+					// Attach a touch dot to the touchpad.
+					const sphereGeometry = new SphereGeometry( 0.001 );
+					const material = new MeshBasicMaterial( { color: 0x0000FF } );
+					const sphere = new Mesh( sphereGeometry, material );
+					component.touchPointNode.add( sphere );
+
+				} else {
+
+					console.warn( `Could not find touch dot, ${component.touchPointNodeName}, in touchpad component ${component.id}` );
+
+				}
+
+			}
+
+			// Loop through all the visual responses to be applied to this component
+			Object.values( visualResponses ).forEach( ( visualResponse ) => {
+
+				const { valueNodeName, minNodeName, maxNodeName, valueNodeProperty } = visualResponse;
+
+				// If animating a transform, find the two nodes to be interpolated between.
+				if ( valueNodeProperty === Constants.VisualResponseProperty.TRANSFORM ) {
+
+					visualResponse.minNode = scene.getObjectByName( minNodeName );
+					visualResponse.maxNode = scene.getObjectByName( maxNodeName );
+
+					// If the extents cannot be found, skip this animation
+					if ( ! visualResponse.minNode ) {
+
+						console.warn( `Could not find ${minNodeName} in the model` );
+						return;
+
+					}
+
+					if ( ! visualResponse.maxNode ) {
+
+						console.warn( `Could not find ${maxNodeName} in the model` );
+						return;
+
+					}
+
+				}
+
+				// If the target node cannot be found, skip this animation
+				visualResponse.valueNode = scene.getObjectByName( valueNodeName );
+				if ( ! visualResponse.valueNode ) {
+
+					console.warn( `Could not find ${valueNodeName} in the model` );
+
+				}
+
+			} );
+
+		} );
+
+	}
+
+	function addAssetSceneToControllerModel( controllerModel, scene ) {
+
+		// Find the nodes needed for animation and cache them on the motionController.
+		findNodes( controllerModel.motionController, scene );
+
+		// Apply any environment map that the mesh already has set.
+		if ( controllerModel.envMap ) {
+
+			scene.traverse( ( child ) => {
+
+				if ( child.isMesh ) {
+
+					child.material.envMap = controllerModel.envMap;
+					child.material.needsUpdate = true;
+
+				}
+
+			} );
+
+		}
+
+		// Add the glTF scene to the controllerModel.
+		controllerModel.add( scene );
+
+	}
+
+	class XRControllerModelFactory {
+
+		constructor( gltfLoader = null ) {
+
+			this.gltfLoader = gltfLoader;
+			this.path = DEFAULT_PROFILES_PATH;
+			this._assetCache = {};
+
+			// If a GLTFLoader wasn't supplied to the constructor create a new one.
+			if ( ! this.gltfLoader ) {
+
+				this.gltfLoader = new GLTFLoader();
+
+			}
+
+		}
+
+		createControllerModel( controller ) {
+
+			const controllerModel = new XRControllerModel();
+			let scene = null;
+
+			controller.addEventListener( 'connected', ( event ) => {
+
+				const xrInputSource = event.data;
+
+				if ( xrInputSource.targetRayMode !== 'tracked-pointer' || ! xrInputSource.gamepad ) return;
+
+				fetchProfile( xrInputSource, this.path, DEFAULT_PROFILE ).then( ( { profile, assetPath } ) => {
+
+					controllerModel.motionController = new MotionController(
+						xrInputSource,
+						profile,
+						assetPath
+					);
+
+					const cachedAsset = this._assetCache[ controllerModel.motionController.assetUrl ];
+					if ( cachedAsset ) {
+
+						scene = cachedAsset.scene.clone();
+
+						addAssetSceneToControllerModel( controllerModel, scene );
+
+					} else {
+
+						if ( ! this.gltfLoader ) {
+
+							throw new Error( 'GLTFLoader not set.' );
+
+						}
+
+						this.gltfLoader.setPath( '' );
+						this.gltfLoader.load( controllerModel.motionController.assetUrl, ( asset ) => {
+
+							this._assetCache[ controllerModel.motionController.assetUrl ] = asset;
+
+							scene = asset.scene.clone();
+
+							addAssetSceneToControllerModel( controllerModel, scene );
+
+						},
+						null,
+						() => {
+
+							throw new Error( `Asset ${controllerModel.motionController.assetUrl} missing or malformed.` );
+
+						} );
+
+					}
+
+				} ).catch( ( err ) => {
+
+					console.warn( err );
+
+				} );
+
+			} );
+
+			controller.addEventListener( 'disconnected', () => {
+
+				controllerModel.motionController = null;
+				controllerModel.remove( scene );
+				scene = null;
+
+			} );
+
+			return controllerModel;
+
+		}
+
+	}
+
 	function get_all_properties(obj) {
 	    let result = [];
 	    do {
@@ -54352,6 +59868,34 @@ var app = (function () {
 	    'H2O': {
 	        'geometry': new SphereGeometry( 5, 10, 10 ),
 	        'material': new MeshToonMaterial({color: 0x26a0d4})
+	    },
+	    'CO': {
+	        'geometry': new SphereGeometry( 3, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0x6e6e6e})
+	    },
+	    'O2': {
+	        'geometry': new SphereGeometry( 3, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0x3d7cff})
+	    },
+	    'Na': {
+	        'geometry': new SphereGeometry( 4, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0xc0c0c0})
+	    },
+	    'Cl': {
+	        'geometry': new SphereGeometry( 4, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0x7cfc00})
+	    },
+	    'Au': {
+	        'geometry': new SphereGeometry( 5, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0xffd700})
+	    },
+	    'Ag': {
+	        'geometry': new SphereGeometry( 4, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0xd8d8d8})
+	    },
+	    'Ca': {
+	        'geometry': new SphereGeometry( 4, 10, 10 ),
+	        'material': new MeshToonMaterial({color: 0xf5f5dc})
 	    },
 	};
 
@@ -62794,6 +68338,119 @@ var app = (function () {
 
 	}
 
+	/** Per-formula combat hooks applied on projectile hit. */
+	const MOLECULE_HIT_EFFECTS = Object.freeze({
+	    NH3: 'poison',
+	    CN: 'poison',
+	    H2O: 'splash',
+	    CH4: 'explode',
+	});
+
+	function enemy_world_pos(enemy, target = new Vector3()) {
+	    if (enemy?.getWorldPosition) {
+	        return enemy.getWorldPosition(target);
+	    }
+	    if (enemy?.mesh?.getWorldPosition) {
+	        return enemy.mesh.getWorldPosition(target);
+	    }
+	    return target.set(0, 0, 0);
+	}
+
+	function enemies_within_radius(origin_world, radius, exclude = null) {
+	    const nearby = [];
+	    const scratch = new Vector3();
+	    for (const enemy of store$3.enemies ?? []) {
+	        if (!enemy || enemy.should_delete || enemy === exclude) continue;
+	        if (enemy_world_pos(enemy, scratch).distanceTo(origin_world) <= radius) {
+	            nearby.push(enemy);
+	        }
+	    }
+	    return nearby;
+	}
+
+	function apply_poison(enemy) {
+	    if (!enemy || enemy.should_delete) return;
+	    const pulses_remaining = Array.from({ length: poison_duration }, (_, idx) => idx + 1);
+	    const poison_updater = new Updater((state, time_delta) => {
+	        if (enemy.should_delete) {
+	            return { finished: true };
+	        }
+	        let { pulses_remaining: remaining, total_time } = state;
+	        total_time += time_delta;
+	        const due = remaining.filter((pulse) => total_time >= pulse);
+	        remaining = remaining.filter((pulse) => total_time < pulse);
+	        for (let i = 0; i < due.length; i++) {
+	            enemy.take_damage(poison_pulse_damage);
+	            if (enemy.should_delete) {
+	                return { finished: true };
+	            }
+	        }
+	        if (remaining.length === 0) {
+	            return { finished: true };
+	        }
+	        return { finished: false, total_time, pulses_remaining: remaining };
+	    }, { finished: false, total_time: 0, pulses_remaining });
+	    store$3.global_updates_queue.push(poison_updater);
+	}
+
+	function apply_splash(impact_world_pos, projectile_damage, primary_enemy) {
+	    const splash_damage = Math.max(1, Math.round(projectile_damage * splash_damage_ratio));
+	    for (const enemy of enemies_within_radius(impact_world_pos, splash_radius, primary_enemy)) {
+	        enemy.take_damage(splash_damage);
+	    }
+	}
+
+	function knockback_away_from(enemy, impact_world_pos) {
+	    if (!enemy?.apply_axe_knockback || enemy.should_delete) return;
+	    const enemy_pos = enemy_world_pos(enemy);
+	    const surface_normal = enemy_pos.clone().normalize();
+	    const away = enemy_pos.clone().sub(impact_world_pos);
+	    if (away.lengthSq() < 1e-6) {
+	        away.copy(store$3.camera.getWorldDirection(new Vector3()));
+	    }
+	    const tangent = away.projectOnPlane(surface_normal);
+	    if (tangent.lengthSq() < 1e-6) return;
+	    enemy.apply_axe_knockback(tangent.normalize(), explode_knockback_radians);
+	}
+
+	function apply_explosion(impact_world_pos, projectile_damage, primary_enemy) {
+	    const aoe_damage = Math.max(1, Math.round(projectile_damage * explode_damage_ratio));
+	    const victims = enemies_within_radius(impact_world_pos, explode_radius, null);
+	    for (const enemy of victims) {
+	        if (enemy !== primary_enemy) {
+	            enemy.take_damage(aoe_damage);
+	        }
+	        knockback_away_from(enemy, impact_world_pos);
+	    }
+	    // Primary may already be dead from the direct hit; still try knockback if alive.
+	    if (primary_enemy && !primary_enemy.should_delete && !victims.includes(primary_enemy)) {
+	        knockback_away_from(primary_enemy, impact_world_pos);
+	    }
+	}
+
+	/**
+	 * Apply formula-specific follow-up effects after the primary collide damage.
+	 * @returns {string|null} effect name applied, if any
+	 */
+	function apply_molecule_hit_effect(projectile, primary_enemy, impact_world_pos) {
+	    const effect = MOLECULE_HIT_EFFECTS[projectile?.formula];
+	    if (!effect) return null;
+
+	    if (effect === 'poison') {
+	        apply_poison(primary_enemy);
+	        return effect;
+	    }
+	    if (effect === 'splash') {
+	        apply_splash(impact_world_pos, projectile.damage, primary_enemy);
+	        return effect;
+	    }
+	    if (effect === 'explode') {
+	        apply_explosion(impact_world_pos, projectile.damage, primary_enemy);
+	        return effect;
+	    }
+	    return null;
+	}
+
 	var size = new Vector3(50, 50, 50);
 	new Box3(size.negate(), size);
 	class ProjectileBase extends GameObj {
@@ -62873,8 +68530,10 @@ var app = (function () {
 	    mesh.position.add(direction);
 
 	    let collisions = projectile.check_collisions(store$3.enemies);
+	    const impact_world_pos = mesh.getWorldPosition(new Vector3());
 	    collisions.forEach(collided_obj => {
 	        collided_obj.collide(projectile);
+	        apply_molecule_hit_effect(projectile, collided_obj, impact_world_pos);
 	        if (store$3.lab_effects['electrical'] > 0) {
 	            const stun_update_helper = (state, time_delta) => {
 	                let {total_time} = state;
@@ -62952,7 +68611,7 @@ var app = (function () {
 	        super({formula, initial_pos, velocity, onclick});
 	        this.name = 'Methane';
 	        this.damage = formula_to_damage_dict[this.formula];
-	        this.effects = [];
+	        this.effects = [MOLECULE_HIT_EFFECTS.CH4];
 	    }
 	}
 
@@ -62962,7 +68621,7 @@ var app = (function () {
 	        super({formula, initial_pos, velocity, onclick});
 	        this.name = 'Ammonia';
 	        this.damage = formula_to_damage_dict[this.formula];
-	        this.effects = [];
+	        this.effects = [MOLECULE_HIT_EFFECTS.NH3];
 	    }
 	}
 
@@ -62972,7 +68631,7 @@ var app = (function () {
 	        super({formula, initial_pos, velocity, onclick});
 	        this.name = 'Cyanide';
 	        this.damage = formula_to_damage_dict[this.formula];
-	        this.effects = [];
+	        this.effects = [MOLECULE_HIT_EFFECTS.CN];
 	    }
 	}
 
@@ -62982,6 +68641,16 @@ var app = (function () {
 	        super({formula, initial_pos, velocity, onclick});
 	        this.name = 'Water';
 	        this.damage = formula_to_damage_dict[this.formula];
+	        this.effects = [MOLECULE_HIT_EFFECTS.H2O];
+	    }
+	}
+
+	/** Fallback for battle-usable formulas without a dedicated subclass. */
+	class GenericMolecule extends Projectile {
+	    constructor({formula, initial_pos, velocity, onclick}) {
+	        super({formula, initial_pos, velocity, onclick});
+	        this.name = formula;
+	        this.damage = formula_to_damage_dict[this.formula] ?? 10;
 	        this.effects = [];
 	    }
 	}
@@ -62996,7 +68665,9 @@ var app = (function () {
 
 	function create_projectile(compound_name, arg_dict) {
 	    let klass = compound_name_to_class[compound_name];
-	    let projectile = new klass(arg_dict);
+	    let projectile = klass
+	        ? new klass(arg_dict)
+	        : new GenericMolecule({ ...arg_dict, formula: compound_name });
 	    let proxy = new Proxy(projectile, proxy_handler('mesh'));
 	    proxy.position.copy(arg_dict['initial_pos']);
 	    return proxy
@@ -63427,7 +69098,7 @@ var app = (function () {
 	        return state;
 	    }
 
-	    apply_axe_knockback(tangent_knockback_world) {
+	    apply_axe_knockback(tangent_knockback_world, knockback_radians = AXE_KNOCKBACK_RADIANS) {
 	        if (tangent_knockback_world.lengthSq() < 1e-6) {
 	            return;
 	        }
@@ -63437,6 +69108,7 @@ var app = (function () {
 
 	        const enemy = this;
 	        const tangent = tangent_knockback_world.clone().normalize();
+	        const total_radians = knockback_radians;
 	        const updater = new Updater((state, time_delta) => {
 	            if (enemy.should_delete) {
 	                enemy.position.z = state.base_z;
@@ -63446,7 +69118,7 @@ var app = (function () {
 	            state.elapsed += time_delta;
 	            const linear_progress = Math.min(state.elapsed / AXE_KNOCKBACK_DURATION, 1);
 	            const eased_progress = 1 - Math.pow(1 - linear_progress, 2);
-	            const delta_radians = AXE_KNOCKBACK_RADIANS * (eased_progress - state.eased_progress);
+	            const delta_radians = total_radians * (eased_progress - state.eased_progress);
 
 	            if (delta_radians > 0) {
 	                apply_surface_knockback(enemy.parent, tangent, earth_radius, delta_radians);
@@ -63628,13 +69300,13 @@ var app = (function () {
 	}
 
 
-	function rotate_on_mouse_move(event) {
-	    // calculate mouse position in normalized device coordinates
-	    // (-1 to +1) for both components
-	    // mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-	    // mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+	function is_xr_presenting$1() {
+	    return Boolean(store$3.renderer?.xr?.isPresenting);
+	}
 
-	    //TODO: check this at some point: https://web.dev/articles/disable-mouse-acceleration
+	function rotate_on_mouse_move(event) {
+	    // Headset owns look direction while presenting.
+	    if (is_xr_presenting$1()) return;
 
 	    // the sensitivity is set so that the screen width/height is 180 degrees
 	    var movementX = event.movementX || event.mozMovementX || 0;
@@ -63647,16 +69319,20 @@ var app = (function () {
 	}
 
 	function rotate_on_controller_move(state, time_delta) {
+	    if (is_xr_presenting$1()) return { finished: false };
+
 	    let event = {
 	        // TODO: make the multipliers settings that the player can adjust
 	        movementX: store$3.pushed_buttons['axes'][left_stick_left_right]['value'] * 20,
 	        movementY: store$3.pushed_buttons['axes'][left_stick_up_down]['value'] * -5,
 	    };
 	    rotate_on_mouse_move(event);
-	    return {finshed: false};
+	    return {finished: false};
 	}
 
 	function rotate_camera(x_radians, y_radians) {
+	    if (is_xr_presenting$1()) return;
+
 	    /*
 	    Important note: an object's rotation/quaternion is relative to its parent. It is a local rotation.
 	    So here I get the vectors from the point of view of the camera parent.
@@ -63684,11 +69360,24 @@ var app = (function () {
 	    store$3.mouse_ray.setFromCamera( store$3.mouse, store$3.camera );
 	}
 
+	/** Smooth yaw for XR right-stick turning (rotates camera_parent around radial up). */
+	function rotate_camera_yaw(radians) {
+	    if (!radians || !store$3.camera_parent || !store$3.camera || !store$3.earth) return;
+
+	    const earth_world_pos = store$3.earth.getWorldPosition(new Vector3());
+	    const camera_world_pos = store$3.camera.getWorldPosition(new Vector3());
+	    const up = new Vector3().subVectors(camera_world_pos, earth_world_pos).normalize();
+	    const quaternion = new Quaternion().setFromAxisAngle(up, radians);
+	    store$3.camera_parent.quaternion.premultiply(quaternion);
+	    store$3.camera_parent.updateMatrixWorld(true);
+	}
+
 
 	function create_camera$1(){
 	    const fov = 60;
-	    const aspect = 1920 / 1080;
-	    const near = 1.0;
+	    const aspect = window.innerWidth / window.innerHeight;
+	    // Near plane must be small for WebXR comfort / clipping
+	    const near = 0.1;
 	    const far = 5000.0;
 	    store$3.camera = new PerspectiveCamera(fov, aspect, near, far);
 	    store$3.camera_parent = new Object3D();
@@ -63697,6 +69386,46 @@ var app = (function () {
 	    store$3.camera_parent.add(store$3.camera);
 	    store$3.camera.position.set(0, 0, earth_radius + camera_offset);
 	    store$3.camera.rotateX(Math.PI/2);
+	    store$3.player_rig = null;
+	}
+
+	/**
+	 * Insert a standing rig between camera_parent and camera so XR headset pose
+	 * is applied relative to the planet surface. Controllers must share this parent.
+	 */
+	function enter_xr_camera_rig() {
+	    if (store$3.player_rig) return store$3.player_rig;
+
+	    const height = store$3.jump_in_progress
+	        ? store$3.camera.position.z
+	        : earth_radius + camera_offset;
+
+	    const rig = new Object3D();
+	    rig.position.set(0, 0, height);
+	    // Local +Y points away from planet; headset -Z is forward along the surface.
+	    rig.rotation.x = -Math.PI / 2;
+	    store$3.camera_parent.add(rig);
+
+	    rig.add(store$3.camera);
+	    store$3.camera.position.set(0, 0, 0);
+	    store$3.camera.quaternion.identity();
+	    store$3.camera.scale.set(1, 1, 1);
+
+	    store$3.player_rig = rig;
+	    return rig;
+	}
+
+	function exit_xr_camera_rig() {
+	    if (!store$3.player_rig) return;
+
+	    const height = store$3.player_rig.position.z || (earth_radius + camera_offset);
+	    store$3.camera_parent.add(store$3.camera);
+	    store$3.camera.position.set(0, 0, height);
+	    store$3.camera.quaternion.identity();
+	    store$3.camera.rotateX(Math.PI / 2);
+
+	    store$3.camera_parent.remove(store$3.player_rig);
+	    store$3.player_rig = null;
 	}
 
 	function movement_curve(x) {
@@ -63766,19 +69495,27 @@ var app = (function () {
 	    return Math.sin(3*x)
 	}
 
+	function get_jump_anchor() {
+	    // In XR the standing rig holds radial height; desktop jumps the camera itself.
+	    return store$3.player_rig || store$3.camera;
+	}
+
 	function jump() {
 	    if (store$3.jump_in_progress) return;
 	    store$3.jump_in_progress = true;
 
 	    function jump_helper(func_state, func_time_delta){
 	        let {finished, initial_time, has_collided} = func_state;
-	        store$3.camera.position.z = earth_radius + camera_offset + jump_curve(store$3.global_clock.elapsedTime - initial_time) * 150;
+	        const anchor = get_jump_anchor();
+	        anchor.position.z = earth_radius + camera_offset + jump_curve(store$3.global_clock.elapsedTime - initial_time) * 150;
 	        has_collided = check_camera_intersects(store$3.clouds, 'cloud') | check_camera_intersects(store$3.labs, 'lab');
 
 	        if (store$3.global_clock.elapsedTime - initial_time > Math.PI/3) {
 	            finished = true;
 	            store$3.jump_in_progress = false;
-	            store$3.pushed_buttons['buttons'][bottom_button]['pressed'] = 0;
+	            if (store$3.pushed_buttons?.buttons?.[bottom_button]) {
+	                store$3.pushed_buttons['buttons'][bottom_button]['pressed'] = 0;
+	            }
 	        }
 	        return {finished, initial_time, has_collided}
 	    }
@@ -63937,6 +69674,7 @@ var app = (function () {
 	 * @param {{ charge?: number }} [options] charge in [0, 1]; only used with Erlenmeyer Flask
 	 */
 	function try_to_fire_player_weapon(compound, options = {}){
+	    if (!compound) return;
 	    const charge = Math.min(1, Math.max(0, options.charge ?? 0));
 	    const has_flask = has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK);
 	    const size_mult = has_flask ? 1 + charge : 1;
@@ -64015,7 +69753,7 @@ var app = (function () {
 	    };
 	}
 
-	function is_playing() {
+	function is_playing$1() {
 	    return get$2(store$3.game_state).state === store$3.GameStates.PLAYING;
 	}
 
@@ -64050,12 +69788,12 @@ var app = (function () {
 	    }
 
 	    on_mouse_move(event){
-	        if (!is_playing()) return;
+	        if (!is_playing$1()) return;
 	        rotate_on_mouse_move(event);
 	    }
 
 	    on_mouse_down(event) {
-	        if (!is_playing()) return;
+	        if (!is_playing$1()) return;
 	        if (event.button !== 0) return;
 	        this._charge_started_at = performance.now();
 	        if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
@@ -64067,7 +69805,7 @@ var app = (function () {
 	    }
 
 	    on_mouse_up(event) {
-	        if (!is_playing()) return;
+	        if (!is_playing$1()) return;
 	        if (event.button !== 0) return;
 	        if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
 	            this._charge_started_at = null;
@@ -64087,11 +69825,12 @@ var app = (function () {
 
 	    _fire_selected_compound(charge) {
 	        let compound = get$2(store$3.key_to_compound)[get$2(store$3.selected_compound_index)];
+	        if (!compound) return;
 	        try_to_fire_player_weapon(compound, { charge });
 	    }
 
 	    on_keydown(e) {
-	        if (!is_playing()) return;
+	        if (!is_playing$1()) return;
 
 	        if (is_pause_key(e)) {
 	            store$3.battle_scene?.pause();
@@ -64100,18 +69839,24 @@ var app = (function () {
 	        }
 
 	        if (compound_selection_keys.includes(e.key)) {
-	            store$3.selected_compound_index.set(e.key);
+	            const loadout = get$2(store$3.key_to_compound);
+	            if (loadout[e.key]) {
+	                store$3.selected_compound_index.set(e.key);
+	            }
 	        } else if (e.key === axe_swing_key) {
 	            store$3.axe.try_to_swing();
 	        } else if (['ArrowRight', 'ArrowLeft'].indexOf(e.key) > -1) {
-	            let _selected_compound_index = parseInt(get$2(store$3.selected_compound_index));
-	            let max_keys = compound_selection_keys.length;
+	            const loadout = get$2(store$3.key_to_compound);
+	            const available_keys = compound_selection_keys.filter((key) => loadout[key]);
+	            if (!available_keys.length) return;
+	            let current_index = available_keys.indexOf(get$2(store$3.selected_compound_index));
+	            if (current_index < 0) current_index = 0;
 	            if (e.key === 'ArrowLeft') {
-	                _selected_compound_index = _selected_compound_index <= 1 ? max_keys : _selected_compound_index - 1;
-	            } else if (e.key === 'ArrowRight') {
-	                _selected_compound_index = _selected_compound_index >= max_keys ? 1 : _selected_compound_index + 1;
+	                current_index = current_index <= 0 ? available_keys.length - 1 : current_index - 1;
+	            } else {
+	                current_index = current_index >= available_keys.length - 1 ? 0 : current_index + 1;
 	            }
-	            store$3.selected_compound_index.set(String(_selected_compound_index));
+	            store$3.selected_compound_index.set(available_keys[current_index]);
 	        } else if (movement_keys.includes(e.key)) {
 	            store$3.pressed_keys[e.key]['pressed'] = Math.min(5, store$3.pressed_keys[e.key]['pressed'] + 1);
 	        } else if (e.key === space) {
@@ -64125,7 +69870,7 @@ var app = (function () {
 	    }
 
 	    on_keyup(e) {
-	        if (!is_playing()) return;
+	        if (!is_playing$1()) return;
 
 	        if (movement_keys.includes(e.key)) {
 	            store$3.pressed_keys[e.key]['pressed'] = 0;
@@ -64201,6 +69946,8 @@ var app = (function () {
 	    }
 	    
 	    update() {
+	        // XR controllers are handled by XRInputHandler while presenting.
+	        if (store$3.renderer?.xr?.isPresenting) return;
 	        this.update_pressed_values();
 	        this.act_on_pressed_buttons();
 	    }
@@ -64233,11 +69980,233 @@ var app = (function () {
 	            } else if ([right_lower_trigger, right_upper_trigger, left_lower_trigger, left_upper_trigger].indexOf(i) > -1) {
 	                let keys_to_compound = get$2(store$3.key_to_compound);
 	                let compound = keys_to_compound[i];
-	                try_to_fire_player_weapon(compound);
+	                if (compound) try_to_fire_player_weapon(compound);
 	            } else if (i === left_stick_push || i === right_stick_push) {
 	                store$3.axe.try_to_swing();
 	            }
 	        }
+	    }
+	}
+
+	/**
+	 * Quest / WebXR (xr-standard) → keyboard action map
+	 *
+	 * Left thumbstick     → WASD movement (same pressed_keys path as keyboard)
+	 * Right thumbstick X  → yaw turn (comfort look; headset still owns pitch)
+	 * Trigger (either)    → fire selected compound (mouse LMB)
+	 * Grip / squeeze      → axe swing (V)
+	 * A / X (button 4)    → jump (Space)
+	 * B / Y (button 5)    → cycle compound loadout (ArrowRight)
+	 * Thumbstick click    → pause (Escape / P)
+	 */
+
+	const XR_TRIGGER = 0;
+	const XR_SQUEEZE = 1;
+	const XR_THUMBSTICK_CLICK = 3;
+	const XR_BUTTON_AX = 4;
+	const XR_BUTTON_BY = 5;
+	const XR_THUMBSTICK_X = 2;
+	const XR_THUMBSTICK_Y = 3;
+
+	const MOVE_DEADZONE = 0.18;
+	const TURN_DEADZONE = 0.35;
+	const TURN_SPEED_RAD_PER_SEC = 1.8;
+	const STICK_PRESS_SCALE = 5;
+
+	function is_playing() {
+	    return get$2(store$3.game_state).state === store$3.GameStates.PLAYING;
+	}
+
+	function is_xr_presenting() {
+	    return Boolean(store$3.renderer?.xr?.isPresenting);
+	}
+
+	function axis_value(gamepad, index) {
+	    const value = gamepad.axes[index];
+	    return typeof value === 'number' ? value : 0;
+	}
+
+	function button_pressed(gamepad, index) {
+	    const button = gamepad.buttons[index];
+	    return Boolean(button && (button.pressed || button.value > 0.75));
+	}
+
+	function button_value(gamepad, index) {
+	    const button = gamepad.buttons[index];
+	    if (!button) return 0;
+	    if (typeof button.value === 'number') return button.value;
+	    return button.pressed ? 1 : 0;
+	}
+
+	function set_movement_from_stick(x, y) {
+	    const apply = (key, amount) => {
+	        store$3.pressed_keys[key].pressed = amount > MOVE_DEADZONE
+	            ? Math.min(STICK_PRESS_SCALE, amount * STICK_PRESS_SCALE)
+	            : 0;
+	    };
+	    // WebXR thumbstick: -Y is usually forward
+	    apply('w', -y);
+	    apply('s', y);
+	    apply('a', -x);
+	    apply('d', x);
+	}
+
+	function clear_xr_movement_keys() {
+	    if (!store$3.pressed_keys) return;
+	    for (const key of ['w', 's', 'a', 'd']) {
+	        store$3.pressed_keys[key].pressed = 0;
+	    }
+	}
+
+	function cycle_compound(direction = 1) {
+	    const loadout = get$2(store$3.key_to_compound);
+	    const available_keys = compound_selection_keys.filter((key) => loadout[key]);
+	    if (!available_keys.length) return;
+	    let current_index = available_keys.indexOf(get$2(store$3.selected_compound_index));
+	    if (current_index < 0) current_index = 0;
+	    current_index = (current_index + direction + available_keys.length) % available_keys.length;
+	    store$3.selected_compound_index.set(available_keys[current_index]);
+	}
+
+	function fire_selected(charge = 0) {
+	    const compound = get$2(store$3.key_to_compound)[get$2(store$3.selected_compound_index)];
+	    if (!compound) return;
+	    try_to_fire_player_weapon(compound, { charge });
+	}
+
+	/**
+	 * Polls XR input sources each frame and drives the same actions as keyboard/mouse.
+	 */
+	class XRInputHandler {
+	    constructor() {
+	        this._prev = {
+	            trigger: false,
+	            squeeze: false,
+	            jump: false,
+	            cycle: false,
+	            pause: false,
+	        };
+	        this._charge_started_at = null;
+	    }
+
+	    reset() {
+	        this._prev = {
+	            trigger: false,
+	            squeeze: false,
+	            jump: false,
+	            cycle: false,
+	            pause: false,
+	        };
+	        this._charge_started_at = null;
+	        clear_xr_movement_keys();
+	        stop_flask_charge_indicator();
+	    }
+
+	    update(time_delta) {
+	        if (!is_xr_presenting()) return;
+
+	        const session = store$3.renderer.xr.getSession();
+	        if (!session) return;
+
+	        let move_x = 0;
+	        let move_y = 0;
+	        let turn_x = 0;
+	        let trigger_down = false;
+	        let squeeze_down = false;
+	        let jump_down = false;
+	        let cycle_down = false;
+	        let pause_down = false;
+
+	        for (const source of session.inputSources) {
+	            const gamepad = source.gamepad;
+	            if (!gamepad || gamepad.mapping !== 'xr-standard') continue;
+
+	            const stick_x = axis_value(gamepad, XR_THUMBSTICK_X);
+	            const stick_y = axis_value(gamepad, XR_THUMBSTICK_Y);
+
+	            if (source.handedness === 'left') {
+	                move_x = stick_x;
+	                move_y = stick_y;
+	            } else if (source.handedness === 'right') {
+	                turn_x = stick_x;
+	            } else {
+	                // Undeclared handedness: treat first stick as move
+	                if (Math.abs(stick_x) > Math.abs(move_x)) move_x = stick_x;
+	                if (Math.abs(stick_y) > Math.abs(move_y)) move_y = stick_y;
+	            }
+
+	            if (button_pressed(gamepad, XR_TRIGGER) || button_value(gamepad, XR_TRIGGER) > 0.75) {
+	                trigger_down = true;
+	            }
+	            if (button_pressed(gamepad, XR_SQUEEZE)) squeeze_down = true;
+	            if (button_pressed(gamepad, XR_BUTTON_AX)) jump_down = true;
+	            if (button_pressed(gamepad, XR_BUTTON_BY)) cycle_down = true;
+	            if (button_pressed(gamepad, XR_THUMBSTICK_CLICK)) pause_down = true;
+	        }
+
+	        if (!is_playing()) {
+	            clear_xr_movement_keys();
+	            this._prev.trigger = trigger_down;
+	            this._prev.squeeze = squeeze_down;
+	            this._prev.jump = jump_down;
+	            this._prev.cycle = cycle_down;
+	            this._prev.pause = pause_down;
+	            return;
+	        }
+
+	        set_movement_from_stick(move_x, move_y);
+
+	        if (Math.abs(turn_x) > TURN_DEADZONE) {
+	            rotate_camera_yaw(-turn_x * TURN_SPEED_RAD_PER_SEC * time_delta);
+	        }
+
+	        // Trigger edge: press starts fire/charge; release finishes charged shot
+	        if (trigger_down && !this._prev.trigger) {
+	            this._charge_started_at = performance.now();
+	            if (!has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK)) {
+	                fire_selected(0);
+	                this._charge_started_at = null;
+	            } else {
+	                start_flask_charge_indicator();
+	            }
+	        } else if (!trigger_down && this._prev.trigger) {
+	            if (has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK) && this._charge_started_at != null) {
+	                const held_seconds = (performance.now() - this._charge_started_at) / 1000;
+	                const charge = Math.min(1, Math.max(0, held_seconds));
+	                this._charge_started_at = null;
+	                fire_selected(charge);
+	            } else {
+	                this._charge_started_at = null;
+	                stop_flask_charge_indicator();
+	            }
+	        }
+
+	        if (squeeze_down && !this._prev.squeeze) {
+	            store$3.axe?.try_to_swing?.();
+	        }
+
+	        if (jump_down && !this._prev.jump && !store$3.jump_in_progress) {
+	            if (store$3.pressed_keys[' ']) {
+	                store$3.pressed_keys[' '].pressed = 1;
+	            }
+	            jump();
+	        } else if (!jump_down && store$3.pressed_keys?.[' ']) {
+	            store$3.pressed_keys[' '].pressed = 0;
+	        }
+
+	        if (cycle_down && !this._prev.cycle) {
+	            cycle_compound(1);
+	        }
+
+	        if (pause_down && !this._prev.pause) {
+	            store$3.battle_scene?.pause?.();
+	        }
+
+	        this._prev.trigger = trigger_down;
+	        this._prev.squeeze = squeeze_down;
+	        this._prev.jump = jump_down;
+	        this._prev.cycle = cycle_down;
+	        this._prev.pause = pause_down;
 	    }
 	}
 
@@ -64461,6 +70430,9 @@ var app = (function () {
 	    store$3.lab_effects = {'nuclear': 0, 'electrical': 0, 'kinetic': 0, 'thermal': 0, 'chemical': 0, 'sound': 0};
 	    store$3.current_direction_vector = new Vector3(0, 0, 0);
 	    store$3.jump_in_progress = false;
+	    store$3.xr_controllers = [];
+	    store$3.xr_controller_grips = [];
+	    store$3.player_rig = null;
 	}
 
 	class BattleScene {
@@ -64477,6 +70449,16 @@ var app = (function () {
 	        
 	        const canvas_container = document.getElementById('canvas-container');
 	        canvas_container.appendChild(store$3.renderer.domElement);
+
+	        this._vr_button = VRButton.createButton(store$3.renderer);
+	        this._vr_button.id = 'VRButton';
+	        this._ar_button = ARButton.createButton(store$3.renderer, {
+	            optionalFeatures: ['dom-overlay', 'local-floor'],
+	            domOverlay: { root: document.body },
+	        });
+	        this._ar_button.id = 'ARButton';
+	        canvas_container.appendChild(this._vr_button);
+	        canvas_container.appendChild(this._ar_button);
 
 	        store$3.scene = new Scene();
 
@@ -64499,7 +70481,112 @@ var app = (function () {
 
 	        this.input_handler = new InputHandler();
 	        this.controller_input_handler = new ContollerInputHandler();
+	        this.xr_input_handler = new XRInputHandler();
 	        store$3.battle_scene = this;
+
+	        this._on_xr_session_start = this.on_xr_session_start.bind(this);
+	        this._on_xr_session_end = this.on_xr_session_end.bind(this);
+	        store$3.renderer.xr.addEventListener('sessionstart', this._on_xr_session_start);
+	        store$3.renderer.xr.addEventListener('sessionend', this._on_xr_session_end);
+	        this.init_xr_controllers();
+	    }
+
+	    on_xr_session_start() {
+	        store$3.xr_presenting = true;
+	        const session = store$3.renderer.xr.getSession();
+	        // Passthrough / AR: drop the cubemap so the real world can show through.
+	        if (session?.environmentBlendMode && session.environmentBlendMode !== 'opaque') {
+	            store$3.scene.background = null;
+	        }
+
+	        const rig = enter_xr_camera_rig();
+	        for (const controller of store$3.xr_controllers) {
+	            rig.add(controller);
+	        }
+	        for (const grip of store$3.xr_controller_grips) {
+	            rig.add(grip);
+	        }
+
+	        // FPS gun/axe sit on the desktop camera; hide them in immersive mode.
+	        if (store$3.gun) store$3.gun.visible = false;
+	        if (store$3.axe) store$3.axe.visible = false;
+
+	        document.exitPointerLock?.();
+	        this.xr_input_handler.reset();
+
+	        // Entering VR from the start overlay should begin play without a mouse click.
+	        const state = get$2(store$3.game_state).state;
+	        if (state === store$3.GameStates.STARTING) {
+	            store$3.game_state.update((current) => {
+	                current.state = store$3.GameStates.PLAYING;
+	                return current;
+	            });
+	            this.add_event_listeners();
+	            this.animate();
+	        } else if (state === store$3.GameStates.PAUSED) {
+	            this.unpause();
+	        } else if (state === store$3.GameStates.PLAYING) {
+	            // Ensure the XR-paced loop is running.
+	            this.animate();
+	        }
+	    }
+
+	    on_xr_session_end() {
+	        store$3.xr_presenting = false;
+	        store$3.scene.background = create_background();
+	        this.xr_input_handler.reset();
+
+	        for (const controller of store$3.xr_controllers) {
+	            store$3.scene.add(controller);
+	        }
+	        for (const grip of store$3.xr_controller_grips) {
+	            store$3.scene.add(grip);
+	        }
+	        exit_xr_camera_rig();
+
+	        if (store$3.gun) store$3.gun.visible = true;
+	        if (store$3.axe) store$3.axe.visible = true;
+	    }
+
+	    init_xr_controllers() {
+	        const controllerModelFactory = new XRControllerModelFactory();
+	        store$3.xr_controllers = [];
+	        store$3.xr_controller_grips = [];
+
+	        for (let i = 0; i < 2; i++) {
+	            const controller = store$3.renderer.xr.getController(i);
+	            controller.addEventListener('connected', (event) => {
+	                controller.userData.handedness = event.data?.handedness;
+	                controller.userData.targetRayMode = event.data?.targetRayMode;
+	                if (!controller.userData.ray) {
+	                    const geometry = new BufferGeometry().setFromPoints([
+	                        new Vector3(0, 0, 0),
+	                        new Vector3(0, 0, -1),
+	                    ]);
+	                    const line = new Line(geometry);
+	                    line.scale.z = 5;
+	                    line.name = 'xr-ray';
+	                    controller.add(line);
+	                    controller.userData.ray = line;
+	                }
+	            });
+	            controller.addEventListener('disconnected', () => {
+	                const line = controller.userData.ray;
+	                if (line) {
+	                    controller.remove(line);
+	                    line.geometry?.dispose?.();
+	                    line.material?.dispose?.();
+	                    controller.userData.ray = null;
+	                }
+	            });
+	            store$3.scene.add(controller);
+	            store$3.xr_controllers.push(controller);
+
+	            const grip = store$3.renderer.xr.getControllerGrip(i);
+	            grip.add(controllerModelFactory.createControllerModel(grip));
+	            store$3.scene.add(grip);
+	            store$3.xr_controller_grips.push(grip);
+	        }
 	    }
 
 	    pause() {
@@ -64510,6 +70597,7 @@ var app = (function () {
 	        });
 	        reset_pressed_keys();
 	        this.input_handler?.cancel_flask_charge?.();
+	        this.xr_input_handler?.reset?.();
 	        document.exitPointerLock();
 	        this.remove_event_listeners();
 	        this.add_pause_listener();
@@ -64525,8 +70613,10 @@ var app = (function () {
 	        this.add_event_listeners();
 	        store$3.global_clock.getDelta();
 	        this.animate();
-	        const canvas = document.getElementById('canvas-container')?.firstChild;
-	        canvas?.requestPointerLock?.({ unadjustedMovement: true });
+	        if (!store$3.renderer?.xr?.isPresenting) {
+	            const canvas = document.getElementById('canvas-container')?.firstChild;
+	            canvas?.requestPointerLock?.({ unadjustedMovement: true });
+	        }
 	    }
 
 	    add_pause_listener() {
@@ -64593,25 +70683,39 @@ var app = (function () {
 	    destroy() {
 	        this.remove_event_listeners();
 	        this.remove_pause_listener();
+	        store$3.renderer?.setAnimationLoop?.(null);
+	        if (store$3.renderer?.xr) {
+	            store$3.renderer.xr.removeEventListener('sessionstart', this._on_xr_session_start);
+	            store$3.renderer.xr.removeEventListener('sessionend', this._on_xr_session_end);
+	        }
+	        this.xr_input_handler?.reset?.();
 	        store$3.battle_scene = null;
+	        store$3.xr_presenting = false;
 	    }
 
 	    animate(){
-	        requestAnimationFrame(()=>{
+	        // setAnimationFrame is required for WebXR frame pacing; also works on desktop.
+	        store$3.renderer.setAnimationLoop(() => {
 	            let _game_state = get$2(store$3.game_state);
 	            if (_game_state['state'] === store$3.GameStates.GAMELOST || _game_state['state'] === store$3.GameStates.GAMEWON) {
 	                store$3.global_updates_queue = [];
+	                store$3.renderer.setAnimationLoop(null);
 	                return;
 	            }
 	            if (_game_state['state'] === store$3.GameStates.PAUSED) {
+	                // Keep the XR session painted, but freeze simulation.
+	                if (store$3.renderer.xr.isPresenting) {
+	                    store$3.renderer.render(store$3.scene, store$3.camera);
+	                }
 	                return;
 	            }
-	            if (this.controller_input_handler?.connected) {
+	            const time_delta = store$3.global_clock.getDelta();
+	            if (store$3.renderer.xr.isPresenting) {
+	                this.xr_input_handler.update(time_delta);
+	            } else if (this.controller_input_handler?.connected) {
 	                this.controller_input_handler.update();
 	            }
-	            this.animate();
 	            store$3.stats.begin();
-	            const time_delta = store$3.global_clock.getDelta();
 	            let next_updates = [];
 	            for (let i=0; i<store$3.global_updates_queue.length; i++) {
 	                let updater = store$3.global_updates_queue[i];
@@ -64651,11 +70755,14 @@ var app = (function () {
 	    store$3.renderer = new WebGLRenderer({
 	        antialias: false,
 	        powerPreference: "high-performance",
+	        alpha: true, // needed for immersive-ar / passthrough clear
 	    });
 	    store$3.renderer.outputEncoding = sRGBEncoding;
 	    store$3.renderer.shadowMap.enabled = false;
 	    store$3.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 	    store$3.renderer.setSize(window.innerWidth, window.innerHeight);
+	    store$3.renderer.xr.enabled = true;
+	    store$3.renderer.xr.setReferenceSpaceType('local-floor');
 	}
 
 
@@ -65018,7 +71125,7 @@ var app = (function () {
 		let selected_compound_index = store$3.selected_compound_index;
 
 		legacy_pre_effect(() => ($key_to_compound()), () => {
-			set(keyboard_compounds, Object.entries($key_to_compound()).filter(([key]) => ['1', '2', '3', '4', '5'].includes(key)));
+			set(keyboard_compounds, Object.entries($key_to_compound()).filter(([key, compound]) => ['1', '2', '3', '4', '5'].includes(key) && compound));
 		});
 
 		legacy_pre_effect(() => ($max_number_possible_for_each_compound()), () => {
@@ -65493,19 +71600,39 @@ var app = (function () {
 
 	Battle[FILENAME] = 'src/components/battle_scene/battle.svelte';
 
-	var root$7 = add_locations(from_html(`<button type="button" class="button svelte-3wqs9w">Start</button>`), Battle[FILENAME], [[81, 12]]);
-	var root_1$5 = add_locations(from_html(`<h3>Game Over</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[83, 12], [84, 12]]);
-	var root_2$4 = add_locations(from_html(`<h3>You Win!</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[86, 12], [87, 12]]);
+	var root$7 = add_locations(from_html(`<p class="xr-hint xr-warn svelte-3wqs9w">WebXR on Quest requires HTTPS (or localhost). Open this app over a secure URL from the headset browser.</p>`), Battle[FILENAME], [[111, 16]]);
 
-	var root_3$2 = add_locations(from_html(`<div><div id="overlay-to-start" class="svelte-3wqs9w"><!></div> <div id="overlay-paused" class="svelte-3wqs9w"><h2 class="svelte-3wqs9w">Paused</h2> <p class="svelte-3wqs9w">Press P or Escape to resume</p> <button type="button" class="button svelte-3wqs9w">Back to Timeline</button></div> <!> <!> <!> <!> <!> <div id="cursor" class="svelte-3wqs9w"></div> <div id="canvas-container"></div></div>`), Battle[FILENAME], [
+	var root_1$5 = add_locations(from_html(`<button type="button" class="button svelte-3wqs9w">Start</button> <!> <p class="xr-hint svelte-3wqs9w">On a Quest headset, use Enter VR for an immersive session. Controls map to the desktop keys:</p> <ul class="xr-controls svelte-3wqs9w"><li>Left stick → WASD move</li> <li>Right stick → turn</li> <li>Trigger → fire compound</li> <li>Grip → axe (V)</li> <li>A / X → jump</li> <li>B / Y → cycle compounds</li> <li>Stick click → pause</li></ul>`, 1), Battle[FILENAME], [
+		[109, 12],
+		[113, 12],
 		[
-			78,
+			114,
+			12,
+			[
+				[115, 16],
+				[116, 16],
+				[117, 16],
+				[118, 16],
+				[119, 16],
+				[120, 16],
+				[121, 16]
+			]
+		]
+	]);
+
+	var root_2$4 = add_locations(from_html(`<h3>Game Over</h3> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[124, 12], [125, 12]]);
+	var root_3$2 = add_locations(from_html(`<p class="unlock-message svelte-3wqs9w"> </p>`), Battle[FILENAME], [[129, 16]]);
+	var root_4$1 = add_locations(from_html(`<h3>You Win!</h3> <!> <button type="button" class="button svelte-3wqs9w">Back to the Lab</button>`, 1), Battle[FILENAME], [[127, 12], [131, 12]]);
+
+	var root_5$1 = add_locations(from_html(`<div><div id="overlay-to-start" class="svelte-3wqs9w"><!></div> <div id="overlay-paused" class="svelte-3wqs9w"><h2 class="svelte-3wqs9w">Paused</h2> <p class="svelte-3wqs9w">Press P or Escape to resume</p> <button type="button" class="button svelte-3wqs9w">Back to Timeline</button></div> <!> <!> <!> <!> <!> <div id="cursor" class="svelte-3wqs9w"></div> <div id="canvas-container"></div></div>`), Battle[FILENAME], [
+		[
+			106,
 			0,
 			[
-				[79, 4],
-				[90, 4, [[91, 8], [92, 8], [93, 8]]],
-				[102, 4],
-				[103, 4]
+				[107, 4],
+				[134, 4, [[135, 8], [136, 8], [137, 8]]],
+				[146, 4],
+				[147, 4]
 			]
 		]
 	]);
@@ -65525,14 +71652,20 @@ var app = (function () {
 		const show_start_overlay = mutable_source();
 		const show_pause_overlay = mutable_source();
 		var battle_scene = tag(mutable_source(), 'battle_scene');
+		let win_unlock_message = tag(mutable_source(''), 'win_unlock_message');
+		let victory_rewards_applied = false;
+		let needs_https_for_xr = tag(mutable_source(strict_equals(typeof window, 'undefined', false) && !window.isSecureContext), 'needs_https_for_xr');
 
 		onMount(async () => {
 			new_game();
+			set(needs_https_for_xr, !window.isSecureContext);
 		});
 
 		function new_game() {
 			safe_get(battle_scene)?.destroy?.();
 			set(battle_scene, new BattleScene());
+			set(win_unlock_message, '');
+			victory_rewards_applied = false;
 		}
 
 		function start_game() {
@@ -65547,6 +71680,34 @@ var app = (function () {
 		}
 
 		let game_state_store = store$3.game_state;
+
+		function apply_victory_rewards() {
+			if (victory_rewards_applied) return;
+
+			victory_rewards_applied = true;
+
+			const result = defeat_scientist();
+
+			if (!result.ok) {
+				set(win_unlock_message, '');
+
+				return;
+			}
+
+			const parts = [];
+
+			if (result.unlocked_molecule) {
+				const info = molecule_info(result.unlocked_molecule);
+
+				parts.push(`Discovered ${info.name} (${info.formula})`);
+			}
+
+			if (result.unlocked_scientist) {
+				parts.push('Next scientist unlocked');
+			}
+
+			set(win_unlock_message, parts.join(' · '));
+		}
 
 		function handle_click() {
 			let canvas = document.getElementById('canvas-container').firstChild;
@@ -65605,6 +71766,7 @@ var app = (function () {
 				safe_get(battle_scene).game_lost();
 			} else if (strict_equals(get$1(game_state).state, store$3.GameStates.GAMEWON)) {
 				safe_get(battle_scene).game_won();
+				apply_victory_rewards();
 			}
 		});
 
@@ -65617,32 +71779,76 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_3$2();
+		var div = root_5$1();
 		var div_1 = child(div);
 		var node = child(div_1);
 
 		{
-			var consequent = ($$anchor) => {
-				var button = root$7();
-
-				event('click', button, stopPropagation(handle_click));
-				append$1($$anchor, button);
-			};
-
 			var consequent_1 = ($$anchor) => {
 				var fragment = root_1$5();
-				var button_1 = sibling(first_child(fragment), 2);
+				var button = first_child(fragment);
+				var node_1 = sibling(button, 2);
 
-				event('click', button_1, stopPropagation(go_back_to_timeline));
+				{
+					var consequent = ($$anchor) => {
+						var p = root$7();
+
+						append$1($$anchor, p);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_1, ($$render) => {
+							if (get$1(needs_https_for_xr)) $$render(consequent);
+						}),
+						'if',
+						Battle,
+						110,
+						12
+					);
+				}
+
+				next(4);
+				event('click', button, stopPropagation(handle_click));
 				append$1($$anchor, fragment);
 			};
 
 			var consequent_2 = ($$anchor) => {
 				var fragment_1 = root_2$4();
-				var button_2 = sibling(first_child(fragment_1), 2);
+				var button_1 = sibling(first_child(fragment_1), 2);
+
+				event('click', button_1, stopPropagation(go_back_to_timeline));
+				append$1($$anchor, fragment_1);
+			};
+
+			var consequent_4 = ($$anchor) => {
+				var fragment_2 = root_4$1();
+				var node_2 = sibling(first_child(fragment_2), 2);
+
+				{
+					var consequent_3 = ($$anchor) => {
+						var p_1 = root_3$2();
+						var text = child(p_1, true);
+
+						reset(p_1);
+						template_effect(() => set_text(text, get$1(win_unlock_message)));
+						append$1($$anchor, p_1);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_2, ($$render) => {
+							if (get$1(win_unlock_message)) $$render(consequent_3);
+						}),
+						'if',
+						Battle,
+						128,
+						12
+					);
+				}
+
+				var button_2 = sibling(node_2, 2);
 
 				event('click', button_2, stopPropagation(go_back_to_timeline));
-				append$1($$anchor, fragment_1);
+				append$1($$anchor, fragment_2);
 			};
 
 			add_svelte_meta(
@@ -65651,19 +71857,19 @@ var app = (function () {
 						get$1(game_state),
 						deep_read_state(store$3),
 						untrack(() => strict_equals(get$1(game_state).state, store$3.GameStates.STARTING))
-					)) $$render(consequent); else if ((
+					)) $$render(consequent_1); else if ((
 						get$1(game_state),
 						deep_read_state(store$3),
 						untrack(() => strict_equals(get$1(game_state).state, store$3.GameStates.GAMELOST))
-					)) $$render(consequent_1, 1); else if ((
+					)) $$render(consequent_2, 1); else if ((
 						get$1(game_state),
 						deep_read_state(store$3),
 						untrack(() => strict_equals(get$1(game_state).state, store$3.GameStates.GAMEWON))
-					)) $$render(consequent_2, 2);
+					)) $$render(consequent_4, 2);
 				}),
 				'if',
 				Battle,
-				80,
+				108,
 				8
 			);
 		}
@@ -65675,25 +71881,25 @@ var app = (function () {
 
 		reset(div_2);
 
-		var node_1 = sibling(div_2, 2);
+		var node_3 = sibling(div_2, 2);
 
-		add_svelte_meta(() => Health_bar(node_1, {}), 'component', Battle, 97, 4, { componentTag: 'HealthBar' });
-
-		var node_2 = sibling(node_1, 2);
-
-		add_svelte_meta(() => Score(node_2, {}), 'component', Battle, 98, 4, { componentTag: 'Score' });
-
-		var node_3 = sibling(node_2, 2);
-
-		add_svelte_meta(() => Minimap(node_3, {}), 'component', Battle, 99, 4, { componentTag: 'Minimap' });
+		add_svelte_meta(() => Health_bar(node_3, {}), 'component', Battle, 141, 4, { componentTag: 'HealthBar' });
 
 		var node_4 = sibling(node_3, 2);
 
-		add_svelte_meta(() => Right_element_bar$1(node_4, {}), 'component', Battle, 100, 4, { componentTag: 'RightSideBar' });
+		add_svelte_meta(() => Score(node_4, {}), 'component', Battle, 142, 4, { componentTag: 'Score' });
 
 		var node_5 = sibling(node_4, 2);
 
-		add_svelte_meta(() => Bottom_compound_bar(node_5, {}), 'component', Battle, 101, 4, { componentTag: 'BottomCompoundBar' });
+		add_svelte_meta(() => Minimap(node_5, {}), 'component', Battle, 143, 4, { componentTag: 'Minimap' });
+
+		var node_6 = sibling(node_5, 2);
+
+		add_svelte_meta(() => Right_element_bar$1(node_6, {}), 'component', Battle, 144, 4, { componentTag: 'RightSideBar' });
+
+		var node_7 = sibling(node_6, 2);
+
+		add_svelte_meta(() => Bottom_compound_bar(node_7, {}), 'component', Battle, 145, 4, { componentTag: 'BottomCompoundBar' });
 		next(4);
 		reset(div);
 
@@ -68072,29 +74278,44 @@ var app = (function () {
 
 	Workshop[FILENAME] = 'src/components/workshop/workshop.svelte';
 
-	var root$1 = add_locations(from_html(`<li><div class="upgrade-copy svelte-s2k4cj"><h2 class="svelte-s2k4cj"> </h2> <p class="svelte-s2k4cj"> </p> <div class="cost svelte-s2k4cj"><img src="joule.svg" alt="" width="22" height="22" class="svelte-s2k4cj"/> <span> </span></div></div> <button type="button" class="buy-button svelte-s2k4cj"> </button></li>`), Workshop[FILENAME], [
+	var root$1 = add_locations(from_html(`<p class="loadout-message svelte-s2k4cj" role="status"> </p>`), Workshop[FILENAME], [[75, 16]]);
+	var root_1$1 = add_locations(from_html(`<p class="loadout-status svelte-s2k4cj" role="status"> </p> <!>`, 1), Workshop[FILENAME], [[70, 12]]);
+	var root_2$1 = add_locations(from_html(`<span class="badge svelte-s2k4cj">Usable in battle</span>`), Workshop[FILENAME], [[92, 24]]);
+	var root_3 = add_locations(from_html(`<span class="badge muted svelte-s2k4cj">Catalog only</span>`), Workshop[FILENAME], [[94, 24]]);
+	var root_4 = add_locations(from_html(`<button type="button"> </button>`), Workshop[FILENAME], [[97, 24]]);
+
+	var root_5 = add_locations(from_html(`<li><div class="molecule-heading svelte-s2k4cj"><h3 class="svelte-s2k4cj"> </h3> <span class="formula svelte-s2k4cj"> </span></div> <p class="damage svelte-s2k4cj"> </p> <p class="effect svelte-s2k4cj"> </p> <!> <!></li>`), Workshop[FILENAME], [
+		[80, 16, [[85, 20, [[86, 24], [87, 24]]], [89, 20], [90, 20]]]
+	]);
+
+	var root_6 = add_locations(from_html(`<li><div class="upgrade-copy svelte-s2k4cj"><h2 class="svelte-s2k4cj"> </h2> <p class="svelte-s2k4cj"> </p> <div class="cost svelte-s2k4cj"><img src="joule.svg" alt="" width="22" height="22" class="svelte-s2k4cj"/> <span> </span></div></div> <button type="button" class="buy-button svelte-s2k4cj"> </button></li>`), Workshop[FILENAME], [
 		[
-			48,
+			118,
 			16,
 			[
-				[49, 20, [[50, 24], [51, 24], [52, 24, [[53, 28], [54, 28]]]]],
-				[57, 20]
+				[
+					119,
+					20,
+					[[120, 24], [121, 24], [122, 24, [[123, 28], [124, 28]]]]
+				],
+				[127, 20]
 			]
 		]
 	]);
 
-	var root_1$1 = add_locations(from_html(`<p class="purchase-message svelte-s2k4cj" role="status"> </p>`), Workshop[FILENAME], [[69, 12]]);
-	var root_2$1 = add_locations(from_html(`<em class="svelte-s2k4cj">(owned)</em>`), Workshop[FILENAME], [[87, 28]]);
-	var root_3 = add_locations(from_html(`<li><label class="svelte-s2k4cj"><input type="checkbox"/> <span> </span> <!></label></li>`), Workshop[FILENAME], [[78, 16, [[79, 20, [[80, 24], [85, 24]]]]]]);
+	var root_7 = add_locations(from_html(`<p class="purchase-message svelte-s2k4cj" role="status"> </p>`), Workshop[FILENAME], [[139, 12]]);
+	var root_8 = add_locations(from_html(`<em class="svelte-s2k4cj">(owned)</em>`), Workshop[FILENAME], [[157, 28]]);
+	var root_9 = add_locations(from_html(`<li><label class="svelte-s2k4cj"><input type="checkbox"/> <span> </span> <!></label></li>`), Workshop[FILENAME], [[148, 16, [[149, 20, [[150, 24], [155, 24]]]]]]);
 
-	var root_4 = add_locations(from_html(`<div class="workshop svelte-s2k4cj"><header class="workshop-header svelte-s2k4cj"><h1 class="svelte-s2k4cj">Workshop</h1> <p class="svelte-s2k4cj">Spend joules on gear that helps in battle.</p> <!> <button type="button" class="back-button svelte-s2k4cj">Back to Timeline</button></header> <div class="workshop-body svelte-s2k4cj"><ul class="upgrade-list svelte-s2k4cj"></ul> <!></div> <section class="debug-panel svelte-s2k4cj" aria-label="Upgrade test toggles"><h2 class="svelte-s2k4cj">Test toggles</h2> <p class="svelte-s2k4cj">Force-enable upgrades in battle without spending joules.</p> <ul class="debug-list svelte-s2k4cj"></ul></section></div>`), Workshop[FILENAME], [
+	var root_10 = add_locations(from_html(`<div class="workshop svelte-s2k4cj"><header class="workshop-header svelte-s2k4cj"><h1 class="svelte-s2k4cj">Workshop</h1> <p class="svelte-s2k4cj">Review discovered molecules and spend joules on gear.</p> <!> <button type="button" class="back-button svelte-s2k4cj">Back to Timeline</button></header> <section class="pokedex svelte-s2k4cj" aria-label="Molecule Pokédex"><h2 class="svelte-s2k4cj">Molecule Pokédex</h2> <p class="section-lede svelte-s2k4cj"> </p> <!> <ul class="molecule-list svelte-s2k4cj"></ul></section> <div class="workshop-body svelte-s2k4cj"><h2 class="upgrades-heading svelte-s2k4cj">Upgrades</h2> <ul class="upgrade-list svelte-s2k4cj"></ul> <!></div> <section class="debug-panel svelte-s2k4cj" aria-label="Upgrade test toggles"><h2 class="svelte-s2k4cj">Test toggles</h2> <p class="svelte-s2k4cj">Force-enable upgrades in battle without spending joules.</p> <ul class="debug-list svelte-s2k4cj"></ul></section></div>`), Workshop[FILENAME], [
 		[
-			33,
+			54,
 			0,
 			[
-				[34, 4, [[35, 8], [36, 8], [38, 8]]],
-				[43, 4, [[44, 8]]],
-				[73, 4, [[74, 8], [75, 8], [76, 8]]]
+				[55, 4, [[56, 8], [57, 8], [59, 8]]],
+				[64, 4, [[65, 8], [66, 8], [78, 8]]],
+				[112, 4, [[113, 8], [114, 8]]],
+				[143, 4, [[144, 8], [145, 8], [146, 8]]]
 			]
 		]
 	]);
@@ -68103,6 +74324,21 @@ var app = (function () {
 		if (new.target) return createClassComponent({ component: Workshop, ...$$anchor });
 
 		push($$props, false, Workshop);
+
+		const $needs_battle_loadout_selection = () => (
+			validate_store(needs_battle_loadout_selection, 'needs_battle_loadout_selection'),
+			store_get(needs_battle_loadout_selection, '$needs_battle_loadout_selection', $$stores)
+		);
+
+		const $battle_loadout = () => (
+			validate_store(battle_loadout, 'battle_loadout'),
+			store_get(battle_loadout, '$battle_loadout', $$stores)
+		);
+
+		const $discovered_molecule_list = () => (
+			validate_store(discovered_molecule_list, 'discovered_molecule_list'),
+			store_get(discovered_molecule_list, '$discovered_molecule_list', $$stores)
+		);
 
 		const $owned_upgrades = () => (
 			validate_store(owned_upgrades, 'owned_upgrades'),
@@ -68121,6 +74357,7 @@ var app = (function () {
 
 		const [$$stores, $$cleanup] = setup_stores();
 		let purchase_message = tag(mutable_source(''), 'purchase_message');
+		let loadout_message = tag(mutable_source(''), 'loadout_message');
 
 		function go_back_to_timeline() {
 			global_store.current_scene.set(global_store.possible_scenes.Timeline);
@@ -68140,6 +74377,20 @@ var app = (function () {
 			}
 		}
 
+		function toggle_loadout(formula) {
+			const result = toggle_battle_molecule(formula);
+
+			if (result.ok) {
+				set(loadout_message, strict_equals(result.action, 'added')
+					? `Added ${formula} to battle loadout.`
+					: `Removed ${formula} from battle loadout.`);
+			} else if (strict_equals(result.reason, 'full')) {
+				set(loadout_message, `Battle loadout is full (${MAX_BATTLE_MOLECULES}/${MAX_BATTLE_MOLECULES}). Unequip one first.`);
+			} else {
+				set(loadout_message, '');
+			}
+		}
+
 		var $$exports = {
 			$set: update_legacy_props,
 			$on: ($$event_name, $$event_cb) => add_legacy_event_listener($$props, $$event_name, $$event_cb)
@@ -68147,21 +74398,190 @@ var app = (function () {
 
 		init$1();
 
-		var div = root_4();
+		var div = root_10();
 		var header = child(div);
 		var node = sibling(child(header), 4);
 
-		add_svelte_meta(() => Joules_display(node, {}), 'component', Workshop, 37, 8, { componentTag: 'JoulesDisplay' });
+		add_svelte_meta(() => Joules_display(node, {}), 'component', Workshop, 58, 8, { componentTag: 'JoulesDisplay' });
 
 		var button = sibling(node, 2);
 
 		reset(header);
 
-		var div_1 = sibling(header, 2);
-		var ul = child(div_1);
+		var section = sibling(header, 2);
+		var p = sibling(child(section), 2);
+		var text = child(p);
+
+		reset(p);
+
+		var node_1 = sibling(p, 2);
+
+		{
+			var consequent_1 = ($$anchor) => {
+				var fragment = root_1$1();
+				var p_1 = first_child(fragment);
+				var text_1 = child(p_1);
+
+				reset(p_1);
+
+				var node_2 = sibling(p_1, 2);
+
+				{
+					var consequent = ($$anchor) => {
+						var p_2 = root$1();
+						var text_2 = child(p_2, true);
+
+						reset(p_2);
+						template_effect(() => set_text(text_2, get$1(loadout_message)));
+						append$1($$anchor, p_2);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_2, ($$render) => {
+							if (get$1(loadout_message)) $$render(consequent);
+						}),
+						'if',
+						Workshop,
+						74,
+						12
+					);
+				}
+
+				template_effect(() => set_text(text_1, `Battle loadout: ${$battle_loadout().length ?? ''} / ${MAX_BATTLE_MOLECULES } selected.
+                Tap a battle-ready molecule to equip or unequip it.`));
+
+				append$1($$anchor, fragment);
+			};
+
+			add_svelte_meta(
+				() => if_block(node_1, ($$render) => {
+					if ($needs_battle_loadout_selection()) $$render(consequent_1);
+				}),
+				'if',
+				Workshop,
+				69,
+				8
+			);
+		}
+
+		var ul = sibling(node_1, 2);
 
 		add_svelte_meta(
-			() => each(ul, 5, () => UPGRADE_CATALOG, index, ($$anchor, item) => {
+			() => each(ul, 5, $discovered_molecule_list, (molecule) => molecule.formula, ($$anchor, molecule) => {
+				var li = root_5();
+				let classes;
+				var div_1 = child(li);
+				var h3 = child(div_1);
+				var text_3 = child(h3, true);
+
+				reset(h3);
+
+				var span = sibling(h3, 2);
+				var text_4 = child(span, true);
+
+				reset(span);
+				reset(div_1);
+
+				var p_3 = sibling(div_1, 2);
+				var text_5 = child(p_3);
+
+				reset(p_3);
+
+				var p_4 = sibling(p_3, 2);
+				var text_6 = child(p_4, true);
+
+				reset(p_4);
+
+				var node_3 = sibling(p_4, 2);
+
+				{
+					var consequent_2 = ($$anchor) => {
+						var span_1 = root_2$1();
+
+						append$1($$anchor, span_1);
+					};
+
+					var alternate = ($$anchor) => {
+						var span_2 = root_3();
+
+						append$1($$anchor, span_2);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_3, ($$render) => {
+							if (get$1(molecule).battle_usable) $$render(consequent_2); else $$render(alternate, -1);
+						}),
+						'if',
+						Workshop,
+						91,
+						20
+					);
+				}
+
+				var node_4 = sibling(node_3, 2);
+
+				{
+					var consequent_3 = ($$anchor) => {
+						var button_1 = root_4();
+						let classes_1;
+						var text_7 = child(button_1, true);
+
+						reset(button_1);
+
+						template_effect(() => {
+							classes_1 = set_class(button_1, 1, 'equip-button svelte-s2k4cj', null, classes_1, { 'is-equipped': get$1(molecule).equipped });
+							set_attribute(button_1, 'aria-pressed', get$1(molecule).equipped);
+							set_text(text_7, get$1(molecule).equipped ? 'Equipped' : 'Equip for battle');
+						});
+
+						event('click', button_1, function click() {
+							return toggle_loadout(get$1(molecule).formula);
+						});
+
+						append$1($$anchor, button_1);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_4, ($$render) => {
+							if ($needs_battle_loadout_selection() && get$1(molecule).battle_usable) $$render(consequent_3);
+						}),
+						'if',
+						Workshop,
+						96,
+						20
+					);
+				}
+
+				reset(li);
+
+				template_effect(() => {
+					classes = set_class(li, 1, 'molecule-item svelte-s2k4cj', null, classes, {
+						'battle-ready': get$1(molecule).battle_usable,
+						equipped: get$1(molecule).equipped
+					});
+
+					set_text(text_3, get$1(molecule).name);
+					set_text(text_4, get$1(molecule).formula);
+					set_text(text_5, `Damage: ${get$1(molecule).damage ?? ''}`);
+					set_text(text_6, get$1(molecule).effect);
+				});
+
+				append$1($$anchor, li);
+			}),
+			'each',
+			Workshop,
+			79,
+			12
+		);
+
+		reset(ul);
+		reset(section);
+
+		var div_2 = sibling(section, 2);
+		var ul_1 = sibling(child(div_2), 2);
+
+		add_svelte_meta(
+			() => each(ul_1, 5, () => UPGRADE_CATALOG, index, ($$anchor, item) => {
 				const owned = tag(derived_safe_equal(() => $owned_upgrades()[get$1(item).id]), 'owned');
 
 				get$1(owned);
@@ -68170,143 +74590,144 @@ var app = (function () {
 
 				get$1(can_afford);
 
-				var li = root$1();
-				let classes;
-				var div_2 = child(li);
-				var h2 = child(div_2);
-				var text = child(h2, true);
+				var li_1 = root_6();
+				let classes_2;
+				var div_3 = child(li_1);
+				var h2 = child(div_3);
+				var text_8 = child(h2, true);
 
 				reset(h2);
 
-				var p = sibling(h2, 2);
-				var text_1 = child(p, true);
+				var p_5 = sibling(h2, 2);
+				var text_9 = child(p_5, true);
 
-				reset(p);
+				reset(p_5);
 
-				var div_3 = sibling(p, 2);
-				var span = sibling(child(div_3), 2);
-				var text_2 = child(span, true);
+				var div_4 = sibling(p_5, 2);
+				var span_3 = sibling(child(div_4), 2);
+				var text_10 = child(span_3, true);
 
-				reset(span);
+				reset(span_3);
+				reset(div_4);
 				reset(div_3);
-				reset(div_2);
 
-				var button_1 = sibling(div_2, 2);
-				var text_3 = child(button_1, true);
+				var button_2 = sibling(div_3, 2);
+				var text_11 = child(button_2, true);
 
-				reset(button_1);
-				reset(li);
+				reset(button_2);
+				reset(li_1);
 
 				template_effect(() => {
-					classes = set_class(li, 1, 'upgrade-item svelte-s2k4cj', null, classes, { owned: get$1(owned) });
-					set_text(text, get$1(item).name);
-					set_text(text_1, get$1(item).description);
-					set_text(text_2, get$1(item).cost);
-					button_1.disabled = get$1(owned) || !get$1(can_afford);
+					classes_2 = set_class(li_1, 1, 'upgrade-item svelte-s2k4cj', null, classes_2, { owned: get$1(owned) });
+					set_text(text_8, get$1(item).name);
+					set_text(text_9, get$1(item).description);
+					set_text(text_10, get$1(item).cost);
+					button_2.disabled = get$1(owned) || !get$1(can_afford);
 
-					set_text(text_3, get$1(owned)
+					set_text(text_11, get$1(owned)
 						? 'Owned'
 						: get$1(can_afford) ? 'Buy' : 'Need more joules');
 				});
 
-				event('click', button_1, function click() {
+				event('click', button_2, function click_1() {
 					return purchase(get$1(item).id);
-				});
-
-				append$1($$anchor, li);
-			}),
-			'each',
-			Workshop,
-			45,
-			12
-		);
-
-		reset(ul);
-
-		var node_1 = sibling(ul, 2);
-
-		{
-			var consequent = ($$anchor) => {
-				var p_1 = root_1$1();
-				var text_4 = child(p_1, true);
-
-				reset(p_1);
-				template_effect(() => set_text(text_4, get$1(purchase_message)));
-				append$1($$anchor, p_1);
-			};
-
-			add_svelte_meta(
-				() => if_block(node_1, ($$render) => {
-					if (get$1(purchase_message)) $$render(consequent);
-				}),
-				'if',
-				Workshop,
-				68,
-				8
-			);
-		}
-
-		reset(div_1);
-
-		var section = sibling(div_1, 2);
-		var ul_1 = sibling(child(section), 4);
-
-		add_svelte_meta(
-			() => each(ul_1, 5, () => UPGRADE_CATALOG, index, ($$anchor, item) => {
-				var li_1 = root_3();
-				var label = child(li_1);
-				var input = child(label);
-
-				remove_input_defaults(input);
-
-				var span_1 = sibling(input, 2);
-				var text_5 = child(span_1, true);
-
-				reset(span_1);
-
-				var node_2 = sibling(span_1, 2);
-
-				{
-					var consequent_1 = ($$anchor) => {
-						var em = root_2$1();
-
-						append$1($$anchor, em);
-					};
-
-					add_svelte_meta(
-						() => if_block(node_2, ($$render) => {
-							if ($owned_upgrades()[get$1(item).id]) $$render(consequent_1);
-						}),
-						'if',
-						Workshop,
-						86,
-						24
-					);
-				}
-
-				reset(label);
-				reset(li_1);
-
-				template_effect(() => {
-					set_checked(input, $upgrade_debug_toggles()[get$1(item).id]);
-					set_text(text_5, get$1(item).name);
-				});
-
-				event('change', input, function change() {
-					return toggle_upgrade_debug(get$1(item).id);
 				});
 
 				append$1($$anchor, li_1);
 			}),
 			'each',
 			Workshop,
-			77,
+			115,
 			12
 		);
 
 		reset(ul_1);
-		reset(section);
+
+		var node_5 = sibling(ul_1, 2);
+
+		{
+			var consequent_4 = ($$anchor) => {
+				var p_6 = root_7();
+				var text_12 = child(p_6, true);
+
+				reset(p_6);
+				template_effect(() => set_text(text_12, get$1(purchase_message)));
+				append$1($$anchor, p_6);
+			};
+
+			add_svelte_meta(
+				() => if_block(node_5, ($$render) => {
+					if (get$1(purchase_message)) $$render(consequent_4);
+				}),
+				'if',
+				Workshop,
+				138,
+				8
+			);
+		}
+
+		reset(div_2);
+
+		var section_1 = sibling(div_2, 2);
+		var ul_2 = sibling(child(section_1), 4);
+
+		add_svelte_meta(
+			() => each(ul_2, 5, () => UPGRADE_CATALOG, index, ($$anchor, item) => {
+				var li_2 = root_9();
+				var label = child(li_2);
+				var input = child(label);
+
+				remove_input_defaults(input);
+
+				var span_4 = sibling(input, 2);
+				var text_13 = child(span_4, true);
+
+				reset(span_4);
+
+				var node_6 = sibling(span_4, 2);
+
+				{
+					var consequent_5 = ($$anchor) => {
+						var em = root_8();
+
+						append$1($$anchor, em);
+					};
+
+					add_svelte_meta(
+						() => if_block(node_6, ($$render) => {
+							if ($owned_upgrades()[get$1(item).id]) $$render(consequent_5);
+						}),
+						'if',
+						Workshop,
+						156,
+						24
+					);
+				}
+
+				reset(label);
+				reset(li_2);
+
+				template_effect(() => {
+					set_checked(input, $upgrade_debug_toggles()[get$1(item).id]);
+					set_text(text_13, get$1(item).name);
+				});
+
+				event('change', input, function change() {
+					return toggle_upgrade_debug(get$1(item).id);
+				});
+
+				append$1($$anchor, li_2);
+			}),
+			'each',
+			Workshop,
+			147,
+			12
+		);
+
+		reset(ul_2);
+		reset(section_1);
 		reset(div);
+		template_effect(() => set_text(text, `Molecules you have discovered. Up to ${MAX_BATTLE_MOLECULES } can be equipped for battle.`));
 		event('click', button, go_back_to_timeline);
 		append$1($$anchor, div);
 
@@ -68477,6 +74898,200 @@ var app = (function () {
 
 		return $$pop;
 	}
+
+	const PLAYER_SAVE_KEY = 'chem_front_player_v1';
+	const PLAYER_SAVE_VERSION = 1;
+
+	const UPGRADE_ID_LIST = UPGRADE_CATALOG.map((item) => item.id);
+	const KNOWN_MOLECULES = new Set([
+	    ...Object.keys(MOLECULE_CATALOG),
+	    ...BATTLE_USABLE_MOLECULES,
+	    ...STARTING_MOLECULES,
+	]);
+
+	let persistence_started = false;
+	let applying_save = false;
+	let save_scheduled = false;
+
+	function empty_upgrade_flags() {
+	    return {
+	        [UPGRADE_IDS.LAB_COAT]: false,
+	        [UPGRADE_IDS.SHARP_AXE]: false,
+	        [UPGRADE_IDS.ERLENMEYER_FLASK]: false,
+	        [UPGRADE_IDS.SEPARATING_FUNNEL]: false,
+	    };
+	}
+
+	function initial_unlocked_scientists() {
+	    const first = SCIENTIST_ORDER[0];
+	    return first ? { [first]: true } : {};
+	}
+
+	function storage_available() {
+	    try {
+	        if (typeof localStorage === 'undefined') return false;
+	        const probe = '__chem_front_save_probe__';
+	        localStorage.setItem(probe, '1');
+	        localStorage.removeItem(probe);
+	        return true;
+	    } catch {
+	        return false;
+	    }
+	}
+
+	function bool_flag_map(raw, allowed_keys, { ensure_keys = [] } = {}) {
+	    const next = {};
+	    for (const key of ensure_keys) {
+	        next[key] = false;
+	    }
+	    if (!raw || typeof raw !== 'object') {
+	        return next;
+	    }
+	    for (const key of allowed_keys) {
+	        if (raw[key]) next[key] = true;
+	    }
+	    return next;
+	}
+
+	/**
+	 * Normalize a parsed save blob into a safe snapshot.
+	 * Returns null when the payload is unusable.
+	 */
+	function sanitize_player_save(raw) {
+	    if (!raw || typeof raw !== 'object') return null;
+	    if (raw.version !== PLAYER_SAVE_VERSION) return null;
+
+	    const joules_value = Number.isFinite(raw.joules) ? Math.max(0, Math.floor(raw.joules)) : 0;
+
+	    const upgrades = bool_flag_map(raw.owned_upgrades, UPGRADE_ID_LIST, {
+	        ensure_keys: UPGRADE_ID_LIST,
+	    });
+
+	    const unlocked = bool_flag_map(raw.unlocked_scientists, SCIENTIST_ORDER);
+	    if (Object.keys(unlocked).length === 0) {
+	        Object.assign(unlocked, initial_unlocked_scientists());
+	    } else if (SCIENTIST_ORDER[0]) {
+	        // Timeline assumes the first scientist is always available.
+	        unlocked[SCIENTIST_ORDER[0]] = true;
+	    }
+
+	    const discovered = bool_flag_map(
+	        raw.discovered_molecules,
+	        [...KNOWN_MOLECULES],
+	    );
+	    for (const formula of STARTING_MOLECULES) {
+	        discovered[formula] = true;
+	    }
+
+	    const selected_raw = Array.isArray(raw.selected_battle_molecules)
+	        ? raw.selected_battle_molecules
+	        : [];
+	    const selected = [...new Set(
+	        selected_raw.filter(
+	            (formula) =>
+	                typeof formula === 'string'
+	                && discovered[formula]
+	                && BATTLE_USABLE_MOLECULES.includes(formula),
+	        ),
+	    )].slice(0, MAX_BATTLE_MOLECULES);
+
+	    return {
+	        version: PLAYER_SAVE_VERSION,
+	        joules: joules_value,
+	        owned_upgrades: upgrades,
+	        unlocked_scientists: unlocked,
+	        discovered_molecules: discovered,
+	        selected_battle_molecules: selected,
+	    };
+	}
+
+	function collect_player_save() {
+	    return {
+	        version: PLAYER_SAVE_VERSION,
+	        joules: get$2(joules),
+	        owned_upgrades: { ...empty_upgrade_flags(), ...get$2(owned_upgrades) },
+	        unlocked_scientists: { ...get$2(unlocked_scientists) },
+	        discovered_molecules: { ...get$2(discovered_molecules) },
+	        selected_battle_molecules: [...get$2(selected_battle_molecules)],
+	    };
+	}
+
+	function apply_player_save(snapshot) {
+	    const safe = sanitize_player_save(snapshot);
+	    if (!safe) return false;
+
+	    applying_save = true;
+	    try {
+	        joules.set(safe.joules);
+	        owned_upgrades.set(safe.owned_upgrades);
+	        unlocked_scientists.set(safe.unlocked_scientists);
+	        discovered_molecules.set(safe.discovered_molecules);
+	        selected_battle_molecules.set(safe.selected_battle_molecules);
+	    } finally {
+	        applying_save = false;
+	    }
+	    return true;
+	}
+
+	function read_player_save() {
+	    if (!storage_available()) return null;
+	    try {
+	        const raw = localStorage.getItem(PLAYER_SAVE_KEY);
+	        if (!raw) return null;
+	        return sanitize_player_save(JSON.parse(raw));
+	    } catch {
+	        return null;
+	    }
+	}
+
+	function write_player_save(snapshot = collect_player_save()) {
+	    if (!storage_available()) return false;
+	    const safe = sanitize_player_save(snapshot);
+	    if (!safe) return false;
+	    try {
+	        localStorage.setItem(PLAYER_SAVE_KEY, JSON.stringify(safe));
+	        return true;
+	    } catch {
+	        return false;
+	    }
+	}
+
+	function schedule_write() {
+	    if (!persistence_started || applying_save) return;
+	    if (save_scheduled) return;
+	    save_scheduled = true;
+	    queueMicrotask(() => {
+	        save_scheduled = false;
+	        if (!persistence_started || applying_save) return;
+	        write_player_save();
+	    });
+	}
+
+	/**
+	 * Load any existing save, then keep stores in sync with localStorage.
+	 * Safe to call once from app startup; no-ops on later calls.
+	 */
+	function init_player_save() {
+	    if (persistence_started) return;
+	    persistence_started = true;
+
+	    const existing = read_player_save();
+	    if (existing) {
+	        apply_player_save(existing);
+	    } else {
+	        write_player_save();
+	    }
+
+	    [
+	        joules.subscribe(schedule_write),
+	        owned_upgrades.subscribe(schedule_write),
+	        unlocked_scientists.subscribe(schedule_write),
+	        discovered_molecules.subscribe(schedule_write),
+	        selected_battle_molecules.subscribe(schedule_write),
+	    ];
+	}
+
+	init_player_save();
 
 	const app = mount(App, {
 		target: document.body,
