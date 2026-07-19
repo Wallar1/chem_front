@@ -43,7 +43,7 @@ function empty_upgrade_flags() {
     };
 }
 
-export const joules = writable(0);
+export const joules = writable(5);
 export const owned_upgrades = writable(empty_upgrade_flags());
 export const upgrade_debug_toggles = writable(empty_upgrade_flags());
 
@@ -77,4 +77,11 @@ export function toggle_upgrade_debug(id) {
         ...flags,
         [id]: !flags[id],
     }));
+}
+
+/** Test / debug helper to restore fresh economy + upgrades. */
+export function reset_upgrades() {
+    joules.set(0);
+    owned_upgrades.set(empty_upgrade_flags());
+    upgrade_debug_toggles.set(empty_upgrade_flags());
 }

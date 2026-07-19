@@ -117,6 +117,7 @@ export class InputHandler {
 
     _fire_selected_compound(charge) {
         let compound = get(store.key_to_compound)[get(store.selected_compound_index)]
+        if (!compound) return;
         try_to_fire_player_weapon(compound, { charge })
     }
 
@@ -130,18 +131,24 @@ export class InputHandler {
         }
 
         if (compound_selection_keys.includes(e.key)) {
-            store.selected_compound_index.set(e.key)
+            const loadout = get(store.key_to_compound);
+            if (loadout[e.key]) {
+                store.selected_compound_index.set(e.key);
+            }
         } else if (e.key === axe_swing_key) {
             store.axe.try_to_swing();
         } else if (['ArrowRight', 'ArrowLeft'].indexOf(e.key) > -1) {
-            let _selected_compound_index = parseInt(get(store.selected_compound_index))
-            let max_keys = compound_selection_keys.length
+            const loadout = get(store.key_to_compound);
+            const available_keys = compound_selection_keys.filter((key) => loadout[key]);
+            if (!available_keys.length) return;
+            let current_index = available_keys.indexOf(get(store.selected_compound_index));
+            if (current_index < 0) current_index = 0;
             if (e.key === 'ArrowLeft') {
-                _selected_compound_index = _selected_compound_index <= 1 ? max_keys : _selected_compound_index - 1;
-            } else if (e.key === 'ArrowRight') {
-                _selected_compound_index = _selected_compound_index >= max_keys ? 1 : _selected_compound_index + 1;
+                current_index = current_index <= 0 ? available_keys.length - 1 : current_index - 1;
+            } else {
+                current_index = current_index >= available_keys.length - 1 ? 0 : current_index + 1;
             }
-            store.selected_compound_index.set(String(_selected_compound_index))
+            store.selected_compound_index.set(available_keys[current_index]);
         } else if (movement_keys.includes(e.key)) {
             store.pressed_keys[e.key]['pressed'] = Math.min(5, store.pressed_keys[e.key]['pressed'] + 1);
         } else if (e.key === space) {

@@ -136,6 +136,7 @@ function spawn_projectile({compound, initial_pos, direction, lateral_offset, siz
  * @param {{ charge?: number }} [options] charge in [0, 1]; only used with Erlenmeyer Flask
  */
 export function try_to_fire_player_weapon(compound, options = {}){
+    if (!compound) return;
     const charge = Math.min(1, Math.max(0, options.charge ?? 0));
     const has_flask = has_upgrade(UPGRADE_IDS.ERLENMEYER_FLASK);
     const size_mult = has_flask ? 1 + charge : 1;

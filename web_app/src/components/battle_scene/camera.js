@@ -25,13 +25,13 @@ function get_up_direction_rel_camera_parent(camera_parent, camera, earth) {
 }
 
 
-export function rotate_on_mouse_move(event) {
-    // calculate mouse position in normalized device coordinates
-    // (-1 to +1) for both components
-    // mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-    // mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+function is_xr_presenting() {
+    return Boolean(store.renderer?.xr?.isPresenting);
+}
 
-    //TODO: check this at some point: https://web.dev/articles/disable-mouse-acceleration
+export function rotate_on_mouse_move(event) {
+    // Headset owns look direction while presenting.
+    if (is_xr_presenting()) return;
 
     // the sensitivity is set so that the screen width/height is 180 degrees
     var movementX = event.movementX || event.mozMovementX || 0;
@@ -44,16 +44,20 @@ export function rotate_on_mouse_move(event) {
 }
 
 export function rotate_on_controller_move(state, time_delta) {
+    if (is_xr_presenting()) return { finished: false };
+
     let event = {
         // TODO: make the multipliers settings that the player can adjust
         movementX: store.pushed_buttons['axes'][left_stick_left_right]['value'] * 20,
         movementY: store.pushed_buttons['axes'][left_stick_up_down]['value'] * -5,
     }
     rotate_on_mouse_move(event);
-    return {finshed: false};
+    return {finished: false};
 }
 
 function rotate_camera(x_radians, y_radians) {
+    if (is_xr_presenting()) return;
+
     /*
     Important note: an object's rotation/quaternion is relative to its parent. It is a local rotation.
     So here I get the vectors from the point of view of the camera parent.
@@ -81,11 +85,24 @@ function rotate_camera(x_radians, y_radians) {
     store.mouse_ray.setFromCamera( store.mouse, store.camera );
 }
 
+/** Smooth yaw for XR right-stick turning (rotates camera_parent around radial up). */
+export function rotate_camera_yaw(radians) {
+    if (!radians || !store.camera_parent || !store.camera || !store.earth) return;
+
+    const earth_world_pos = store.earth.getWorldPosition(new THREE.Vector3());
+    const camera_world_pos = store.camera.getWorldPosition(new THREE.Vector3());
+    const up = new THREE.Vector3().subVectors(camera_world_pos, earth_world_pos).normalize();
+    const quaternion = new THREE.Quaternion().setFromAxisAngle(up, radians);
+    store.camera_parent.quaternion.premultiply(quaternion);
+    store.camera_parent.updateMatrixWorld(true);
+}
+
 
 export function create_camera(){
     const fov = 60;
-    const aspect = 1920 / 1080;
-    const near = 1.0;
+    const aspect = window.innerWidth / window.innerHeight;
+    // Near plane must be small for WebXR comfort / clipping
+    const near = 0.1;
     const far = 5000.0;
     store.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     store.camera_parent = new THREE.Object3D();
@@ -94,6 +111,46 @@ export function create_camera(){
     store.camera_parent.add(store.camera);
     store.camera.position.set(0, 0, earth_radius + camera_offset);
     store.camera.rotateX(Math.PI/2);
+    store.player_rig = null;
+}
+
+/**
+ * Insert a standing rig between camera_parent and camera so XR headset pose
+ * is applied relative to the planet surface. Controllers must share this parent.
+ */
+export function enter_xr_camera_rig() {
+    if (store.player_rig) return store.player_rig;
+
+    const height = store.jump_in_progress
+        ? store.camera.position.z
+        : earth_radius + camera_offset;
+
+    const rig = new THREE.Object3D();
+    rig.position.set(0, 0, height);
+    // Local +Y points away from planet; headset -Z is forward along the surface.
+    rig.rotation.x = -Math.PI / 2;
+    store.camera_parent.add(rig);
+
+    rig.add(store.camera);
+    store.camera.position.set(0, 0, 0);
+    store.camera.quaternion.identity();
+    store.camera.scale.set(1, 1, 1);
+
+    store.player_rig = rig;
+    return rig;
+}
+
+export function exit_xr_camera_rig() {
+    if (!store.player_rig) return;
+
+    const height = store.player_rig.position.z || (earth_radius + camera_offset);
+    store.camera_parent.add(store.camera);
+    store.camera.position.set(0, 0, height);
+    store.camera.quaternion.identity();
+    store.camera.rotateX(Math.PI / 2);
+
+    store.camera_parent.remove(store.player_rig);
+    store.player_rig = null;
 }
 
 function movement_curve(x) {
@@ -163,19 +220,27 @@ function jump_curve(x) {
     return Math.sin(3*x)
 }
 
+function get_jump_anchor() {
+    // In XR the standing rig holds radial height; desktop jumps the camera itself.
+    return store.player_rig || store.camera;
+}
+
 export function jump() {
     if (store.jump_in_progress) return;
     store.jump_in_progress = true;
 
     function jump_helper(func_state, func_time_delta){
         let {finished, initial_time, has_collided} = func_state
-        store.camera.position.z = earth_radius + camera_offset + jump_curve(store.global_clock.elapsedTime - initial_time) * 150;
+        const anchor = get_jump_anchor();
+        anchor.position.z = earth_radius + camera_offset + jump_curve(store.global_clock.elapsedTime - initial_time) * 150;
         has_collided = check_camera_intersects(store.clouds, 'cloud') | check_camera_intersects(store.labs, 'lab');
 
         if (store.global_clock.elapsedTime - initial_time > Math.PI/3) {
             finished = true
             store.jump_in_progress = false;
-            store.pushed_buttons['buttons'][bottom_button]['pressed'] = 0;
+            if (store.pushed_buttons?.buttons?.[bottom_button]) {
+                store.pushed_buttons['buttons'][bottom_button]['pressed'] = 0;
+            }
         }
         return {finished, initial_time, has_collided}
     }

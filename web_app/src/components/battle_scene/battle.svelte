@@ -9,15 +9,23 @@
     import { store } from './store.js';
     import { global_store } from '../../global_store.js';
     import { reset_pressed_keys } from './input_handler.js';
+    import { defeat_scientist, molecule_info } from '../../progression.js';
     
     var battle_scene;
+    let win_unlock_message = '';
+    let victory_rewards_applied = false;
+    let needs_https_for_xr = typeof window !== 'undefined' && !window.isSecureContext;
+
     onMount(async () => {
         new_game()
+        needs_https_for_xr = !window.isSecureContext;
     })
 
     function new_game() {
         battle_scene?.destroy?.();
         battle_scene = new BattleScene();
+        win_unlock_message = '';
+        victory_rewards_applied = false;
     }
 
     function start_game() {
@@ -52,7 +60,27 @@
             battle_scene.game_lost()
         } else if (game_state.state === store.GameStates.GAMEWON) {
             battle_scene.game_won();
+            apply_victory_rewards();
         }
+    }
+
+    function apply_victory_rewards() {
+        if (victory_rewards_applied) return;
+        victory_rewards_applied = true;
+        const result = defeat_scientist();
+        if (!result.ok) {
+            win_unlock_message = '';
+            return;
+        }
+        const parts = [];
+        if (result.unlocked_molecule) {
+            const info = molecule_info(result.unlocked_molecule);
+            parts.push(`Discovered ${info.name} (${info.formula})`);
+        }
+        if (result.unlocked_scientist) {
+            parts.push('Next scientist unlocked');
+        }
+        win_unlock_message = parts.join(' · ');
     }
 
     function handle_click() {
@@ -79,11 +107,27 @@
     <div id='overlay-to-start' style={show_start_overlay ? 'display: flex;' : 'display: none;'}>
         {#if game_state.state === store.GameStates.STARTING}
             <button type="button" class='button' on:click|stopPropagation={handle_click}>Start</button>
+            {#if needs_https_for_xr}
+                <p class="xr-hint xr-warn">WebXR on Quest requires HTTPS (or localhost). Open this app over a secure URL from the headset browser.</p>
+            {/if}
+            <p class="xr-hint">On a Quest headset, use Enter VR for an immersive session. Controls map to the desktop keys:</p>
+            <ul class="xr-controls">
+                <li>Left stick → WASD move</li>
+                <li>Right stick → turn</li>
+                <li>Trigger → fire compound</li>
+                <li>Grip → axe (V)</li>
+                <li>A / X → jump</li>
+                <li>B / Y → cycle compounds</li>
+                <li>Stick click → pause</li>
+            </ul>
         {:else if game_state.state === store.GameStates.GAMELOST}
             <h3>Game Over</h3>
             <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</button>
         {:else if game_state.state === store.GameStates.GAMEWON}
             <h3>You Win!</h3>
+            {#if win_unlock_message}
+                <p class="unlock-message">{win_unlock_message}</p>
+            {/if}
             <button type="button" class='button' on:click|stopPropagation={go_back_to_timeline}>Back to the Lab</button>
         {/if}
     </div>
@@ -148,6 +192,45 @@
     #overlay-paused p {
         font-size: 24px;
         margin: 0;
+    }
+    .unlock-message {
+        margin: 0 24px 16px;
+        font-size: 22px;
+        text-align: center;
+        max-width: 560px;
+        line-height: 1.35;
+    }
+    .xr-hint {
+        margin: 18px 24px 8px;
+        font-size: 18px;
+        text-align: center;
+        max-width: 520px;
+        line-height: 1.35;
+        opacity: 0.9;
+    }
+    .xr-warn {
+        color: #f0c27a;
+        opacity: 1;
+    }
+    .xr-controls {
+        margin: 0 24px 8px;
+        padding-left: 1.2em;
+        font-size: 16px;
+        line-height: 1.45;
+        text-align: left;
+        opacity: 0.85;
+    }
+    :global(#VRButton),
+    :global(#ARButton) {
+        position: absolute !important;
+        bottom: 24px !important;
+        left: auto !important;
+        right: 24px !important;
+        z-index: 5;
+        opacity: 0.95;
+    }
+    :global(#ARButton) {
+        right: 160px !important;
     }
     #cursor {
         position: absolute;

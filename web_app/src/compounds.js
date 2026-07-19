@@ -101,6 +101,34 @@ export const projectile_material_map = {
         'geometry': new THREE.SphereGeometry( 5, 10, 10 ),
         'material': new THREE.MeshToonMaterial({color: 0x26a0d4})
     },
+    'CO': {
+        'geometry': new THREE.SphereGeometry( 3, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0x6e6e6e})
+    },
+    'O2': {
+        'geometry': new THREE.SphereGeometry( 3, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0x3d7cff})
+    },
+    'Na': {
+        'geometry': new THREE.SphereGeometry( 4, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xc0c0c0})
+    },
+    'Cl': {
+        'geometry': new THREE.SphereGeometry( 4, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0x7cfc00})
+    },
+    'Au': {
+        'geometry': new THREE.SphereGeometry( 5, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xffd700})
+    },
+    'Ag': {
+        'geometry': new THREE.SphereGeometry( 4, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xd8d8d8})
+    },
+    'Ca': {
+        'geometry': new THREE.SphereGeometry( 4, 10, 10 ),
+        'material': new THREE.MeshToonMaterial({color: 0xf5f5dc})
+    },
 }
 
 

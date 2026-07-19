@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { parse_formula_to_dict } from '../../helper_functions.js';
 import {
     left_upper_trigger,
@@ -7,18 +7,48 @@ import {
     left_lower_trigger,
     right_lower_trigger,
 } from './constants.js';
-const key_to_compound = writable({
-    '1': 'H2',
-    '2': 'CH4',
-    '3': 'NH3',
-    '4': 'CN',
-    '5': 'H2O',
-    [right_upper_trigger]: 'CH4',
-    [left_lower_trigger]: 'NH3',
-    [right_lower_trigger]: 'CN',
-    [left_upper_trigger]: 'H2O'
-})
+import { battle_loadout } from '../../progression.js';
+
+function build_key_to_compound(formulas) {
+    const map = {
+        '1': null,
+        '2': null,
+        '3': null,
+        '4': null,
+        '5': null,
+        [right_upper_trigger]: null,
+        [left_lower_trigger]: null,
+        [right_lower_trigger]: null,
+        [left_upper_trigger]: null,
+    };
+    const keys = ['1', '2', '3', '4', '5'];
+    const trigger_keys = [
+        right_upper_trigger,
+        left_lower_trigger,
+        right_lower_trigger,
+        left_upper_trigger,
+    ];
+    formulas.forEach((formula, index) => {
+        if (index < keys.length) map[keys[index]] = formula;
+        // Gamepad triggers map to slots 2–5 (same as the previous hard-coded layout).
+        if (index >= 1 && index - 1 < trigger_keys.length) {
+            map[trigger_keys[index - 1]] = formula;
+        }
+    });
+    return map;
+}
+
 const selected_compound_index = writable('1');
+const key_to_compound = writable(build_key_to_compound(get(battle_loadout)));
+
+battle_loadout.subscribe((formulas) => {
+    key_to_compound.set(build_key_to_compound(formulas));
+    const selected = get(selected_compound_index);
+    const map = get(key_to_compound);
+    if (!map[selected]) {
+        selected_compound_index.set('1');
+    }
+});
 
 
 const GameStates = Object.freeze({
@@ -47,8 +77,12 @@ let initial_counts = {
         last_updated: performance.now(),
     }
 }
+function clone_counts(value) {
+    if (typeof structuredClone === 'function') return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+}
 function create_current_counts_store() {
-    const { subscribe, set: originalSet, update } = writable(window.structuredClone(initial_counts));
+    const { subscribe, set: originalSet, update } = writable(clone_counts(initial_counts));
 
     return {
         subscribe,
@@ -73,7 +107,7 @@ function create_current_counts_store() {
             })
         },
         reset: () => {
-            const initial_with_updated_date = window.structuredClone(initial_counts)
+            const initial_with_updated_date = clone_counts(initial_counts)
             initial_with_updated_date['H']['last_updated'] = performance.now()
             originalSet(initial_with_updated_date)
         }
@@ -89,7 +123,7 @@ const max_number_possible_for_each_compound = derived(
     [key_to_compound, current_element_counts],
     ([$key_to_compound, $current_element_counts]) => {
         let max_possible_by_compound = {}
-        let compounds = Object.values($key_to_compound);
+        let compounds = Object.values($key_to_compound).filter(Boolean);
         for (let i=0; i<compounds.length; i++) {
             let current_max_count = Infinity
             let compound = compounds[i];
@@ -146,6 +180,10 @@ let pushed_buttons = undefined;
 let pressed_keys = undefined;
 let jump_in_progress = false;
 let battle_scene = null;
+let player_rig = null;
+let xr_controllers = [];
+let xr_controller_grips = [];
+let xr_presenting = false;
 
 
 
@@ -172,6 +210,7 @@ export const store = {
     renderer,
     camera,
     camera_parent,
+    player_rig,
     axe,
     gun,
     mouse_ray,
@@ -187,6 +226,9 @@ export const store = {
     pushed_buttons,
     pressed_keys,
     jump_in_progress,
+    xr_controllers,
+    xr_controller_grips,
+    xr_presenting,
     get battle_scene() {
         return battle_scene;
     },

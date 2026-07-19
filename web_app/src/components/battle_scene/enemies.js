@@ -403,7 +403,7 @@ class Enemy extends GameObj {
         return state;
     }
 
-    apply_axe_knockback(tangent_knockback_world) {
+    apply_axe_knockback(tangent_knockback_world, knockback_radians = AXE_KNOCKBACK_RADIANS) {
         if (tangent_knockback_world.lengthSq() < 1e-6) {
             return;
         }
@@ -413,6 +413,7 @@ class Enemy extends GameObj {
 
         const enemy = this;
         const tangent = tangent_knockback_world.clone().normalize();
+        const total_radians = knockback_radians;
         const updater = new Updater((state, time_delta) => {
             if (enemy.should_delete) {
                 enemy.position.z = state.base_z;
@@ -422,7 +423,7 @@ class Enemy extends GameObj {
             state.elapsed += time_delta;
             const linear_progress = Math.min(state.elapsed / AXE_KNOCKBACK_DURATION, 1);
             const eased_progress = 1 - Math.pow(1 - linear_progress, 2);
-            const delta_radians = AXE_KNOCKBACK_RADIANS * (eased_progress - state.eased_progress);
+            const delta_radians = total_radians * (eased_progress - state.eased_progress);
 
             if (delta_radians > 0) {
                 apply_surface_knockback(enemy.parent, tangent, earth_radius, delta_radians);
